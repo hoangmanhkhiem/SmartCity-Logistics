@@ -1,0 +1,482 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ORGANIZATION & CARRIER ====================
+
+model Organization {
+  id          String   @id @default(uuid())
+  name        String
+  type        String   // Loại hình tổ chức (doanh nghiệp, cơ quan, trường, ...)
+  business    String?  // Lĩnh vực hoạt động
+  description String?
+  address     String?
+  phone       String?
+  email       String?
+  website     String?
+  logoUrl     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  carriers    Carrier[]
+  facilities  Facility[]
+  memberships Membership[]
+
+  @@map("organizations")
+}
+
+model Carrier {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  name           String   // Tên hãng vận tải (VD: GHN, GHTK, Shopee Express)
+  scale          String?  // Quy mô
+  vehicleCount   Int?     @map("vehicle_count")
+  warehouseCount Int?     @map("warehouse_count")
+  contactName    String?  @map("contact_name")
+  contactPhone   String?  @map("contact_phone")
+  contactEmail   String?  @map("contact_email")
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vehicles     Vehicle[]
+
+  @@map("carriers")
+}
+
+// ==================== VEHICLE ====================
+
+model Vehicle {
+  id                  String   @id @default(uuid())
+  carrierId           String   @map("carrier_id")
+  type                String   // Loại xe (bike, van, truck, e-scooter, …)
+  plate               String   @unique // Biển số xe
+  brand               String?  // Hãng xe
+  model               String?  // Model xe
+  year                Int?     // Năm sản xuất
+  capacity            Float?   // Tải trọng (kg)
+  volume              Float?   // Thể tích (m³)
+  fuelType            String?  @map("fuel_type") // Loại nhiên liệu
+  isElectric          Boolean  @default(false) @map("is_electric")
+  emissionStandard    String?  @map("emission_standard") // EURO 5, etc.
+  emissionFactor      Float?   @map("emission_factor") // gCO2e/km
+  range               Float?   // Phạm vi hoạt động (km)
+  currentBatteryLevel Float?   @map("current_battery_level")
+  status              String   @default("available") // available, in_use, maintenance
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relations
+  carrier     Carrier      @relation(fields: [carrierId], references: [id], onDelete: Cascade)
+  telemetries Telemetry[]
+  assignments Assignment[]
+
+  @@map("vehicles")
+}
+
+// ==================== FACILITY & RELATED ====================
+
+model Facility {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  zoneId         String?  @map("zone_id")
+  name           String   // Tên điểm trung chuyển / kho / trạm
+  kind           String   // hub, warehouse, charging_station, fuel_station, mfc
+  latitude       Float
+  longitude      Float
+  address        String?
+  capacity       Int?     // Công suất
+  openingTime    String?  @map("opening_time")
+  closingTime    String?  @map("closing_time")
+  description    String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  zone         Zone?        @relation(fields: [zoneId], references: [id])
+  chargers     Charger[]
+  fuelPumps    FuelPump[]
+  docks        Dock[]
+  stops        Stop[]
+
+  @@map("facilities")
+}
+
+model Charger {
+  id            String   @id @default(uuid())
+  facilityId    String   @map("facility_id")
+  type          String   // AC/DC/fast/slow
+  connectorType String?  @map("connector_type") // Type 2, CCS, CHAdeMO
+  powerKw       Float    @map("power_kw") // Công suất đầu ra (kW)
+  slots         Int      @default(1) // Số khe sạc
+  pricePerKwh   Float?   @map("price_per_kwh") // Giá/kWh
+  status        String   @default("available") // available, occupied, maintenance
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@map("chargers")
+}
+
+model FuelPump {
+  id           String   @id @default(uuid())
+  facilityId   String   @map("facility_id")
+  fuelType     String   @map("fuel_type") // RON95, Diesel, E5, …
+  pricePerLiter Float?  @map("price_per_liter") // Giá/lít
+  status       String   @default("available")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@map("fuel_pumps")
+}
+
+model Dock {
+  id         String   @id @default(uuid())
+  facilityId String   @map("facility_id")
+  name       String?
+  capacity   Int      // Số lượng phương tiện tối đa
+  status     String   @default("available")
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@map("docks")
+}
+
+// ==================== ZONE & ROAD ====================
+
+model Zone {
+  id          String   @id @default(uuid())
+  name        String   // Tên vùng (VD: Ba Đình, Đống Đa, Láng, …)
+  type        String?  // district, ward, lez, restricted
+  description String?
+  // Boundary stored as GeoJSON string (for PostGIS, use raw SQL or extensions)
+  boundary    String?  @db.Text
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  facilities   Facility[]
+  roadSegments RoadSegment[]
+  restrictions Restriction[]
+
+  @@map("zones")
+}
+
+model RoadSegment {
+  id        String   @id @default(uuid())
+  zoneId    String?  @map("zone_id")
+  name      String   // Tên đường
+  osmId     String?  @map("osm_id") // OpenStreetMap ID
+  // Geometry stored as GeoJSON string
+  geometry  String?  @db.Text
+  oneWay    Boolean  @default(false) @map("one_way")
+  speedLimit Float?  @map("speed_limit") // km/h
+  lanes     Int?
+  roadType  String?  @map("road_type") // primary, secondary, tertiary
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  zone         Zone?        @relation(fields: [zoneId], references: [id])
+  restrictions Restriction[]
+
+  @@map("road_segments")
+}
+
+model Restriction {
+  id            String    @id @default(uuid())
+  roadSegmentId String?   @map("road_segment_id")
+  zoneId        String?   @map("zone_id")
+  vehicleType   String?   @map("vehicle_type") // Loại xe bị ảnh hưởng
+  maxWeight     Float?    @map("max_weight") // Tải trọng tối đa (kg)
+  maxHeight     Float?    @map("max_height") // Chiều cao tối đa (m)
+  timeFrom      String?   @map("time_from") // Thời điểm bắt đầu hạn chế (HH:mm)
+  timeTo        String?   @map("time_to") // Thời điểm kết thúc hạn chế (HH:mm)
+  daysOfWeek    String[]  @map("days_of_week") // [Mon, Tue, ...]
+  allowed       Boolean   @default(false) // TRUE nếu được phép lưu thông
+  description   String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  roadSegment RoadSegment? @relation(fields: [roadSegmentId], references: [id], onDelete: Cascade)
+  zone        Zone?        @relation(fields: [zoneId], references: [id])
+
+  @@map("restrictions")
+}
+
+// ==================== ORDER & SHIPMENT ====================
+
+model Order {
+  id              String    @id @default(uuid())
+  customerId      String?   @map("customer_id")
+  orderNumber     String    @unique @map("order_number")
+  status          String    @default("pending") // pending, confirmed, shipped, delivered, cancelled
+  pickupAddress   String?   @map("pickup_address")
+  pickupLat       Float?    @map("pickup_lat")
+  pickupLon       Float?    @map("pickup_lon")
+  deliveryAddress String?   @map("delivery_address")
+  deliveryLat     Float?    @map("delivery_lat")
+  deliveryLon     Float?    @map("delivery_lon")
+  timeWindowStart DateTime? @map("time_window_start")
+  timeWindowEnd   DateTime? @map("time_window_end")
+  priority        Int       @default(1) // 1-5
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  customer  User?      @relation(fields: [customerId], references: [id])
+  shipments Shipment[]
+
+  @@map("orders")
+}
+
+model Shipment {
+  id          String   @id @default(uuid())
+  orderId     String   @map("order_id")
+  trackingNo  String   @unique @map("tracking_no")
+  weight      Float?   // Khối lượng (kg)
+  volume      Float?   // Thể tích (m³)
+  width       Float?
+  height      Float?
+  length      Float?
+  itemCount   Int?     @map("item_count")
+  description String?
+  status      String   @default("pending") // pending, in_transit, delivered
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  legs  Leg[]
+
+  @@map("shipments")
+}
+
+// ==================== ROUTE & TRANSPORT ====================
+
+model Route {
+  id            String   @id @default(uuid())
+  name          String   // Tên tuyến
+  mode          String   // road, rail, bike, van, …
+  description   String?
+  totalDistance Float?   @map("total_distance") // km
+  totalDuration Int?     @map("total_duration") // minutes
+  estimatedCo2  Float?   @map("estimated_co2") // gCO2e
+  // Route geometry as GeoJSON
+  geometry      String?  @db.Text
+  status        String   @default("planned") // planned, active, completed
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  legs Leg[]
+
+  @@map("routes")
+}
+
+model Leg {
+  id         String    @id @default(uuid())
+  shipmentId String    @map("shipment_id")
+  routeId    String    @map("route_id")
+  sequence   Int       // Thứ tự chặng trong lô hàng
+  distance   Float?    // km
+  duration   Int?      // minutes
+  startedAt  DateTime? @map("started_at")
+  endedAt    DateTime? @map("ended_at")
+  status     String    @default("pending") // pending, in_progress, completed
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  // Relations
+  shipment    Shipment     @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  route       Route        @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  stops       Stop[]
+  assignments Assignment[]
+
+  @@map("legs")
+}
+
+model Stop {
+  id          String    @id @default(uuid())
+  legId       String    @map("leg_id")
+  facilityId  String?   @map("facility_id")
+  sequence    Int       // Thứ tự điểm dừng
+  type        String    // pickup, delivery, transit, charging, refuel
+  address     String?
+  latitude    Float?
+  longitude   Float?
+  arrival     DateTime? // Thời gian đến
+  departure   DateTime? // Thời gian rời đi
+  notes       String?
+  status      String    @default("pending")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  leg      Leg       @relation(fields: [legId], references: [id], onDelete: Cascade)
+  facility Facility? @relation(fields: [facilityId], references: [id])
+
+  @@map("stops")
+}
+
+// ==================== TELEMETRY & ASSIGNMENT ====================
+
+model Telemetry {
+  id           String   @id @default(uuid())
+  vehicleId    String   @map("vehicle_id")
+  timestamp    DateTime @default(now())
+  latitude     Float
+  longitude    Float
+  speed        Float?   // km/h
+  heading      Float?   // degrees
+  altitude     Float?   // meters
+  batteryLevel Float?   @map("battery_level") // %
+  fuelLevel    Float?   @map("fuel_level") // %
+  engineStatus String?  @map("engine_status")
+  odometer     Float?   // km
+  createdAt    DateTime @default(now())
+
+  // Relations
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, timestamp])
+  @@map("telemetry")
+}
+
+model Assignment {
+  id         String    @id @default(uuid())
+  vehicleId  String    @map("vehicle_id")
+  legId      String    @map("leg_id")
+  driverId   String?   @map("driver_id")
+  assignedAt DateTime  @default(now()) @map("assigned_at")
+  startedAt  DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  status     String    @default("assigned") // assigned, in_progress, completed, cancelled
+  notes      String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  // Relations
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  leg     Leg     @relation(fields: [legId], references: [id], onDelete: Cascade)
+  driver  User?   @relation(fields: [driverId], references: [id])
+
+  @@map("assignments")
+}
+
+// ==================== USER & RBAC ====================
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String
+  name          String
+  phone         String?
+  avatarUrl     String?   @map("avatar_url")
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  memberships Membership[]
+  orders      Order[]
+  assignments Assignment[]
+
+  @@map("users")
+}
+
+model Membership {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  organizationId String   @map("organization_id")
+  roleId         String   @map("role_id")
+  isDefault      Boolean  @default(false) @map("is_default")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role         Role         @relation(fields: [roleId], references: [id])
+
+  @@unique([userId, organizationId])
+  @@map("memberships")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique // admin, regulator, carrier_mgr, dispatcher, student, viewer
+  displayName String?  @map("display_name")
+  description String?
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  memberships     Membership[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique // manage_vehicle, view_data, etc.
+  resource    String   // vehicle, facility, order, route, etc.
+  action      String   // read, write, delete, manage
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String   @id @default(uuid())
+  roleId       String   @map("role_id")
+  permissionId String   @map("permission_id")
+  createdAt    DateTime @default(now())
+
+  // Relations
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
