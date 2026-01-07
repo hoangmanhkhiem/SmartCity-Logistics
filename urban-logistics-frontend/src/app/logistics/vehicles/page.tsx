@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Card, CardBody, CardHeader, DataTable, Badge, Select, Button, Input, Modal } from '@/components/ui';
-import { vehicleApi } from '@/lib/api';
-import { Vehicle } from '@/types';
+import { vehicleApi, carrierApi } from '@/lib/api';
+import { Vehicle, Carrier } from '@/types';
 import { Truck, Plus, Search, Edit, Trash2, Zap, Fuel } from 'lucide-react';
 import type { Column } from '@/components/ui';
 
@@ -30,6 +30,7 @@ const statusLabel: Record<string, string> = {
 
 export default function LogisticsVehiclesPage() {
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+    const [carriers, setCarriers] = useState<Carrier[]>([]);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
@@ -38,6 +39,7 @@ export default function LogisticsVehiclesPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
     const [formData, setFormData] = useState({
+        carrierId: '',
         type: 'motorcycle',
         plate: '',
         brand: '',
@@ -49,6 +51,15 @@ export default function LogisticsVehiclesPage() {
         emissionStandard: '',
         range: '',
     });
+
+    const fetchCarriers = async () => {
+        try {
+            const response = await carrierApi.getAll({ limit: 100 });
+            setCarriers(response.data.data || response.data);
+        } catch (error) {
+            console.error('Failed to fetch carriers:', error);
+        }
+    };
 
     const fetchVehicles = async () => {
         setLoading(true);
@@ -64,6 +75,10 @@ export default function LogisticsVehiclesPage() {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        fetchCarriers();
+    }, []);
 
     useEffect(() => {
         fetchVehicles();
@@ -96,6 +111,7 @@ export default function LogisticsVehiclesPage() {
     const handleEdit = (vehicle: Vehicle) => {
         setEditingVehicle(vehicle);
         setFormData({
+            carrierId: vehicle.carrierId || '',
             type: vehicle.type,
             plate: vehicle.plate,
             brand: vehicle.brand || '',
@@ -123,6 +139,7 @@ export default function LogisticsVehiclesPage() {
 
     const resetForm = () => {
         setFormData({
+            carrierId: '',
             type: 'motorcycle',
             plate: '',
             brand: '',
@@ -310,6 +327,13 @@ export default function LogisticsVehiclesPage() {
                 size="lg"
             >
                 <form onSubmit={handleSubmit} className="space-y-4">
+                    <Select
+                        label="Đơn vị vận tải *"
+                        options={carriers.map(c => ({ value: c.id, label: c.name }))}
+                        value={formData.carrierId}
+                        onChange={(v) => setFormData({ ...formData, carrierId: v })}
+                        placeholder="Chọn đơn vị vận tải"
+                    />
                     <div className="grid grid-cols-2 gap-4">
                         <Input
                             label="Biển số *"
