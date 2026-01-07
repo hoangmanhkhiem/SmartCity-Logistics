@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Card, CardBody, CardHeader, Input, Badge, Button } from '@/components/ui';
-import { orderApi, telemetryApi } from '@/lib/api';
+import { orderApi } from '@/lib/api';
 import { Order, Telemetry } from '@/types';
-import { MapPin, Package, Truck, Clock, Search, RefreshCw } from 'lucide-react';
+import { MapPin, Package, Truck, Clock, Search, RefreshCw, Play, Pause } from 'lucide-react';
 
 // Dynamic import for Map to avoid SSR issues
 const Map = dynamic(() => import('@/components/shared/map'), {
@@ -44,12 +44,19 @@ export default function ConsumerTrackingPage() {
     const [loading, setLoading] = useState(false);
     const [trackingLoading, setTrackingLoading] = useState(false);
 
+    // Route animation state
+    const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([]);
+    const [progress, setProgress] = useState(0);
+    const [isPlaying, setIsPlaying] = useState(true);
+    const [vehiclePosition, setVehiclePosition] = useState<[number, number] | null>(null);
+
     useEffect(() => {
         const fetchOrders = async () => {
             setLoading(true);
             try {
-                const response = await orderApi.getAll({ status: 'shipped', limit: 20 });
-                setOrders(response.data.data || response.data);
+                const response = await orderApi.getAll({ limit: 50 });
+                const allOrders = response.data.data || response.data;
+                setOrders(allOrders);
             } catch (error) {
                 console.error('Failed to fetch orders:', error);
             } finally {
@@ -59,42 +66,76 @@ export default function ConsumerTrackingPage() {
         fetchOrders();
     }, []);
 
+    // Handle route loaded from Map component
+    const handleRouteLoaded = useCallback((coordinates: [number, number][]) => {
+        setRouteCoordinates(coordinates);
+        setProgress(0);
+        if (coordinates.length > 0) {
+            setVehiclePosition(coordinates[0]);
+        }
+    }, []);
+
+    // Animate vehicle along route
+    useEffect(() => {
+        if (!isPlaying || routeCoordinates.length === 0 || !selectedOrder) return;
+        if (!['shipped', 'confirmed'].includes(selectedOrder.status)) return;
+
+        const interval = setInterval(() => {
+            setProgress(prev => {
+                const newProgress = prev + 0.005; // 0.5% per tick
+                if (newProgress >= 1) {
+                    return 0; // Loop back
+                }
+                return newProgress;
+            });
+        }, 100); // Update every 100ms for smooth animation
+
+        return () => clearInterval(interval);
+    }, [isPlaying, routeCoordinates.length, selectedOrder]);
+
+    // Update vehicle position based on progress
+    useEffect(() => {
+        if (routeCoordinates.length === 0) return;
+
+        const totalPoints = routeCoordinates.length - 1;
+        const exactIndex = progress * totalPoints;
+        const index = Math.floor(exactIndex);
+        const fraction = exactIndex - index;
+
+        const start = routeCoordinates[index];
+        const end = routeCoordinates[Math.min(index + 1, routeCoordinates.length - 1)];
+
+        if (start && end) {
+            const newLng = start[0] + (end[0] - start[0]) * fraction;
+            const newLat = start[1] + (end[1] - start[1]) * fraction;
+            setVehiclePosition([newLng, newLat]);
+
+            // Calculate heading
+            const dx = end[0] - start[0];
+            const dy = end[1] - start[1];
+            const heading = (Math.atan2(dy, dx) * 180 / Math.PI + 90) % 360;
+
+            // Update telemetry
+            setTelemetry({
+                id: 'route-simulation',
+                vehicleId: 'demo',
+                latitude: newLat,
+                longitude: newLng,
+                speed: Math.floor(30 + Math.random() * 20),
+                heading: Math.floor(heading < 0 ? heading + 360 : heading),
+                timestamp: new Date().toISOString(),
+            } as any);
+        }
+    }, [progress, routeCoordinates]);
+
     const handleTrackOrder = async (order: Order) => {
         setSelectedOrder(order);
         setTrackingLoading(true);
-        try {
-            // Try to get latest telemetry data
-            const response = await telemetryApi.getAll({ limit: 1 });
-            const latestTelemetry = response.data.data?.[0] || response.data[0];
-            if (latestTelemetry) {
-                setTelemetry(latestTelemetry);
-            } else {
-                // Use simulated data if no real telemetry
-                setTelemetry({
-                    id: 'simulated',
-                    vehicleId: 'demo',
-                    latitude: (order.deliveryLat || 21.0285) - 0.01,
-                    longitude: (order.deliveryLon || 105.8542) - 0.01,
-                    speed: Math.floor(Math.random() * 40) + 20,
-                    heading: Math.floor(Math.random() * 360),
-                    timestamp: new Date().toISOString(),
-                } as any);
-            }
-        } catch (error) {
-            console.error('Failed to fetch tracking:', error);
-            // Use simulated data on error
-            setTelemetry({
-                id: 'simulated',
-                vehicleId: 'demo',
-                latitude: (order.deliveryLat || 21.0285) - 0.01,
-                longitude: (order.deliveryLon || 105.8542) - 0.01,
-                speed: Math.floor(Math.random() * 40) + 20,
-                heading: Math.floor(Math.random() * 360),
-                timestamp: new Date().toISOString(),
-            } as any);
-        } finally {
-            setTrackingLoading(false);
-        }
+        setProgress(0);
+        setRouteCoordinates([]);
+        setIsPlaying(true);
+
+        setTimeout(() => setTrackingLoading(false), 500);
     };
 
     const filteredOrders = orders.filter(
@@ -103,17 +144,41 @@ export default function ConsumerTrackingPage() {
             order.deliveryAddress?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    // Build route config for Map
+    const routeConfig = selectedOrder && ['shipped', 'confirmed'].includes(selectedOrder.status) ? {
+        start: [
+            selectedOrder.pickupLon || 105.8342,
+            selectedOrder.pickupLat || 21.0185
+        ] as [number, number],
+        end: [
+            selectedOrder.deliveryLon || 105.8542,
+            selectedOrder.deliveryLat || 21.0285
+        ] as [number, number],
+    } : undefined;
+
     // Build map markers
     const mapMarkers = [];
-    if (selectedOrder && telemetry) {
-        // Vehicle marker
-        mapMarkers.push({
-            id: 'vehicle',
-            coordinates: [telemetry.longitude, telemetry.latitude] as [number, number],
-            type: 'vehicle' as const,
-            label: 'Xe giao hàng',
-            popup: `Tốc độ: ${telemetry.speed || 0} km/h`,
-        });
+    if (selectedOrder) {
+        // Vehicle marker (animated position)
+        if (vehiclePosition) {
+            mapMarkers.push({
+                id: 'vehicle',
+                coordinates: vehiclePosition,
+                type: 'vehicle' as const,
+                label: 'Xe giao hàng',
+                popup: `Tốc độ: ${telemetry?.speed || 0} km/h<br/>Tiến độ: ${Math.floor(progress * 100)}%`,
+            });
+        }
+        // Pickup marker
+        if (selectedOrder.pickupLat && selectedOrder.pickupLon) {
+            mapMarkers.push({
+                id: 'pickup',
+                coordinates: [selectedOrder.pickupLon, selectedOrder.pickupLat] as [number, number],
+                type: 'facility' as const,
+                label: 'Điểm lấy hàng',
+                popup: selectedOrder.pickupAddress || 'Điểm lấy hàng',
+            });
+        }
         // Destination marker
         if (selectedOrder.deliveryLat && selectedOrder.deliveryLon) {
             mapMarkers.push({
@@ -126,9 +191,7 @@ export default function ConsumerTrackingPage() {
         }
     }
 
-    const mapCenter: [number, number] = telemetry
-        ? [telemetry.longitude, telemetry.latitude]
-        : [105.8542, 21.0285];
+    const mapCenter: [number, number] = vehiclePosition || [105.8542, 21.0285];
 
     return (
         <div className="space-y-6">
@@ -162,7 +225,7 @@ export default function ConsumerTrackingPage() {
                             ) : filteredOrders.length === 0 ? (
                                 <div className="text-center py-8 text-gray-500">
                                     <Package size={32} className="mx-auto mb-2 opacity-50" />
-                                    <p>Không có đơn hàng đang giao</p>
+                                    <p>Không có đơn hàng</p>
                                 </div>
                             ) : (
                                 filteredOrders.map((order) => (
@@ -185,6 +248,12 @@ export default function ConsumerTrackingPage() {
                                         <p className="text-sm text-gray-500 mt-1 truncate">
                                             {order.deliveryAddress || 'Chưa có địa chỉ'}
                                         </p>
+                                        {['shipped', 'confirmed'].includes(order.status) && (
+                                            <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                                                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                                Có thể theo dõi trực tiếp
+                                            </p>
+                                        )}
                                     </div>
                                 ))
                             )}
@@ -197,20 +266,39 @@ export default function ConsumerTrackingPage() {
                     {/* Map */}
                     <Card>
                         <CardHeader className="flex items-center justify-between">
-                            <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Vị trí giao hàng</h2>
-                            {selectedOrder && (
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleTrackOrder(selectedOrder)}
-                                    disabled={trackingLoading}
-                                >
-                                    <RefreshCw size={16} className={trackingLoading ? 'animate-spin' : ''} />
-                                </Button>
-                            )}
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Vị trí giao hàng</h2>
+                                {routeCoordinates.length > 0 && (
+                                    <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                                        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                        Live
+                                    </span>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {selectedOrder && ['shipped', 'confirmed'].includes(selectedOrder.status) && (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setIsPlaying(!isPlaying)}
+                                    >
+                                        {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+                                    </Button>
+                                )}
+                                {selectedOrder && (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleTrackOrder(selectedOrder)}
+                                        disabled={trackingLoading}
+                                    >
+                                        <RefreshCw size={16} className={trackingLoading ? 'animate-spin' : ''} />
+                                    </Button>
+                                )}
+                            </div>
                         </CardHeader>
                         <CardBody>
-                            <div className="h-80">
+                            <div className="h-96">
                                 {!selectedOrder ? (
                                     <div className="h-full bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
                                         <div className="text-center text-gray-500">
@@ -228,11 +316,29 @@ export default function ConsumerTrackingPage() {
                                 ) : (
                                     <Map
                                         center={mapCenter}
-                                        zoom={13}
+                                        zoom={14}
                                         markers={mapMarkers}
+                                        route={routeConfig}
+                                        onRouteLoaded={handleRouteLoaded}
                                     />
                                 )}
                             </div>
+                            {/* Progress bar */}
+                            {selectedOrder && ['shipped', 'confirmed'].includes(selectedOrder.status) && routeCoordinates.length > 0 && (
+                                <div className="mt-3">
+                                    <div className="flex justify-between text-sm text-gray-500 mb-1">
+                                        <span>Điểm lấy hàng</span>
+                                        <span>{Math.floor(progress * 100)}%</span>
+                                        <span>Điểm giao</span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-2">
+                                        <div
+                                            className="bg-blue-600 h-2 rounded-full transition-all duration-100"
+                                            style={{ width: `${progress * 100}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            )}
                         </CardBody>
                     </Card>
 
@@ -240,9 +346,7 @@ export default function ConsumerTrackingPage() {
                     {selectedOrder && (
                         <Card>
                             <CardHeader>
-                                <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
-                                    Chi tiết theo dõi
-                                </h2>
+                                <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Chi tiết theo dõi</h2>
                             </CardHeader>
                             <CardBody>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -252,9 +356,7 @@ export default function ConsumerTrackingPage() {
                                         </div>
                                         <div>
                                             <p className="text-sm text-gray-500">Mã đơn hàng</p>
-                                            <p className="font-semibold text-gray-800 dark:text-white">
-                                                {selectedOrder.orderNumber}
-                                            </p>
+                                            <p className="font-semibold text-gray-800 dark:text-white">{selectedOrder.orderNumber}</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
@@ -263,9 +365,7 @@ export default function ConsumerTrackingPage() {
                                         </div>
                                         <div>
                                             <p className="text-sm text-gray-500">Tốc độ hiện tại</p>
-                                            <p className="font-semibold text-gray-800 dark:text-white">
-                                                {telemetry?.speed ? `${telemetry.speed} km/h` : '-- km/h'}
-                                            </p>
+                                            <p className="font-semibold text-gray-800 dark:text-white">{telemetry?.speed || '--'} km/h</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
@@ -274,9 +374,7 @@ export default function ConsumerTrackingPage() {
                                         </div>
                                         <div>
                                             <p className="text-sm text-gray-500">Địa chỉ giao</p>
-                                            <p className="font-semibold text-gray-800 dark:text-white truncate">
-                                                {selectedOrder.deliveryAddress || 'Chưa có'}
-                                            </p>
+                                            <p className="font-semibold text-gray-800 dark:text-white truncate max-w-[200px]">{selectedOrder.deliveryAddress || 'Chưa có'}</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
@@ -285,11 +383,7 @@ export default function ConsumerTrackingPage() {
                                         </div>
                                         <div>
                                             <p className="text-sm text-gray-500">Cập nhật lần cuối</p>
-                                            <p className="font-semibold text-gray-800 dark:text-white">
-                                                {telemetry?.timestamp
-                                                    ? new Date(telemetry.timestamp).toLocaleTimeString('vi-VN')
-                                                    : '--:--'}
-                                            </p>
+                                            <p className="font-semibold text-gray-800 dark:text-white">{telemetry?.timestamp ? new Date(telemetry.timestamp).toLocaleTimeString('vi-VN') : '--:--'}</p>
                                         </div>
                                     </div>
                                 </div>

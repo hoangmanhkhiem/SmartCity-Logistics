@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Card, CardBody, CardHeader, Badge, Button } from '@/components/ui';
-import { vehicleApi, telemetryApi } from '@/lib/api';
-import { Vehicle, Telemetry } from '@/types';
-import { MapPin, Truck, RefreshCw, Battery, Fuel, Navigation } from 'lucide-react';
+import { vehicleApi, facilityApi } from '@/lib/api';
+import { Vehicle, Telemetry, Facility } from '@/types';
+import { MapPin, Truck, RefreshCw, Battery, Fuel, Navigation, Play, Pause } from 'lucide-react';
 
 // Dynamic import for Map to avoid SSR issues
 const Map = dynamic(() => import('@/components/shared/map'), {
@@ -22,78 +22,166 @@ const Map = dynamic(() => import('@/components/shared/map'), {
 
 export default function DeliveryTrackingPage() {
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+    const [facilities, setFacilities] = useState<Facility[]>([]);
     const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
     const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
     const [loading, setLoading] = useState(true);
     const [trackingLoading, setTrackingLoading] = useState(false);
 
+    // Route animation state
+    const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([]);
+    const [progress, setProgress] = useState(0);
+    const [isPlaying, setIsPlaying] = useState(true);
+    const [vehiclePosition, setVehiclePosition] = useState<[number, number] | null>(null);
+    const [routeDestination, setRouteDestination] = useState<Facility | null>(null);
+
     useEffect(() => {
-        const fetchVehicles = async () => {
+        const fetchData = async () => {
             try {
-                const response = await vehicleApi.getAll({ limit: 50 });
-                const vehicleData = response.data.data || response.data;
+                const [vehicleRes, facilityRes] = await Promise.all([
+                    vehicleApi.getAll({ limit: 50 }),
+                    facilityApi.getAll({ limit: 20 }),
+                ]);
+                const vehicleData = vehicleRes.data.data || vehicleRes.data;
+                const facilityData = facilityRes.data.data || facilityRes.data;
                 setVehicles(vehicleData);
+                setFacilities(facilityData);
                 if (vehicleData.length > 0) {
                     setSelectedVehicle(vehicleData[0]);
                 }
             } catch (error) {
-                console.error('Failed to fetch vehicles:', error);
+                console.error('Failed to fetch data:', error);
             } finally {
                 setLoading(false);
             }
         };
-        fetchVehicles();
+        fetchData();
     }, []);
 
+    // Pick a random facility as destination when vehicle changes
     useEffect(() => {
-        if (selectedVehicle) {
-            fetchTelemetry(selectedVehicle.id);
+        if (selectedVehicle && facilities.length > 0) {
+            const randomFacility = facilities[Math.floor(Math.random() * facilities.length)];
+            setRouteDestination(randomFacility);
+            setProgress(0);
+            setRouteCoordinates([]);
         }
-    }, [selectedVehicle?.id]);
+    }, [selectedVehicle?.id, facilities]);
 
-    const fetchTelemetry = async (vehicleId: string) => {
-        setTrackingLoading(true);
-        try {
-            const response = await telemetryApi.getLatest(vehicleId);
-            setTelemetry(response.data);
-        } catch (error: any) {
-            // If no telemetry data exists (404), use simulated data
-            if (error?.response?.status === 404) {
-                setTelemetry({
-                    id: 'simulated',
-                    vehicleId,
-                    latitude: 21.0285 + (Math.random() - 0.5) * 0.05,
-                    longitude: 105.8542 + (Math.random() - 0.5) * 0.05,
-                    speed: Math.floor(Math.random() * 60) + 10,
-                    heading: Math.floor(Math.random() * 360),
-                    batteryLevel: Math.floor(Math.random() * 40) + 60,
-                    fuelLevel: Math.floor(Math.random() * 40) + 60,
-                    timestamp: new Date().toISOString(),
-                } as any);
-            } else {
-                console.error('Failed to fetch telemetry:', error);
-                setTelemetry(null);
-            }
-        } finally {
-            setTrackingLoading(false);
+    // Handle route loaded from Map component
+    const handleRouteLoaded = useCallback((coordinates: [number, number][]) => {
+        setRouteCoordinates(coordinates);
+        if (coordinates.length > 0) {
+            setVehiclePosition(coordinates[0]);
         }
-    };
+    }, []);
+
+    // Animate vehicle along route
+    useEffect(() => {
+        if (!isPlaying || routeCoordinates.length === 0 || !selectedVehicle) return;
+        if (selectedVehicle.status !== 'in_use') return;
+
+        const interval = setInterval(() => {
+            setProgress(prev => {
+                const newProgress = prev + 0.003;
+                if (newProgress >= 1) {
+                    return 0;
+                }
+                return newProgress;
+            });
+        }, 100);
+
+        return () => clearInterval(interval);
+    }, [isPlaying, routeCoordinates.length, selectedVehicle]);
+
+    // Update vehicle position based on progress
+    useEffect(() => {
+        if (routeCoordinates.length === 0) return;
+
+        const totalPoints = routeCoordinates.length - 1;
+        const exactIndex = progress * totalPoints;
+        const index = Math.floor(exactIndex);
+        const fraction = exactIndex - index;
+
+        const start = routeCoordinates[index];
+        const end = routeCoordinates[Math.min(index + 1, routeCoordinates.length - 1)];
+
+        if (start && end) {
+            const newLng = start[0] + (end[0] - start[0]) * fraction;
+            const newLat = start[1] + (end[1] - start[1]) * fraction;
+            setVehiclePosition([newLng, newLat]);
+
+            // Calculate heading
+            const dx = end[0] - start[0];
+            const dy = end[1] - start[1];
+            const heading = (Math.atan2(dy, dx) * 180 / Math.PI + 90) % 360;
+
+            setTelemetry({
+                id: 'route-simulation',
+                vehicleId: selectedVehicle?.id || '',
+                latitude: newLat,
+                longitude: newLng,
+                speed: Math.floor(25 + Math.random() * 35),
+                heading: Math.floor(heading < 0 ? heading + 360 : heading),
+                batteryLevel: selectedVehicle?.isElectric ? Math.floor(60 + Math.random() * 30) : undefined,
+                fuelLevel: !selectedVehicle?.isElectric ? Math.floor(60 + Math.random() * 30) : undefined,
+                timestamp: new Date().toISOString(),
+            } as any);
+        }
+    }, [progress, routeCoordinates, selectedVehicle]);
+
+    // Set static position for non-moving vehicles
+    useEffect(() => {
+        if (!selectedVehicle) return;
+        if (selectedVehicle.status !== 'in_use') {
+            const staticLat = 21.0285 + (Math.random() - 0.5) * 0.02;
+            const staticLng = 105.8542 + (Math.random() - 0.5) * 0.02;
+            setVehiclePosition([staticLng, staticLat]);
+            setTelemetry({
+                id: 'static',
+                vehicleId: selectedVehicle.id,
+                latitude: staticLat,
+                longitude: staticLng,
+                speed: 0,
+                heading: 0,
+                batteryLevel: selectedVehicle.isElectric ? 85 : undefined,
+                fuelLevel: !selectedVehicle.isElectric ? 75 : undefined,
+                timestamp: new Date().toISOString(),
+            } as any);
+        }
+    }, [selectedVehicle]);
 
     const activeVehicles = vehicles.filter(v => v.status === 'in_use');
     const availableVehicles = vehicles.filter(v => v.status === 'available');
 
-    // Build map markers from vehicles with telemetry
-    const mapMarkers = selectedVehicle && telemetry ? [{
-        id: selectedVehicle.id,
-        coordinates: [telemetry.longitude, telemetry.latitude] as [number, number],
-        type: 'vehicle' as const,
-        label: selectedVehicle.plate,
-        popup: `${selectedVehicle.brand} ${selectedVehicle.model}<br/>Tốc độ: ${telemetry.speed || 0} km/h`,
-    }] : [];
+    // Build route config for in_use vehicles
+    const routeConfig = selectedVehicle?.status === 'in_use' && routeDestination ? {
+        start: [105.8342, 21.0185] as [number, number], // Starting point
+        end: [routeDestination.longitude, routeDestination.latitude] as [number, number],
+    } : undefined;
 
-    const mapCenter: [number, number] = telemetry
-        ? [telemetry.longitude, telemetry.latitude]
-        : [105.8542, 21.0285];
+    // Build map markers
+    const mapMarkers = [];
+    if (selectedVehicle && vehiclePosition) {
+        mapMarkers.push({
+            id: selectedVehicle.id,
+            coordinates: vehiclePosition,
+            type: 'vehicle' as const,
+            label: selectedVehicle.plate,
+            popup: `${selectedVehicle.brand} ${selectedVehicle.model}<br/>Tốc độ: ${telemetry?.speed || 0} km/h`,
+        });
+    }
+    if (routeDestination && selectedVehicle?.status === 'in_use') {
+        mapMarkers.push({
+            id: 'destination',
+            coordinates: [routeDestination.longitude, routeDestination.latitude] as [number, number],
+            type: 'facility' as const,
+            label: routeDestination.name,
+            popup: routeDestination.address || routeDestination.kind,
+        });
+    }
+
+    const mapCenter: [number, number] = vehiclePosition || [105.8542, 21.0285];
 
     return (
         <div className="space-y-6">
@@ -103,14 +191,28 @@ export default function DeliveryTrackingPage() {
                     <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Tracking xe</h1>
                     <p className="text-gray-500 mt-1">Theo dõi vị trí xe thời gian thực</p>
                 </div>
-                <Button
-                    variant="outline"
-                    onClick={() => selectedVehicle && fetchTelemetry(selectedVehicle.id)}
-                    disabled={!selectedVehicle || trackingLoading}
-                >
-                    <RefreshCw size={18} className={trackingLoading ? 'animate-spin' : ''} />
-                    <span className="ml-1">Làm mới</span>
-                </Button>
+                <div className="flex items-center gap-2">
+                    {selectedVehicle?.status === 'in_use' && (
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsPlaying(!isPlaying)}
+                        >
+                            {isPlaying ? <Pause size={18} /> : <Play size={18} />}
+                            <span className="ml-1">{isPlaying ? 'Dừng' : 'Chạy'}</span>
+                        </Button>
+                    )}
+                    <Button
+                        variant="outline"
+                        onClick={() => {
+                            setProgress(0);
+                            setRouteCoordinates([]);
+                        }}
+                        disabled={!selectedVehicle || trackingLoading}
+                    >
+                        <RefreshCw size={18} className={trackingLoading ? 'animate-spin' : ''} />
+                        <span className="ml-1">Làm mới</span>
+                    </Button>
+                </div>
             </div>
 
             {/* Stats */}
@@ -201,6 +303,12 @@ export default function DeliveryTrackingPage() {
                                         <p className="text-sm text-gray-500 mt-1">
                                             {vehicle.brand} {vehicle.model}
                                         </p>
+                                        {vehicle.status === 'in_use' && (
+                                            <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                                                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                                Đang di chuyển theo tuyến
+                                            </p>
+                                        )}
                                     </div>
                                 ))
                             )}
@@ -213,12 +321,25 @@ export default function DeliveryTrackingPage() {
                     {/* Map */}
                     <Card>
                         <CardHeader className="flex items-center justify-between">
-                            <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
-                                Vị trí xe {selectedVehicle ? `- ${selectedVehicle.plate}` : ''}
-                            </h2>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
+                                    Vị trí xe {selectedVehicle ? `- ${selectedVehicle.plate}` : ''}
+                                </h2>
+                                {routeCoordinates.length > 0 && isPlaying && (
+                                    <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                                        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                        Live
+                                    </span>
+                                )}
+                            </div>
+                            {routeDestination && selectedVehicle?.status === 'in_use' && (
+                                <span className="text-sm text-gray-500">
+                                    → {routeDestination.name}
+                                </span>
+                            )}
                         </CardHeader>
                         <CardBody>
-                            <div className="h-80">
+                            <div className="h-96">
                                 {!selectedVehicle ? (
                                     <div className="h-full bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
                                         <div className="text-center text-gray-500">
@@ -226,21 +347,32 @@ export default function DeliveryTrackingPage() {
                                             <p>Chọn xe để xem vị trí</p>
                                         </div>
                                     </div>
-                                ) : trackingLoading ? (
-                                    <div className="h-full bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
-                                        <div className="flex items-center gap-2 text-gray-500">
-                                            <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                                            Đang tải vị trí...
-                                        </div>
-                                    </div>
                                 ) : (
                                     <Map
                                         center={mapCenter}
                                         zoom={14}
                                         markers={mapMarkers}
+                                        route={routeConfig}
+                                        onRouteLoaded={handleRouteLoaded}
                                     />
                                 )}
                             </div>
+                            {/* Progress bar */}
+                            {selectedVehicle?.status === 'in_use' && routeCoordinates.length > 0 && (
+                                <div className="mt-3">
+                                    <div className="flex justify-between text-sm text-gray-500 mb-1">
+                                        <span>Xuất phát</span>
+                                        <span>{Math.floor(progress * 100)}%</span>
+                                        <span>{routeDestination?.name || 'Đích'}</span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-2">
+                                        <div
+                                            className="bg-blue-600 h-2 rounded-full transition-all duration-100"
+                                            style={{ width: `${progress * 100}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            )}
                         </CardBody>
                     </Card>
 
@@ -248,23 +380,21 @@ export default function DeliveryTrackingPage() {
                     {selectedVehicle && (
                         <Card>
                             <CardHeader>
-                                <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
-                                    Thông tin chi tiết
-                                </h2>
+                                <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Thông tin chi tiết</h2>
                             </CardHeader>
                             <CardBody>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                     <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-center">
                                         <Navigation size={24} className="mx-auto mb-2 text-blue-500" />
                                         <p className="text-2xl font-bold text-gray-800 dark:text-white">
-                                            {telemetry?.speed ? `${telemetry.speed}` : '--'}
+                                            {telemetry?.speed !== undefined ? telemetry.speed : '--'}
                                         </p>
                                         <p className="text-sm text-gray-500">km/h</p>
                                     </div>
                                     <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-center">
                                         <MapPin size={24} className="mx-auto mb-2 text-green-500" />
                                         <p className="text-2xl font-bold text-gray-800 dark:text-white">
-                                            {telemetry?.heading ? `${telemetry.heading}°` : '--'}
+                                            {telemetry?.heading !== undefined ? `${telemetry.heading}°` : '--'}
                                         </p>
                                         <p className="text-sm text-gray-500">Hướng</p>
                                     </div>
@@ -276,23 +406,15 @@ export default function DeliveryTrackingPage() {
                                         )}
                                         <p className="text-2xl font-bold text-gray-800 dark:text-white">
                                             {selectedVehicle.isElectric
-                                                ? telemetry?.batteryLevel
-                                                    ? `${telemetry.batteryLevel}%`
-                                                    : '--'
-                                                : telemetry?.fuelLevel
-                                                    ? `${telemetry.fuelLevel}%`
-                                                    : '--'}
+                                                ? telemetry?.batteryLevel !== undefined ? `${telemetry.batteryLevel}%` : '--'
+                                                : telemetry?.fuelLevel !== undefined ? `${telemetry.fuelLevel}%` : '--'}
                                         </p>
-                                        <p className="text-sm text-gray-500">
-                                            {selectedVehicle.isElectric ? 'Pin' : 'Xăng'}
-                                        </p>
+                                        <p className="text-sm text-gray-500">{selectedVehicle.isElectric ? 'Pin' : 'Xăng'}</p>
                                     </div>
                                     <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-center">
                                         <RefreshCw size={24} className="mx-auto mb-2 text-purple-500" />
                                         <p className="text-sm font-bold text-gray-800 dark:text-white">
-                                            {telemetry?.timestamp
-                                                ? new Date(telemetry.timestamp).toLocaleTimeString('vi-VN')
-                                                : '--:--'}
+                                            {telemetry?.timestamp ? new Date(telemetry.timestamp).toLocaleTimeString('vi-VN') : '--:--'}
                                         </p>
                                         <p className="text-sm text-gray-500">Cập nhật</p>
                                     </div>
