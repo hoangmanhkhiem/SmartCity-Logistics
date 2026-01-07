@@ -1,9 +1,70 @@
 'use client';
 
+import { useState, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { Card, CardBody, CardHeader } from '@/components/ui';
-import { Truck, Package, MapPin, Users, TrendingUp, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Truck, Package, MapPin, CheckCircle, Clock } from 'lucide-react';
+import { vehicleApi } from '@/lib/api';
+import { Vehicle } from '@/types';
+
+// Dynamic import for Map to avoid SSR issues
+const MapView = dynamic(() => import('@/components/shared/map'), {
+    ssr: false,
+    loading: () => (
+        <div className="h-80 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+            <div className="flex items-center gap-2 text-gray-500">
+                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                Đang tải bản đồ...
+            </div>
+        </div>
+    )
+});
 
 export default function DeliveryDashboard() {
+    const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+    const [vehiclePositions, setVehiclePositions] = useState<globalThis.Map<string, [number, number]>>(new globalThis.Map());
+
+    useEffect(() => {
+        const fetchVehicles = async () => {
+            try {
+                const response = await vehicleApi.getAll({ limit: 50 });
+                const vehicleData = response.data.data || response.data;
+                setVehicles(vehicleData);
+
+                // Initialize random positions for vehicles
+                const positions = new Map<string, [number, number]>();
+                vehicleData.forEach((v: Vehicle) => {
+                    positions.set(v.id, [
+                        105.8542 + (Math.random() - 0.5) * 0.05,
+                        21.0285 + (Math.random() - 0.5) * 0.05
+                    ]);
+                });
+                setVehiclePositions(positions);
+            } catch (error) {
+                console.error('Failed to fetch vehicles:', error);
+            }
+        };
+        fetchVehicles();
+    }, []);
+
+    // Animate in_use vehicles
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setVehiclePositions(prev => {
+                const newPositions = new Map(prev);
+                vehicles.filter(v => v.status === 'in_use').forEach(v => {
+                    const current = prev.get(v.id) || [105.8542, 21.0285];
+                    newPositions.set(v.id, [
+                        current[0] + (Math.random() - 0.5) * 0.002,
+                        current[1] + (Math.random() - 0.5) * 0.002
+                    ]);
+                });
+                return newPositions;
+            });
+        }, 2000);
+        return () => clearInterval(interval);
+    }, [vehicles]);
+
     const stats = [
         { label: 'Tổng đơn hàng hôm nay', value: '156', icon: <Package size={24} />, color: 'text-blue-500', bg: 'bg-blue-500/10' },
         { label: 'Đang vận chuyển', value: '42', icon: <Truck size={24} />, color: 'text-purple-500', bg: 'bg-purple-500/10' },
@@ -38,6 +99,20 @@ export default function DeliveryDashboard() {
         };
         return <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status]}`}>{labels[status]}</span>;
     };
+
+    // Build map markers from vehicles
+    const mapMarkers = vehicles.map((vehicle) => {
+        const position = vehiclePositions.get(vehicle.id) || [105.8542, 21.0285];
+        return {
+            id: vehicle.id,
+            coordinates: position as [number, number],
+            type: 'vehicle' as const,
+            label: vehicle.plate,
+            popup: `${vehicle.brand} ${vehicle.model}<br/>${vehicle.status === 'in_use' ? '🟢 Đang chạy' : '⏸️ Dừng'}`,
+        };
+    });
+
+    const activeCount = vehicles.filter(v => v.status === 'in_use').length;
 
     return (
         <div className="space-y-6">
@@ -104,18 +179,26 @@ export default function DeliveryDashboard() {
                 </Card>
             </div>
 
-            {/* Map for tracking */}
+            {/* Live Map for tracking */}
             <Card>
-                <CardHeader>
-                    <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Theo dõi xe thời gian thực</h2>
+                <CardHeader className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Theo dõi xe thời gian thực</h2>
+                        {activeCount > 0 && (
+                            <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                {activeCount} xe đang chạy
+                            </span>
+                        )}
+                    </div>
                 </CardHeader>
                 <CardBody>
-                    <div className="h-80 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
-                        <div className="text-center text-gray-500">
-                            <MapPin size={48} className="mx-auto mb-2 opacity-50" />
-                            <p>Bản đồ tracking xe</p>
-                            <p className="text-sm">Hiển thị vị trí xe realtime</p>
-                        </div>
+                    <div className="h-80">
+                        <MapView
+                            center={[105.8542, 21.0285]}
+                            zoom={12}
+                            markers={mapMarkers}
+                        />
                     </div>
                 </CardBody>
             </Card>

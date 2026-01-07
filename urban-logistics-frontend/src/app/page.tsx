@@ -6,18 +6,18 @@ import { useAuthStore, getDashboardPath } from '@/stores/auth-store';
 
 export default function Home() {
   const router = useRouter();
-  const { user, token } = useAuthStore();
+  const { user, accessToken } = useAuthStore();
 
   useEffect(() => {
-    if (token && user) {
+    if (accessToken && user) {
       // Already logged in - redirect to dashboard based on role
-      const primaryRole = user.memberships?.[0]?.role?.name || 'consumer';
+      const primaryRole = (user.memberships?.[0]?.role?.name || 'consumer') as any;
       router.replace(getDashboardPath(primaryRole));
     } else {
       // Not logged in - redirect to login
       router.replace('/login');
     }
-  }, [token, user, router]);
+  }, [accessToken, user, router]);
 
   // Show loading while redirecting
   return (

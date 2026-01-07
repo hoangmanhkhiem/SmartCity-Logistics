@@ -1,23 +1,83 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { Card, CardBody, CardHeader } from '@/components/ui';
-import { Building2, Truck, Leaf, AlertTriangle, TrendingDown, MapPin, BarChart3 } from 'lucide-react';
+import { Truck, Leaf, AlertTriangle, TrendingDown, MapPin, BarChart3 } from 'lucide-react';
+import { zoneApi, vehicleApi } from '@/lib/api';
+import { Zone, Vehicle } from '@/types';
+
+// Dynamic import for Map to avoid SSR issues
+const MapView = dynamic(() => import('@/components/shared/map'), {
+    ssr: false,
+    loading: () => (
+        <div className="h-80 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+            <div className="flex items-center gap-2 text-gray-500">
+                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                Đang tải bản đồ...
+            </div>
+        </div>
+    )
+});
 
 export default function RegulatorDashboard() {
-    const kpis = [
-        { label: 'Tổng đơn vị vận tải', value: '45', icon: <Truck size={24} />, color: 'text-blue-500', bg: 'bg-blue-500/10', change: '+5%' },
-        { label: 'CO₂ tiết kiệm (tấn)', value: '1,250', icon: <Leaf size={24} />, color: 'text-green-500', bg: 'bg-green-500/10', change: '-12%' },
-        { label: 'Vùng LEZ hoạt động', value: '8', icon: <MapPin size={24} />, color: 'text-purple-500', bg: 'bg-purple-500/10', change: '+2' },
-        { label: 'Vi phạm tháng này', value: '23', icon: <AlertTriangle size={24} />, color: 'text-red-500', bg: 'bg-red-500/10', change: '-8%' },
-    ];
+    const [zones, setZones] = useState<Zone[]>([]);
+    const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+    const [vehiclePositions, setVehiclePositions] = useState<globalThis.Map<string, [number, number]>>(new globalThis.Map());
 
-    const emissionData = [
-        { month: 'T1', co2: 450 },
-        { month: 'T2', co2: 420 },
-        { month: 'T3', co2: 380 },
-        { month: 'T4', co2: 350 },
-        { month: 'T5', co2: 320 },
-        { month: 'T6', co2: 290 },
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const [zoneRes, vehicleRes] = await Promise.all([
+                    zoneApi.getAll({ limit: 50 }),
+                    vehicleApi.getAll({ limit: 50 }),
+                ]);
+                setZones(zoneRes.data.data || zoneRes.data);
+                const vehicleData = vehicleRes.data.data || vehicleRes.data;
+                setVehicles(vehicleData);
+
+                // Initialize positions
+                const positions = new globalThis.Map<string, [number, number]>();
+                vehicleData.forEach((v: Vehicle) => {
+                    positions.set(v.id, [
+                        105.8542 + (Math.random() - 0.5) * 0.06,
+                        21.0285 + (Math.random() - 0.5) * 0.06
+                    ]);
+                });
+                setVehiclePositions(positions);
+            } catch (error) {
+                console.error('Failed to fetch data:', error);
+            }
+        };
+        fetchData();
+    }, []);
+
+    // Animate vehicles
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setVehiclePositions(prev => {
+                const newPositions = new globalThis.Map(prev);
+                vehicles.filter(v => v.status === 'in_use').forEach(v => {
+                    const current = prev.get(v.id) || [105.8542, 21.0285];
+                    newPositions.set(v.id, [
+                        current[0] + (Math.random() - 0.5) * 0.002,
+                        current[1] + (Math.random() - 0.5) * 0.002
+                    ]);
+                });
+                return newPositions;
+            });
+        }, 2000);
+        return () => clearInterval(interval);
+    }, [vehicles]);
+
+    const activeVehicles = vehicles.filter(v => v.status === 'in_use').length;
+    const lezZones = zones.filter(z => z.type === 'lez').length;
+
+    const kpis = [
+        { label: 'Tổng đơn vị vận tải', value: String(vehicles.length), icon: <Truck size={24} />, color: 'text-blue-500', bg: 'bg-blue-500/10', change: '+5%' },
+        { label: 'CO₂ tiết kiệm (tấn)', value: '1,250', icon: <Leaf size={24} />, color: 'text-green-500', bg: 'bg-green-500/10', change: '-12%' },
+        { label: 'Vùng LEZ hoạt động', value: String(lezZones), icon: <MapPin size={24} />, color: 'text-purple-500', bg: 'bg-purple-500/10', change: '+2' },
+        { label: 'Vi phạm tháng này', value: '23', icon: <AlertTriangle size={24} />, color: 'text-red-500', bg: 'bg-red-500/10', change: '-8%' },
     ];
 
     const topCarriers = [
@@ -27,11 +87,17 @@ export default function RegulatorDashboard() {
         { name: 'J&T Express', vehicles: 65, compliance: 89, co2: 28 },
     ];
 
-    const zones = [
-        { name: 'Hoàn Kiếm LEZ', type: 'Low Emission Zone', status: 'active', vehicles: 45 },
-        { name: 'Ba Đình', type: 'Restricted Hours', status: 'active', vehicles: 120 },
-        { name: 'Đống Đa', type: 'Weight Limit', status: 'active', vehicles: 89 },
-    ];
+    // Build map markers
+    const mapMarkers = vehicles.map((vehicle) => {
+        const position = vehiclePositions.get(vehicle.id) || [105.8542, 21.0285];
+        return {
+            id: vehicle.id,
+            coordinates: position as [number, number],
+            type: 'vehicle' as const,
+            label: vehicle.plate,
+            popup: `${vehicle.brand} ${vehicle.model}<br/>${vehicle.isElectric ? '⚡ Xe điện' : '⛽ Xe xăng'}`,
+        };
+    });
 
     return (
         <div className="space-y-6">
@@ -54,19 +120,26 @@ export default function RegulatorDashboard() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Emission Chart placeholder */}
+                {/* Live Map */}
                 <Card>
                     <CardHeader className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Xu hướng phát thải CO₂</h2>
-                        <TrendingDown size={20} className="text-green-500" />
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Giám sát xe thời gian thực</h2>
+                            {activeVehicles > 0 && (
+                                <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                    {activeVehicles} xe
+                                </span>
+                            )}
+                        </div>
                     </CardHeader>
                     <CardBody>
-                        <div className="h-64 bg-gray-50 dark:bg-gray-700/50 rounded-lg flex items-center justify-center">
-                            <div className="text-center">
-                                <BarChart3 size={48} className="mx-auto mb-2 text-gray-400" />
-                                <p className="text-gray-500">Biểu đồ phát thải CO₂</p>
-                                <p className="text-sm text-gray-400">Xu hướng giảm dần qua các tháng</p>
-                            </div>
+                        <div className="h-64">
+                            <MapView
+                                center={[105.8542, 21.0285]}
+                                zoom={11}
+                                markers={mapMarkers}
+                            />
                         </div>
                     </CardBody>
                 </Card>
@@ -100,21 +173,23 @@ export default function RegulatorDashboard() {
                 </Card>
             </div>
 
-            {/* Active Zones */}
+            {/* Active Zones with Map */}
             <Card>
-                <CardHeader>
+                <CardHeader className="flex items-center justify-between">
                     <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Vùng quản lý hoạt động</h2>
+                    <span className="text-sm text-gray-500">{zones.length} vùng</span>
                 </CardHeader>
                 <CardBody>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {zones.map((zone, i) => (
+                        {zones.slice(0, 6).map((zone, i) => (
                             <div key={i} className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
                                 <div className="flex items-center justify-between mb-2">
                                     <h3 className="font-medium text-gray-800 dark:text-white">{zone.name}</h3>
-                                    <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">Hoạt động</span>
+                                    <span className={`px-2 py-1 text-xs rounded-full ${zone.type === 'lez' ? 'bg-green-100 text-green-700' : zone.type === 'restricted' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                                        {zone.type === 'lez' ? 'LEZ' : zone.type === 'restricted' ? 'Hạn chế' : 'Quận'}
+                                    </span>
                                 </div>
-                                <p className="text-sm text-gray-500 mb-2">{zone.type}</p>
-                                <p className="text-sm"><span className="font-medium">{zone.vehicles}</span> xe đang hoạt động</p>
+                                <p className="text-sm text-gray-500">{zone.description || zone.type}</p>
                             </div>
                         ))}
                     </div>
