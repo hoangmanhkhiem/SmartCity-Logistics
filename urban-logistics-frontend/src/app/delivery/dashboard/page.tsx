@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Card, CardBody, CardHeader } from '@/components/ui';
 import { Truck, Package, MapPin, CheckCircle, Clock } from 'lucide-react';
-import { vehicleApi } from '@/lib/api';
-import { Vehicle } from '@/types';
+import { vehicleApi, facilityApi } from '@/lib/api';
+import { Vehicle, Facility } from '@/types';
 
 // Dynamic import for Map to avoid SSR issues
 const MapView = dynamic(() => import('@/components/shared/map'), {
@@ -20,50 +20,127 @@ const MapView = dynamic(() => import('@/components/shared/map'), {
     )
 });
 
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || 'pk.eyJ1Ijoia2hpZW1obTA0IiwiYSI6ImNtazNnc216ajBkZHgzZ3EyaWJ3OGFrZ2QifQ.3EGQJyiXL-oU1l1Ug4qfTQ';
+
 export default function DeliveryDashboard() {
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+    const [facilities, setFacilities] = useState<Facility[]>([]);
+    const [vehicleRoutes, setVehicleRoutes] = useState<globalThis.Map<string, [number, number][]>>(new globalThis.Map());
+    const [vehicleProgress, setVehicleProgress] = useState<globalThis.Map<string, number>>(new globalThis.Map());
     const [vehiclePositions, setVehiclePositions] = useState<globalThis.Map<string, [number, number]>>(new globalThis.Map());
 
+    // Fetch initial data
     useEffect(() => {
-        const fetchVehicles = async () => {
+        const fetchData = async () => {
             try {
-                const response = await vehicleApi.getAll({ limit: 50 });
-                const vehicleData = response.data.data || response.data;
+                const [vehicleRes, facilityRes] = await Promise.all([
+                    vehicleApi.getAll({ limit: 50 }),
+                    facilityApi.getAll({ limit: 20 }),
+                ]);
+                const vehicleData = vehicleRes.data.data || vehicleRes.data;
+                const facilityData = facilityRes.data.data || facilityRes.data;
                 setVehicles(vehicleData);
+                setFacilities(facilityData);
 
-                // Initialize random positions for vehicles
-                const positions = new Map<string, [number, number]>();
-                vehicleData.forEach((v: Vehicle) => {
+                // Fetch routes for in_use vehicles
+                vehicleData.filter((v: Vehicle) => v.status === 'in_use').forEach((vehicle: Vehicle) => {
+                    // Pick random start and end facilities
+                    if (facilityData.length >= 2) {
+                        const startFacility = facilityData[Math.floor(Math.random() * facilityData.length)];
+                        let endFacility = facilityData[Math.floor(Math.random() * facilityData.length)];
+                        while (endFacility.id === startFacility.id) {
+                            endFacility = facilityData[Math.floor(Math.random() * facilityData.length)];
+                        }
+                        fetchRouteForVehicle(vehicle.id,
+                            [startFacility.longitude, startFacility.latitude],
+                            [endFacility.longitude, endFacility.latitude]
+                        );
+                    }
+                });
+
+                // Set static positions for non-active vehicles
+                const positions = new globalThis.Map<string, [number, number]>();
+                vehicleData.filter((v: Vehicle) => v.status !== 'in_use').forEach((v: Vehicle) => {
                     positions.set(v.id, [
-                        105.8542 + (Math.random() - 0.5) * 0.05,
-                        21.0285 + (Math.random() - 0.5) * 0.05
+                        105.8542 + (Math.random() - 0.5) * 0.04,
+                        21.0285 + (Math.random() - 0.5) * 0.04
                     ]);
                 });
                 setVehiclePositions(positions);
             } catch (error) {
-                console.error('Failed to fetch vehicles:', error);
+                console.error('Failed to fetch data:', error);
             }
         };
-        fetchVehicles();
+        fetchData();
     }, []);
 
-    // Animate in_use vehicles
+    // Fetch route from Mapbox Directions API
+    const fetchRouteForVehicle = useCallback(async (vehicleId: string, start: [number, number], end: [number, number]) => {
+        try {
+            const response = await fetch(
+                `https://api.mapbox.com/directions/v5/mapbox/driving/${start[0]},${start[1]};${end[0]},${end[1]}?geometries=geojson&access_token=${MAPBOX_TOKEN}`
+            );
+            const data = await response.json();
+
+            if (data.routes && data.routes[0]) {
+                const coordinates = data.routes[0].geometry.coordinates as [number, number][];
+                setVehicleRoutes(prev => {
+                    const newRoutes = new globalThis.Map(prev);
+                    newRoutes.set(vehicleId, coordinates);
+                    return newRoutes;
+                });
+                setVehicleProgress(prev => {
+                    const newProgress = new globalThis.Map(prev);
+                    newProgress.set(vehicleId, Math.random() * 0.3); // Random start position
+                    return newProgress;
+                });
+            }
+        } catch (error) {
+            console.error('Failed to fetch route:', error);
+        }
+    }, []);
+
+    // Animate vehicles along routes
     useEffect(() => {
         const interval = setInterval(() => {
-            setVehiclePositions(prev => {
-                const newPositions = new Map(prev);
-                vehicles.filter(v => v.status === 'in_use').forEach(v => {
-                    const current = prev.get(v.id) || [105.8542, 21.0285];
-                    newPositions.set(v.id, [
-                        current[0] + (Math.random() - 0.5) * 0.002,
-                        current[1] + (Math.random() - 0.5) * 0.002
-                    ]);
+            setVehicleProgress(prev => {
+                const newProgress = new globalThis.Map(prev);
+                prev.forEach((progress, vehicleId) => {
+                    let newValue = progress + 0.0008 + Math.random() * 0.0005;
+                    if (newValue >= 1) newValue = 0;
+                    newProgress.set(vehicleId, newValue);
                 });
-                return newPositions;
+                return newProgress;
             });
-        }, 2000);
+        }, 100);
         return () => clearInterval(interval);
-    }, [vehicles]);
+    }, []);
+
+    // Update vehicle positions based on progress
+    useEffect(() => {
+        const newPositions = new globalThis.Map(vehiclePositions);
+
+        vehicleProgress.forEach((progress, vehicleId) => {
+            const route = vehicleRoutes.get(vehicleId);
+            if (!route || route.length === 0) return;
+
+            const totalPoints = route.length - 1;
+            const exactIndex = progress * totalPoints;
+            const index = Math.floor(exactIndex);
+            const fraction = exactIndex - index;
+
+            const start = route[index];
+            const end = route[Math.min(index + 1, route.length - 1)];
+
+            if (start && end) {
+                const newLng = start[0] + (end[0] - start[0]) * fraction;
+                const newLat = start[1] + (end[1] - start[1]) * fraction;
+                newPositions.set(vehicleId, [newLng, newLat]);
+            }
+        });
+
+        setVehiclePositions(newPositions);
+    }, [vehicleProgress, vehicleRoutes]);
 
     const stats = [
         { label: 'Tổng đơn hàng hôm nay', value: '156', icon: <Package size={24} />, color: 'text-blue-500', bg: 'bg-blue-500/10' },
@@ -102,15 +179,16 @@ export default function DeliveryDashboard() {
 
     // Build map markers from vehicles
     const mapMarkers = vehicles.map((vehicle) => {
-        const position = vehiclePositions.get(vehicle.id) || [105.8542, 21.0285];
+        const position = vehiclePositions.get(vehicle.id);
+        if (!position) return null;
         return {
             id: vehicle.id,
-            coordinates: position as [number, number],
+            coordinates: position,
             type: 'vehicle' as const,
             label: vehicle.plate,
-            popup: `${vehicle.brand} ${vehicle.model}<br/>${vehicle.status === 'in_use' ? '🟢 Đang chạy' : '⏸️ Dừng'}`,
+            popup: `${vehicle.brand} ${vehicle.model}<br/>${vehicle.status === 'in_use' ? '🟢 Đang chạy theo tuyến' : '⏸️ Dừng'}`,
         };
-    });
+    }).filter(Boolean) as any[];
 
     const activeCount = vehicles.filter(v => v.status === 'in_use').length;
 
@@ -187,7 +265,7 @@ export default function DeliveryDashboard() {
                         {activeCount > 0 && (
                             <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
                                 <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                                {activeCount} xe đang chạy
+                                {activeCount} xe đang chạy theo tuyến
                             </span>
                         )}
                     </div>

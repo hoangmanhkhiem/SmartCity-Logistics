@@ -83,7 +83,7 @@ export default function DeliveryTrackingPage() {
 
         const interval = setInterval(() => {
             setProgress(prev => {
-                const newProgress = prev + 0.003;
+                const newProgress = prev + 0.001;
                 if (newProgress >= 1) {
                     return 0;
                 }

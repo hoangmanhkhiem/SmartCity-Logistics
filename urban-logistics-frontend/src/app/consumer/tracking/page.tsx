@@ -82,7 +82,7 @@ export default function ConsumerTrackingPage() {
 
         const interval = setInterval(() => {
             setProgress(prev => {
-                const newProgress = prev + 0.005; // 0.5% per tick
+                const newProgress = prev + 0.0015; // 0.15% per tick
                 if (newProgress >= 1) {
                     return 0; // Loop back
                 }

@@ -95,7 +95,7 @@ export default function ConsumerOrdersPage() {
 
         const interval = setInterval(() => {
             setProgress(prev => {
-                const newProgress = prev + 0.005;
+                const newProgress = prev + 0.0015; // 0.15% per tick - slower
                 if (newProgress >= 1) {
                     return 0;
                 }
