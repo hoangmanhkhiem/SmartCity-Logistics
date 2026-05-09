@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ensureDispatchLegForOrder } from '../dispatch/fulfillment.util';
 import { CreateOrderDto, UpdateOrderDto } from './dto';
 import { v4 as uuid } from 'uuid';
 
@@ -9,7 +10,17 @@ export class OrderService {
 
     async create(dto: CreateOrderDto) {
         const orderNumber = `ORD-${Date.now()}-${uuid().slice(0, 4).toUpperCase()}`;
-        return this.prisma.order.create({ data: { ...dto, orderNumber }, include: { customer: true, shipments: true } });
+        const created = await this.prisma.order.create({
+            data: { ...dto, orderNumber },
+            include: { customer: true, shipments: true },
+        });
+        await ensureDispatchLegForOrder(this.prisma, created.id);
+        const full = await this.prisma.order.findUnique({
+            where: { id: created.id },
+            include: { customer: true, shipments: { include: { legs: { include: { stops: true } } } } },
+        });
+        if (!full) throw new NotFoundException('Order not found after create');
+        return full;
     }
 
     async findAll(page = 1, limit = 10, status?: string, customerId?: string) {

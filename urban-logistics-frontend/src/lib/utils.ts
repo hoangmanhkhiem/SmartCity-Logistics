@@ -46,6 +46,10 @@ export function getStatusColor(status: string): string {
         available: 'bg-green-500/20 text-green-500',
         in_use: 'bg-blue-500/20 text-blue-500',
         maintenance: 'bg-orange-500/20 text-orange-500',
+        planned: 'bg-amber-500/20 text-amber-500',
+        active: 'bg-cyan-500/20 text-cyan-500',
+        assigned: 'bg-indigo-500/20 text-indigo-500',
+        in_progress: 'bg-blue-500/20 text-blue-500',
     };
     return colors[status?.toLowerCase()] || 'bg-gray-500/20 text-gray-500';
 }

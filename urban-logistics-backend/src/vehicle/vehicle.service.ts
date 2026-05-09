@@ -14,14 +14,23 @@ export class VehicleService {
         const pageNum = Number(page) || 1; const limitNum = Number(limit) || 10; const skip = (pageNum - 1) * limitNum;
         const where = { ...(carrierId && { carrierId }), ...(type && { type }) };
         const [data, total] = await Promise.all([
-            this.prisma.vehicle.findMany({ where, skip, take: limitNum, include: { carrier: { include: { organization: true } } }, orderBy: { createdAt: 'desc' } }),
+            this.prisma.vehicle.findMany({
+                where,
+                skip,
+                take: limitNum,
+                include: { carrier: { select: { id: true, name: true, organizationId: true } } },
+                orderBy: { createdAt: 'desc' },
+            }),
             this.prisma.vehicle.count({ where }),
         ]);
         return { data, meta: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) } };
     }
 
     async findOne(id: string) {
-        const v = await this.prisma.vehicle.findUnique({ where: { id }, include: { carrier: { include: { organization: true } } } });
+        const v = await this.prisma.vehicle.findUnique({
+            where: { id },
+            include: { carrier: { select: { id: true, name: true, organizationId: true } } },
+        });
         if (!v) throw new NotFoundException(`Vehicle ${id} not found`);
         return v;
     }

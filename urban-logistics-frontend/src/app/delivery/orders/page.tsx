@@ -6,30 +6,17 @@ import { orderApi } from '@/lib/api';
 import { Order } from '@/types';
 import { Package, Plus, Search, Eye, Edit, MapPin } from 'lucide-react';
 import type { Column } from '@/components/ui';
+import { viStatus, ORDER_STATUS_OPTIONS } from '@/lib/status-labels';
 
-const statusOptions = [
-    { value: '', label: 'Tất cả trạng thái' },
-    { value: 'pending', label: 'Chờ xử lý' },
-    { value: 'confirmed', label: 'Đã xác nhận' },
-    { value: 'shipped', label: 'Đang giao' },
-    { value: 'delivered', label: 'Đã giao' },
-    { value: 'cancelled', label: 'Đã hủy' },
-];
+const statusOptions = [{ value: '', label: 'Tất cả trạng thái' }, ...ORDER_STATUS_OPTIONS];
 
 const statusVariant: Record<string, 'warning' | 'info' | 'success' | 'error'> = {
     pending: 'warning',
     confirmed: 'info',
     shipped: 'info',
+    in_transit: 'info',
     delivered: 'success',
     cancelled: 'error',
-};
-
-const statusLabel: Record<string, string> = {
-    pending: 'Chờ xử lý',
-    confirmed: 'Đã xác nhận',
-    shipped: 'Đang giao',
-    delivered: 'Đã giao',
-    cancelled: 'Đã hủy',
 };
 
 export default function DeliveryOrdersPage() {
@@ -44,6 +31,9 @@ export default function DeliveryOrdersPage() {
     const [formData, setFormData] = useState({
         pickupAddress: '',
         deliveryAddress: '',
+        pickupPhone: '',
+        deliveryPhone: '',
+        sourceUrl: '',
         priority: '1',
         notes: '',
     });
@@ -83,11 +73,22 @@ export default function DeliveryOrdersPage() {
             await orderApi.create({
                 pickupAddress: formData.pickupAddress,
                 deliveryAddress: formData.deliveryAddress,
+                pickupPhone: formData.pickupPhone || undefined,
+                deliveryPhone: formData.deliveryPhone || undefined,
+                sourceUrl: formData.sourceUrl || undefined,
                 priority: Number(formData.priority),
                 notes: formData.notes || undefined,
             });
             setIsCreateOpen(false);
-            setFormData({ pickupAddress: '', deliveryAddress: '', priority: '1', notes: '' });
+            setFormData({
+                pickupAddress: '',
+                deliveryAddress: '',
+                pickupPhone: '',
+                deliveryPhone: '',
+                sourceUrl: '',
+                priority: '1',
+                notes: '',
+            });
             fetchOrders();
         } catch (error) {
             console.error('Failed to create order:', error);
@@ -105,7 +106,7 @@ export default function DeliveryOrdersPage() {
             header: 'Trạng thái',
             render: (o) => (
                 <Badge variant={statusVariant[o.status] || 'default'}>
-                    {statusLabel[o.status] || o.status}
+                    {viStatus(o.status)}
                 </Badge>
             ),
         },
@@ -279,7 +280,7 @@ export default function DeliveryOrdersPage() {
                     <div className="space-y-4">
                         <div className="flex items-center gap-2">
                             <Badge variant={statusVariant[selectedOrder.status] || 'default'} className="text-sm">
-                                {statusLabel[selectedOrder.status] || selectedOrder.status}
+                                {viStatus(selectedOrder.status)}
                             </Badge>
                             <span className="text-sm text-gray-500">
                                 Độ ưu tiên: {selectedOrder.priority}
@@ -363,6 +364,26 @@ export default function DeliveryOrdersPage() {
                         onChange={(e) => setFormData({ ...formData, deliveryAddress: e.target.value })}
                         required
                         placeholder="Số nhà, đường, phường..."
+                    />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <Input
+                            label="SĐT lấy hàng"
+                            value={formData.pickupPhone}
+                            onChange={(e) => setFormData({ ...formData, pickupPhone: e.target.value })}
+                            placeholder="09..."
+                        />
+                        <Input
+                            label="SĐT nhận hàng"
+                            value={formData.deliveryPhone}
+                            onChange={(e) => setFormData({ ...formData, deliveryPhone: e.target.value })}
+                            placeholder="09..."
+                        />
+                    </div>
+                    <Input
+                        label="Link nguồn (Shopee / web)"
+                        value={formData.sourceUrl}
+                        onChange={(e) => setFormData({ ...formData, sourceUrl: e.target.value })}
+                        placeholder="https://..."
                     />
                     <Select
                         label="Độ ưu tiên"

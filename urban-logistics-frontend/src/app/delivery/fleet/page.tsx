@@ -6,6 +6,7 @@ import { vehicleApi, carrierApi } from '@/lib/api';
 import { Vehicle, Carrier } from '@/types';
 import { Truck, Plus, Search, Edit, Trash2, Zap, Fuel } from 'lucide-react';
 import type { Column } from '@/components/ui';
+import { viStatus, VEHICLE_STATUS_OPTIONS } from '@/lib/status-labels';
 
 const vehicleTypeOptions = [
     { value: '', label: 'Tất cả loại xe' },
@@ -16,23 +17,12 @@ const vehicleTypeOptions = [
     { value: 'electric_bike', label: 'Xe điện' },
 ];
 
-const statusOptions = [
-    { value: '', label: 'Tất cả trạng thái' },
-    { value: 'available', label: 'Sẵn sàng' },
-    { value: 'in_use', label: 'Đang sử dụng' },
-    { value: 'maintenance', label: 'Bảo trì' },
-];
+const statusOptions = [{ value: '', label: 'Tất cả trạng thái' }, ...VEHICLE_STATUS_OPTIONS];
 
 const statusVariant: Record<string, 'success' | 'info' | 'warning' | 'error'> = {
     available: 'success',
     in_use: 'info',
     maintenance: 'warning',
-};
-
-const statusLabel: Record<string, string> = {
-    available: 'Sẵn sàng',
-    in_use: 'Đang sử dụng',
-    maintenance: 'Bảo trì',
 };
 
 export default function DeliveryFleetPage() {
@@ -161,7 +151,7 @@ export default function DeliveryFleetPage() {
             header: 'Trạng thái',
             render: (v) => (
                 <Badge variant={statusVariant[v.status] || 'default'}>
-                    {statusLabel[v.status] || v.status}
+                    {viStatus(v.status)}
                 </Badge>
             ),
         },

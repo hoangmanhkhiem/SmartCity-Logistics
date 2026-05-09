@@ -15,8 +15,8 @@ datasource db {
 model Organization {
   id          String   @id @default(uuid())
   name        String
-  type        String   // Loại hình tổ chức (doanh nghiệp, cơ quan, trường, ...)
-  business    String?  // Lĩnh vực hoạt động
+  type        String // Loại hình tổ chức (doanh nghiệp, cơ quan, trường, ...)
+  business    String? // Lĩnh vực hoạt động
   description String?
   address     String?
   phone       String?
@@ -38,8 +38,8 @@ model Organization {
 model Carrier {
   id             String   @id @default(uuid())
   organizationId String   @map("organization_id")
-  name           String   // Tên hãng vận tải (VD: GHN, GHTK, Shopee Express)
-  scale          String?  // Quy mô
+  name           String // Tên hãng vận tải (VD: GHN, GHTK, Shopee Express)
+  scale          String? // Quy mô
   vehicleCount   Int?     @map("vehicle_count")
   warehouseCount Int?     @map("warehouse_count")
   contactName    String?  @map("contact_name")
@@ -61,18 +61,18 @@ model Carrier {
 model Vehicle {
   id                  String   @id @default(uuid())
   carrierId           String   @map("carrier_id")
-  type                String   // Loại xe (bike, van, truck, e-scooter, …)
+  type                String // Loại xe (bike, van, truck, e-scooter, …)
   plate               String   @unique // Biển số xe
-  brand               String?  // Hãng xe
-  model               String?  // Model xe
-  year                Int?     // Năm sản xuất
-  capacity            Float?   // Tải trọng (kg)
-  volume              Float?   // Thể tích (m³)
+  brand               String? // Hãng xe
+  model               String? // Model xe
+  year                Int? // Năm sản xuất
+  capacity            Float? // Tải trọng (kg)
+  volume              Float? // Thể tích (m³)
   fuelType            String?  @map("fuel_type") // Loại nhiên liệu
   isElectric          Boolean  @default(false) @map("is_electric")
   emissionStandard    String?  @map("emission_standard") // EURO 5, etc.
   emissionFactor      Float?   @map("emission_factor") // gCO2e/km
-  range               Float?   // Phạm vi hoạt động (km)
+  range               Float? // Phạm vi hoạt động (km)
   currentBatteryLevel Float?   @map("current_battery_level")
   status              String   @default("available") // available, in_use, maintenance
   isActive            Boolean  @default(true)
@@ -93,12 +93,12 @@ model Facility {
   id             String   @id @default(uuid())
   organizationId String   @map("organization_id")
   zoneId         String?  @map("zone_id")
-  name           String   // Tên điểm trung chuyển / kho / trạm
-  kind           String   // hub, warehouse, charging_station, fuel_station, mfc
+  name           String // Tên điểm trung chuyển / kho / trạm
+  kind           String // hub, warehouse, charging_station, fuel_station, mfc
   latitude       Float
   longitude      Float
   address        String?
-  capacity       Int?     // Công suất
+  capacity       Int? // Công suất
   openingTime    String?  @map("opening_time")
   closingTime    String?  @map("closing_time")
   description    String?
@@ -120,7 +120,7 @@ model Facility {
 model Charger {
   id            String   @id @default(uuid())
   facilityId    String   @map("facility_id")
-  type          String   // AC/DC/fast/slow
+  type          String // AC/DC/fast/slow
   connectorType String?  @map("connector_type") // Type 2, CCS, CHAdeMO
   powerKw       Float    @map("power_kw") // Công suất đầu ra (kW)
   slots         Int      @default(1) // Số khe sạc
@@ -137,14 +137,14 @@ model Charger {
 }
 
 model FuelPump {
-  id           String   @id @default(uuid())
-  facilityId   String   @map("facility_id")
-  fuelType     String   @map("fuel_type") // RON95, Diesel, E5, …
-  pricePerLiter Float?  @map("price_per_liter") // Giá/lít
-  status       String   @default("available")
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String   @id @default(uuid())
+  facilityId    String   @map("facility_id")
+  fuelType      String   @map("fuel_type") // RON95, Diesel, E5, …
+  pricePerLiter Float?   @map("price_per_liter") // Giá/lít
+  status        String   @default("available")
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // Relations
   facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
@@ -156,7 +156,7 @@ model Dock {
   id         String   @id @default(uuid())
   facilityId String   @map("facility_id")
   name       String?
-  capacity   Int      // Số lượng phương tiện tối đa
+  capacity   Int // Số lượng phương tiện tối đa
   status     String   @default("available")
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
@@ -172,8 +172,8 @@ model Dock {
 
 model Zone {
   id          String   @id @default(uuid())
-  name        String   // Tên vùng (VD: Ba Đình, Đống Đa, Láng, …)
-  type        String?  // district, ward, lez, restricted
+  name        String // Tên vùng (VD: Ba Đình, Đống Đa, Láng, …)
+  type        String? // district, ward, lez, restricted
   description String?
   // Boundary stored as GeoJSON string (for PostGIS, use raw SQL or extensions)
   boundary    String?  @db.Text
@@ -190,42 +190,42 @@ model Zone {
 }
 
 model RoadSegment {
-  id        String   @id @default(uuid())
-  zoneId    String?  @map("zone_id")
-  name      String   // Tên đường
-  osmId     String?  @map("osm_id") // OpenStreetMap ID
+  id         String   @id @default(uuid())
+  zoneId     String?  @map("zone_id")
+  name       String // Tên đường
+  osmId      String?  @map("osm_id") // OpenStreetMap ID
   // Geometry stored as GeoJSON string
-  geometry  String?  @db.Text
-  oneWay    Boolean  @default(false) @map("one_way")
-  speedLimit Float?  @map("speed_limit") // km/h
-  lanes     Int?
-  roadType  String?  @map("road_type") // primary, secondary, tertiary
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  geometry   String?  @db.Text
+  oneWay     Boolean  @default(false) @map("one_way")
+  speedLimit Float?   @map("speed_limit") // km/h
+  lanes      Int?
+  roadType   String?  @map("road_type") // primary, secondary, tertiary
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   // Relations
-  zone         Zone?        @relation(fields: [zoneId], references: [id])
+  zone         Zone?         @relation(fields: [zoneId], references: [id])
   restrictions Restriction[]
 
   @@map("road_segments")
 }
 
 model Restriction {
-  id            String    @id @default(uuid())
-  roadSegmentId String?   @map("road_segment_id")
-  zoneId        String?   @map("zone_id")
-  vehicleType   String?   @map("vehicle_type") // Loại xe bị ảnh hưởng
-  maxWeight     Float?    @map("max_weight") // Tải trọng tối đa (kg)
-  maxHeight     Float?    @map("max_height") // Chiều cao tối đa (m)
-  timeFrom      String?   @map("time_from") // Thời điểm bắt đầu hạn chế (HH:mm)
-  timeTo        String?   @map("time_to") // Thời điểm kết thúc hạn chế (HH:mm)
-  daysOfWeek    String[]  @map("days_of_week") // [Mon, Tue, ...]
-  allowed       Boolean   @default(false) // TRUE nếu được phép lưu thông
+  id            String   @id @default(uuid())
+  roadSegmentId String?  @map("road_segment_id")
+  zoneId        String?  @map("zone_id")
+  vehicleType   String?  @map("vehicle_type") // Loại xe bị ảnh hưởng
+  maxWeight     Float?   @map("max_weight") // Tải trọng tối đa (kg)
+  maxHeight     Float?   @map("max_height") // Chiều cao tối đa (m)
+  timeFrom      String?  @map("time_from") // Thời điểm bắt đầu hạn chế (HH:mm)
+  timeTo        String?  @map("time_to") // Thời điểm kết thúc hạn chế (HH:mm)
+  daysOfWeek    String[] @map("days_of_week") // [Mon, Tue, ...]
+  allowed       Boolean  @default(false) // TRUE nếu được phép lưu thông
   description   String?
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // Relations
   roadSegment RoadSegment? @relation(fields: [roadSegmentId], references: [id], onDelete: Cascade)
@@ -234,30 +234,55 @@ model Restriction {
   @@map("restrictions")
 }
 
+// ==================== PLATFORM API (B2B partner keys) ====================
+
+model PlatformApiClient {
+  id        String   @id @default(uuid())
+  name      String
+  keyPrefix String   @map("key_prefix")
+  keyHash   String   @unique @map("key_hash")
+  scopes    String[] @default(["orders:create"])
+  isActive  Boolean  @default(true) @map("isActive")
+  createdAt DateTime @default(now()) @map("createdAt")
+  updatedAt DateTime @default(now()) @updatedAt @map("updatedAt")
+
+  orders Order[]
+
+  @@map("platform_api_clients")
+}
+
 // ==================== ORDER & SHIPMENT ====================
 
 model Order {
-  id              String    @id @default(uuid())
-  customerId      String?   @map("customer_id")
-  orderNumber     String    @unique @map("order_number")
-  status          String    @default("pending") // pending, confirmed, shipped, delivered, cancelled
-  pickupAddress   String?   @map("pickup_address")
-  pickupLat       Float?    @map("pickup_lat")
-  pickupLon       Float?    @map("pickup_lon")
-  deliveryAddress String?   @map("delivery_address")
-  deliveryLat     Float?    @map("delivery_lat")
-  deliveryLon     Float?    @map("delivery_lon")
-  timeWindowStart DateTime? @map("time_window_start")
-  timeWindowEnd   DateTime? @map("time_window_end")
-  priority        Int       @default(1) // 1-5
-  notes           String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                  String    @id @default(uuid())
+  customerId          String?   @map("customer_id")
+  orderNumber         String    @unique @map("order_number")
+  status              String    @default("pending") // pending, confirmed, shipped, delivered, cancelled
+  pickupAddress       String?   @map("pickup_address")
+  pickupLat           Float?    @map("pickup_lat")
+  pickupLon           Float?    @map("pickup_lon")
+  deliveryAddress     String?   @map("delivery_address")
+  deliveryLat         Float?    @map("delivery_lat")
+  deliveryLon         Float?    @map("delivery_lon")
+  pickupPhone         String?   @map("pickup_phone")
+  deliveryPhone       String?   @map("delivery_phone")
+  sourceUrl           String?   @map("source_url")
+  externalRef         String?   @map("external_ref")
+  fulfillmentChannel  String?   @map("fulfillment_channel")
+  platformApiClientId String?   @map("platform_api_client_id")
+  timeWindowStart     DateTime? @map("time_window_start")
+  timeWindowEnd       DateTime? @map("time_window_end")
+  priority            Int       @default(1) // 1-5
+  notes               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   // Relations
-  customer  User?      @relation(fields: [customerId], references: [id])
-  shipments Shipment[]
+  customer          User?              @relation(fields: [customerId], references: [id])
+  platformApiClient PlatformApiClient? @relation(fields: [platformApiClientId], references: [id], onDelete: SetNull)
+  shipments         Shipment[]
 
+  @@index([platformApiClientId, externalRef])
   @@map("orders")
 }
 
@@ -265,8 +290,8 @@ model Shipment {
   id          String   @id @default(uuid())
   orderId     String   @map("order_id")
   trackingNo  String   @unique @map("tracking_no")
-  weight      Float?   // Khối lượng (kg)
-  volume      Float?   // Thể tích (m³)
+  weight      Float? // Khối lượng (kg)
+  volume      Float? // Thể tích (m³)
   width       Float?
   height      Float?
   length      Float?
@@ -287,8 +312,8 @@ model Shipment {
 
 model Route {
   id            String   @id @default(uuid())
-  name          String   // Tên tuyến
-  mode          String   // road, rail, bike, van, …
+  name          String // Tên tuyến
+  mode          String // road, rail, bike, van, …
   description   String?
   totalDistance Float?   @map("total_distance") // km
   totalDuration Int?     @map("total_duration") // minutes
@@ -310,9 +335,9 @@ model Leg {
   id         String    @id @default(uuid())
   shipmentId String    @map("shipment_id")
   routeId    String    @map("route_id")
-  sequence   Int       // Thứ tự chặng trong lô hàng
-  distance   Float?    // km
-  duration   Int?      // minutes
+  sequence   Int // Thứ tự chặng trong lô hàng
+  distance   Float? // km
+  duration   Int? // minutes
   startedAt  DateTime? @map("started_at")
   endedAt    DateTime? @map("ended_at")
   status     String    @default("pending") // pending, in_progress, completed
@@ -329,20 +354,20 @@ model Leg {
 }
 
 model Stop {
-  id          String    @id @default(uuid())
-  legId       String    @map("leg_id")
-  facilityId  String?   @map("facility_id")
-  sequence    Int       // Thứ tự điểm dừng
-  type        String    // pickup, delivery, transit, charging, refuel
-  address     String?
-  latitude    Float?
-  longitude   Float?
-  arrival     DateTime? // Thời gian đến
-  departure   DateTime? // Thời gian rời đi
-  notes       String?
-  status      String    @default("pending")
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id         String    @id @default(uuid())
+  legId      String    @map("leg_id")
+  facilityId String?   @map("facility_id")
+  sequence   Int // Thứ tự điểm dừng
+  type       String // pickup, delivery, transit, charging, refuel
+  address    String?
+  latitude   Float?
+  longitude  Float?
+  arrival    DateTime? // Thời gian đến
+  departure  DateTime? // Thời gian rời đi
+  notes      String?
+  status     String    @default("pending")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   // Relations
   leg      Leg       @relation(fields: [legId], references: [id], onDelete: Cascade)
@@ -359,13 +384,13 @@ model Telemetry {
   timestamp    DateTime @default(now())
   latitude     Float
   longitude    Float
-  speed        Float?   // km/h
-  heading      Float?   // degrees
-  altitude     Float?   // meters
+  speed        Float? // km/h
+  heading      Float? // degrees
+  altitude     Float? // meters
   batteryLevel Float?   @map("battery_level") // %
   fuelLevel    Float?   @map("fuel_level") // %
   engineStatus String?  @map("engine_status")
-  odometer     Float?   // km
+  odometer     Float? // km
   createdAt    DateTime @default(now())
 
   // Relations
@@ -376,17 +401,17 @@ model Telemetry {
 }
 
 model Assignment {
-  id         String    @id @default(uuid())
-  vehicleId  String    @map("vehicle_id")
-  legId      String    @map("leg_id")
-  driverId   String?   @map("driver_id")
-  assignedAt DateTime  @default(now()) @map("assigned_at")
-  startedAt  DateTime? @map("started_at")
+  id          String    @id @default(uuid())
+  vehicleId   String    @map("vehicle_id")
+  legId       String    @map("leg_id")
+  driverId    String?   @map("driver_id")
+  assignedAt  DateTime  @default(now()) @map("assigned_at")
+  startedAt   DateTime? @map("started_at")
   completedAt DateTime? @map("completed_at")
-  status     String    @default("assigned") // assigned, in_progress, completed, cancelled
-  notes      String?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  status      String    @default("assigned") // assigned, in_progress, completed, cancelled
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // Relations
   vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
@@ -399,16 +424,16 @@ model Assignment {
 // ==================== USER & RBAC ====================
 
 model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  password      String
-  name          String
-  phone         String?
-  avatarUrl     String?   @map("avatar_url")
-  isActive      Boolean   @default(true)
-  lastLoginAt   DateTime? @map("last_login_at")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id          String    @id @default(uuid())
+  email       String    @unique
+  password    String
+  name        String
+  phone       String?
+  avatarUrl   String?   @map("avatar_url")
+  isActive    Boolean   @default(true)
+  lastLoginAt DateTime? @map("last_login_at")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // Relations
   memberships Membership[]
@@ -455,8 +480,8 @@ model Role {
 model Permission {
   id          String   @id @default(uuid())
   name        String   @unique // manage_vehicle, view_data, etc.
-  resource    String   // vehicle, facility, order, route, etc.
-  action      String   // read, write, delete, manage
+  resource    String // vehicle, facility, order, route, etc.
+  action      String // read, write, delete, manage
   description String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -479,4 +504,251 @@ model RolePermission {
 
   @@unique([roleId, permissionId])
   @@map("role_permissions")
+}
+
+// ==================== RESEARCH / FIELD DATA (SQL imports) ====================
+// Column names with CRLF must use \r\n in @map (DB identifiers), not \n only.
+
+model ResearchBangThuThap0 {
+  id              String  @id @default(uuid()) @db.Uuid
+  stt             Int?
+  nhomDuLieu      String? @map("Nhóm dữ liệu") @db.Text
+  chiTieuThongTin String? @map("Chỉ tiêu/Thông tin cần thu thập") @db.Text
+  nguonDuLieu     String? @map("Nguồn dữ liệu") @db.Text
+  bienNghienCuu   String? @map("Biến nghiên cứu") @db.Text
+  thoiGian        String? @map("Thời gian") @db.Text
+
+  @@map("0_Bang_Thu_Thap")
+}
+
+model ResearchKhuCauGiay1 {
+  id                 String  @id @default(uuid()) @db.Uuid
+  stt                Int?
+  nhomDuLieu         String? @map("Nhóm dữ liệu") @db.Text
+  chiTieuNoiDung     String? @map("Chỉ tiêu / Nội dung cần thu thập\r\n(bổ sung thêm chi") @db.Text
+  nguonDuLieuDuKien  String? @map("Nguồn dữ liệu dự kiến") @db.Text
+  nguonCuThe         String? @map("Nguồn cụ thể (điền sau)") @db.Text
+  cauGiayDichVong    String? @map("Cầu Giấy (Dịch Vọng)") @db.Text
+  cauGiayDichVongHau String? @map("Cầu Giấy ( Dịch Vọng Hậu)") @db.Text
+  quanHoa            String? @map("Quan Hoa") @db.Text
+  myDinh1            String? @map("Mỹ Đình 1") @db.Text
+  myDinh2            String? @map("Mỹ Đình 2") @db.Text
+  yenHoa             String? @map("Yên Hòa") @db.Text
+  thoiGianDuLieu     String? @map("Thời gian dữ liệu") @db.Text
+  mucDichSuDung      String? @map("Mục đích sử dụng") @db.Text
+  ghiChu             String? @map("Ghi chú") @db.Text
+  column15           String? @map("column15") @db.Text
+
+  @@map("1_khu_thu_thap_cau_giay")
+}
+
+model ResearchKhuDongDa2 {
+  id                String  @id @default(uuid()) @db.Uuid
+  stt               Int?
+  nhomDuLieu        String? @map("Nhóm dữ liệu") @db.Text
+  chiTieuNoiDung    String? @map("Chỉ tiêu / Nội dung cần thu thập") @db.Text
+  nguonDuLieuDuKien String? @map("Nguồn dữ liệu dự kiến") @db.Text
+  nguonCuThe        String? @map("Nguồn cụ thể (điền sau)") @db.Text
+  thinhQuang        String? @map("Thịnh Quang") @db.Text
+  quangTrung        String? @map("Quang Trung") @db.Text
+  langHa            String? @map("Láng Hạ") @db.Text
+  namDong           String? @map("Nam Đồng") @db.Text
+  oChoDua           String? @map("Ô Chợ Dừa") @db.Text
+  trungLiet         String? @map("Trung Liệt") @db.Text
+  soLieuThongTin    String? @map("Số liệu / Thông tin thu thập") @db.Text
+  thoiGianDuLieu    String? @map("Thời gian dữ liệu") @db.Text
+  mucDichSuDung     String? @map("Mục đích sử dụng") @db.Text
+  ghiChu            String? @map("Ghi chú") @db.Text
+  column16          String? @map("column16") @db.Text
+
+  @@map("2_khu_thu_thap_dong_da")
+}
+
+model ResearchKhuHoanKiem3 {
+  id                   String  @id @default(uuid()) @db.Uuid
+  stt                  Int?
+  nhomDuLieu           String? @map("Nhóm dữ liệu") @db.Text
+  chiTieuNoiDung       String? @map("Chỉ tiêu / Nội dung cần thu thập\r\n(bổ sung thêm chi") @db.Text
+  nguonDuLieuDuKien    String? @map("Nguồn dữ liệu dự kiến") @db.Text
+  nguonCuThe           String? @map("Nguồn cụ thể (điền sau)") @db.Text
+  hangBac              String? @map("Hàng Bạc") @db.Text
+  hangBo               String? @map("Hàng Bồ") @db.Text
+  hangBuom             String? @map("Hàng Buồm") @db.Text
+  hangDao              String? @map("Hàng Đào") @db.Text
+  hangGai              String? @map("Hàng Gai") @db.Text
+  hangMa               String? @map("Hàng Mã") @db.Text
+  lyThaiTo             String? @map("Lý Thái Tổ") @db.Text
+  dienBien             String? @map("Điện Biên") @db.Text
+  dongXuan             String? @map("Đồng Xuân") @db.Text
+  motPhanHangBong      String? @map("1 phần Hàng Bông") @db.Text
+  motPhanHangTrong     String? @map("1 phần Hàng Trống") @db.Text
+  motPhanTrangTien     String? @map("1 phần Tràng Tiền") @db.Text
+  motPhanCuaNamCuaDong String? @map("1 phần Cửa Nam, Cửa Đông") @db.Text
+  thoiGianDuLieu       String? @map("Thời gian dữ liệu") @db.Text
+  mucDichSuDung        String? @map("Mục đích sử dụng") @db.Text
+  ghiChu               String? @map("Ghi chú") @db.Text
+  column22             String? @map("column22") @db.Text
+  column23             String? @map("column23") @db.Text
+  column24             String? @map("column24") @db.Text
+  column25             String? @map("column25") @db.Text
+  column26             String? @map("column26") @db.Text
+  column27             String? @map("column27") @db.Text
+  column28             String? @map("column28") @db.Text
+  column29             String? @map("column29") @db.Text
+  column30             String? @map("column30") @db.Text
+  column31             String? @map("column31") @db.Text
+  column32             String? @map("column32") @db.Text
+  column33             String? @map("column33") @db.Text
+  column34             String? @map("column34") @db.Text
+  column35             String? @map("column35") @db.Text
+  column36             String? @map("column36") @db.Text
+  column37             String? @map("column37") @db.Text
+  column38             String? @map("column38") @db.Text
+
+  @@map("3_khu_thu_thap_hoan_kiem")
+}
+
+model ResearchKhuCuaNam4 {
+  id                  String  @id @default(uuid()) @db.Uuid
+  stt                 Int?
+  nhomDuLieu          String? @map("Nhóm dữ liệu") @db.Text
+  chiTieuNoiDung      String? @map("Chỉ tiêu / Nội dung cần thu thập\r\n(bổ sung thêm chi") @db.Text
+  nguonDuLieuDuKien   String? @map("Nguồn dữ liệu dự kiến") @db.Text
+  nguonCuThe          String? @map("Nguồn cụ thể (điền sau)") @db.Text
+  hangBai             String? @map("Hàng Bài") @db.Text
+  phanChuTrinh        String? @map("Phan Chu Trinh") @db.Text
+  tranHungDao         String? @map("Trần Hưng Đạo") @db.Text
+  motPhanNguyenDu     String? @map("1 phần Nguyễn Du") @db.Text
+  motPhanCuaNam       String? @map("1 phần Cửa Nam") @db.Text
+  motPhanPhamDinhHo   String? @map("1 phần Phạm Đình Hổ") @db.Text
+  phanConLaiHangBong  String? @map("phần còn lại Hàng Bông") @db.Text
+  phanConLaiHangTrong String? @map("phần còn lại Hàng Trống") @db.Text
+  phanConLaiTrangTien String? @map("phần còn lại Tràng Tiền") @db.Text
+  thoiGianDuLieu      String? @map("Thời gian dữ liệu") @db.Text
+  mucDichSuDung       String? @map("Mục đích sử dụng") @db.Text
+  ghiChu              String? @map("Ghi chú") @db.Text
+  column18            String? @map("column18") @db.Text
+
+  @@map("4_khu_thu_thap_cua_nam")
+}
+
+model ResearchKhuCnBaDinh5 {
+  id                   String  @id @default(uuid()) @db.Uuid
+  stt                  Int?
+  nhomDuLieu           String? @map("Nhóm dữ liệu") @db.Text
+  chiTieuNoiDung       String? @map("Chỉ tiêu / Nội dung cần thu thập\r\n(bổ sung thêm chi") @db.Text
+  nguonDuLieuDuKien    String? @map("Nguồn dữ liệu dự kiến") @db.Text
+  nguonCuThe           String? @map("Nguồn cụ thể (điền sau)") @db.Text
+  quanThanh            String? @map("Quán Thánh") @db.Text
+  trucBach             String? @map("Trúc Bạch") @db.Text
+  motPhanCuaNamTuNhien String? @map("1 phần (tự nhiên, quy mô dân số) Cửa Nam") @db.Text
+  dienBien             String? @map("Điện Biên") @db.Text
+  doiCan               String? @map("Đội Cấn") @db.Text
+  kimMa                String? @map("Kim Mã") @db.Text
+  ngocHa               String? @map("Ngọc Hà") @db.Text
+  motPhanThuyKhue      String? @map("1 phần diện tích tự nhiênThụy Khuê") @db.Text
+  phanConLaiCuaDong    String? @map("Phần còn lại của phường Cửa Đông") @db.Text
+  phuongDongXuan       String? @map("Phường Đồng Xuân") @db.Text
+  thoiGianDuLieu       String? @map("Thời gian dữ liệu") @db.Text
+  mucDichSuDung        String? @map("Mục đích sử dụng") @db.Text
+  ghiChu               String? @map("Ghi chú") @db.Text
+  column19             String? @map("column19") @db.Text
+  column20             String? @map("column20") @db.Text
+  column21             String? @map("column21") @db.Text
+  column22             String? @map("column22") @db.Text
+  column23             String? @map("column23") @db.Text
+  column24             String? @map("column24") @db.Text
+  column25             String? @map("column25") @db.Text
+  column26             String? @map("column26") @db.Text
+  column27             String? @map("column27") @db.Text
+  column28             String? @map("column28") @db.Text
+  column29             String? @map("column29") @db.Text
+  column30             String? @map("column30") @db.Text
+  column31             String? @map("column31") @db.Text
+  column32             String? @map("column32") @db.Text
+  column33             String? @map("column33") @db.Text
+  column34             String? @map("column34") @db.Text
+  column35             String? @map("column35") @db.Text
+
+  @@map("5_khu_cong_nghiep_ba_dinh")
+}
+
+model ResearchKhuGiangVo6 {
+  id                String  @id @default(uuid()) @db.Uuid
+  stt               Int?
+  nhomDuLieu        String? @map("Nhóm dữ liệu") @db.Text
+  chiTieuNoiDung    String? @map("Chỉ tiêu / Nội dung cần thu thập\r\n(bổ sung thêm chi") @db.Text
+  nguonDuLieuDuKien String? @map("Nguồn dữ liệu dự kiến") @db.Text
+  nguonCuThe        String? @map("Nguồn cụ thể (điền sau)") @db.Text
+  giangVo           String? @map("Giảng Võ") @db.Text
+  catLinh           String? @map("Cát Linh") @db.Text
+  langHa            String? @map("Láng Hạ") @db.Text
+  kimMa             String? @map("Kim Mã") @db.Text
+  ngocKhanh         String? @map("Ngọc Khánh") @db.Text
+  thanhCong         String? @map("Thành Công") @db.Text
+  congVi            String? @map("Cống Vị") @db.Text
+  thoiGianDuLieu    String? @map("Thời gian dữ liệu") @db.Text
+  mucDichSuDung     String? @map("Mục đích sử dụng") @db.Text
+  ghiChu            String? @map("Ghi chú") @db.Text
+  column16          String? @map("column16") @db.Text
+  column17          String? @map("column17") @db.Text
+  column18          String? @map("column18") @db.Text
+  column19          String? @map("column19") @db.Text
+  column20          String? @map("column20") @db.Text
+  column21          String? @map("column21") @db.Text
+  column22          String? @map("column22") @db.Text
+  column23          String? @map("column23") @db.Text
+  column24          String? @map("column24") @db.Text
+  column25          String? @map("column25") @db.Text
+  column26          String? @map("column26") @db.Text
+  column27          String? @map("column27") @db.Text
+  column28          String? @map("column28") @db.Text
+  column29          String? @map("column29") @db.Text
+  column30          String? @map("column30") @db.Text
+  column31          String? @map("column31") @db.Text
+  column32          String? @map("column32") @db.Text
+
+  @@map("6_khu_thu_thap_giang_vo")
+}
+
+model ResearchBenchmarkBe {
+  id             String  @id @default(uuid()) @db.Uuid
+  stt            Int?
+  nhomNoiDung    String? @map("Nhóm nội dung") @db.Text
+  chiTieuThuThap String? @map("Chỉ tiêu thu thập") @db.Text
+  noiDungCuThe   String? @map("Nội dung cụ thể ( Be )") @db.Text
+  dangDuLieu     String? @map("Dạng dữ liệu") @db.Text
+  donVi          String? @map("Đơn vị") @db.Text
+  nguonDuLieu    String? @map("Nguồn dữ liệu") @db.Text
+  ghiChu         String? @map("Ghi chú") @db.Text
+
+  @@map("b")
+}
+
+model ResearchBenchmarkGrab {
+  id             String  @id @default(uuid()) @db.Uuid
+  stt            Int?
+  nhomNoiDung    String? @map("Nhóm nội dung") @db.Text
+  chiTieuThuThap String? @map("Chỉ tiêu thu thập") @db.Text
+  noiDungCuThe   String? @map("Nội dung cụ thể ( Grab)") @db.Text
+  dangDuLieu     String? @map("Dạng dữ liệu") @db.Text
+  donVi          String? @map("Đơn vị") @db.Text
+  nguonDuLieu    String? @map("Nguồn dữ liệu") @db.Text
+  ghiChu         String? @map("Ghi chú") @db.Text
+
+  @@map("grab")
+}
+
+model ResearchBenchmarkShopee {
+  id             String  @id @default(uuid()) @db.Uuid
+  stt            Int?
+  nhomNoiDung    String? @map("Nhóm nội dung") @db.Text
+  chiTieuThuThap String? @map("Chỉ tiêu thu thập") @db.Text
+  noiDungCuThe   String? @map("Nội dung cụ thể ( Shopee)") @db.Text
+  dangDuLieu     String? @map("Dạng dữ liệu") @db.Text
+  donVi          String? @map("Đơn vị") @db.Text
+  nguonDuLieu    String? @map("Nguồn dữ liệu") @db.Text
+  ghiChu         String? @map("Ghi chú") @db.Text
+
+  @@map("shopee")
 }

@@ -15,6 +15,12 @@ import {
     Settings,
     ChevronLeft,
     ChevronRight,
+    Table2,
+    GitBranch,
+    Scale,
+    KeyRound,
+    PackageSearch,
+    LayoutGrid,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -95,11 +101,13 @@ export function Sidebar({ title, navItems }: SidebarProps) {
 export const consumerNavItems: NavItem[] = [
     { label: 'Bản đồ', href: '/consumer', icon: <MapPin size={20} /> },
     { label: 'Đơn hàng', href: '/consumer/orders', icon: <Package size={20} /> },
+    { label: 'Theo dõi vận đơn', href: '/consumer/tracking', icon: <PackageSearch size={20} /> },
     { label: 'Tra cứu', href: '/consumer/search', icon: <Building2 size={20} /> },
 ];
 
 export const deliveryNavItems: NavItem[] = [
     { label: 'Dashboard', href: '/delivery/dashboard', icon: <LayoutDashboard size={20} /> },
+    { label: 'Nền tảng Logistics', href: '/logistics/dashboard', icon: <LayoutGrid size={20} /> },
     { label: 'Đội xe', href: '/delivery/fleet', icon: <Truck size={20} /> },
     { label: 'Đơn hàng', href: '/delivery/orders', icon: <Package size={20} /> },
     { label: 'Tracking', href: '/delivery/tracking', icon: <MapPin size={20} /> },
@@ -110,6 +118,7 @@ export const deliveryNavItems: NavItem[] = [
 export const regulatorNavItems: NavItem[] = [
     { label: 'Dashboard', href: '/regulator/dashboard', icon: <LayoutDashboard size={20} /> },
     { label: 'Vùng & Zone', href: '/regulator/zones', icon: <MapPin size={20} /> },
+    { label: 'Dữ liệu nghiên cứu', href: '/regulator/research', icon: <Table2 size={20} /> },
     { label: 'Báo cáo', href: '/regulator/reports', icon: <BarChart3 size={20} /> },
     { label: 'Carriers', href: '/regulator/carriers', icon: <Truck size={20} /> },
     { label: 'Hạn chế', href: '/regulator/restrictions', icon: <Settings size={20} /> },
@@ -117,9 +126,13 @@ export const regulatorNavItems: NavItem[] = [
 
 export const logisticsNavItems: NavItem[] = [
     { label: 'Dashboard', href: '/logistics/dashboard', icon: <LayoutDashboard size={20} /> },
+    { label: 'Điều phối', href: '/logistics/dispatch', icon: <GitBranch size={20} /> },
+    { label: 'So sánh cước', href: '/logistics/quotes', icon: <Scale size={20} /> },
+    { label: 'API tích hợp', href: '/logistics/integrations', icon: <KeyRound size={20} /> },
     { label: 'Cơ sở', href: '/logistics/facilities', icon: <Building2 size={20} /> },
     { label: 'Đội xe', href: '/logistics/vehicles', icon: <Truck size={20} /> },
     { label: 'Tuyến', href: '/logistics/routes', icon: <Route size={20} /> },
     { label: 'Nhân viên', href: '/logistics/users', icon: <Users size={20} /> },
     { label: 'Cài đặt', href: '/logistics/settings', icon: <Settings size={20} /> },
+    { label: 'Giao hàng (đơn vị)', href: '/delivery/dashboard', icon: <Truck size={20} /> },
 ];

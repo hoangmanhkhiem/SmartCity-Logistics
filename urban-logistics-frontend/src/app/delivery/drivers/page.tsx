@@ -1,38 +1,61 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardBody, CardHeader, DataTable, Badge, Button, Input, Modal } from '@/components/ui';
-import { userApi } from '@/lib/api';
-import { User } from '@/types';
-import { Users, Search, Eye, Edit, Phone, Mail } from 'lucide-react';
+import { driversApi } from '@/lib/api';
+import { Users, Search, Eye, Phone, Mail } from 'lucide-react';
 import type { Column } from '@/components/ui';
 
-export default function DeliveryDriversPage() {
-    const [users, setUsers] = useState<User[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [page, setPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [selectedUser, setSelectedUser] = useState<User | null>(null);
+type DriverRow = {
+    id: string;
+    name: string;
+    email: string;
+    phone?: string;
+    isActive: boolean;
+    assignmentsTotal: number;
+};
 
-    const fetchUsers = async () => {
+export default function DeliveryDriversPage() {
+    const [drivers, setDrivers] = useState<DriverRow[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selected, setSelected] = useState<DriverRow | null>(null);
+    const [statsDetail, setStatsDetail] = useState<Record<string, unknown> | null>(null);
+    const [statsLoading, setStatsLoading] = useState(false);
+
+    const fetchDrivers = useCallback(async () => {
         setLoading(true);
         try {
-            const response = await userApi.getAll({ page, limit: 10 });
-            setUsers(response.data.data || response.data);
-            setTotalPages(response.data.meta?.totalPages || 1);
+            const response = await driversApi.list();
+            setDrivers(response.data);
         } catch (error) {
-            console.error('Failed to fetch users:', error);
+            console.error('Failed to fetch drivers:', error);
+            setDrivers([]);
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
-        fetchUsers();
-    }, [page]);
+        fetchDrivers();
+    }, [fetchDrivers]);
 
-    const columns: Column<User>[] = [
+    const openDetail = async (d: DriverRow) => {
+        setSelected(d);
+        setStatsDetail(null);
+        setStatsLoading(true);
+        try {
+            const res = await driversApi.getStats(d.id);
+            setStatsDetail(res.data);
+        } catch (e) {
+            console.error(e);
+            setStatsDetail({ error: true });
+        } finally {
+            setStatsLoading(false);
+        }
+    };
+
+    const columns: Column<DriverRow>[] = [
         {
             key: 'name',
             header: 'Họ tên',
@@ -48,50 +71,47 @@ export default function DeliveryDriversPage() {
         { key: 'email', header: 'Email' },
         { key: 'phone', header: 'Điện thoại' },
         {
+            key: 'assignmentsTotal',
+            header: 'Phân công',
+            render: (u) => <Badge variant="info">{u.assignmentsTotal}</Badge>,
+        },
+        {
             key: 'isActive',
             header: 'Trạng thái',
             render: (u) => (
-                <Badge variant={u.isActive ? 'success' : 'error'}>
-                    {u.isActive ? 'Hoạt động' : 'Ngưng'}
-                </Badge>
+                <Badge variant={u.isActive ? 'success' : 'error'}>{u.isActive ? 'Hoạt động' : 'Ngưng'}</Badge>
             ),
-        },
-        {
-            key: 'lastLoginAt',
-            header: 'Đăng nhập lần cuối',
-            render: (u) => u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString('vi-VN') : '-',
         },
         {
             key: 'actions',
             header: '',
             render: (u) => (
-                <Button variant="ghost" size="sm" onClick={() => setSelectedUser(u)}>
+                <Button variant="ghost" size="sm" onClick={() => openDetail(u)}>
                     <Eye size={16} />
                 </Button>
             ),
         },
     ];
 
-    const filteredUsers = users.filter((u) =>
-        u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        u.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        u.phone?.includes(searchQuery)
+    const filtered = drivers.filter(
+        (u) =>
+            u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            u.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            u.phone?.includes(searchQuery)
     );
 
     const stats = {
-        total: users.length,
-        active: users.filter(u => u.isActive).length,
+        total: drivers.length,
+        active: drivers.filter((u) => u.isActive).length,
     };
 
     return (
         <div className="space-y-6">
-            {/* Header */}
             <div>
                 <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Quản lý tài xế</h1>
-                <p className="text-gray-500 mt-1">Danh sách và thông tin tài xế</p>
+                <p className="text-gray-500 mt-1">Role driver — hiệu suất & phân công (API /drivers)</p>
             </div>
 
-            {/* Stats */}
             <div className="grid grid-cols-2 gap-4">
                 <Card>
                     <CardBody className="flex items-center gap-3">
@@ -117,7 +137,6 @@ export default function DeliveryDriversPage() {
                 </Card>
             </div>
 
-            {/* Search */}
             <Card>
                 <CardBody>
                     <div className="relative max-w-md">
@@ -132,7 +151,6 @@ export default function DeliveryDriversPage() {
                 </CardBody>
             </Card>
 
-            {/* Table */}
             <Card>
                 <CardHeader>
                     <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Danh sách tài xế</h2>
@@ -140,59 +158,46 @@ export default function DeliveryDriversPage() {
                 <CardBody>
                     <DataTable
                         columns={columns}
-                        data={filteredUsers}
+                        data={filtered}
                         loading={loading}
-                        emptyMessage="Chưa có tài xế nào"
-                        pagination={{ page, totalPages, onPageChange: setPage }}
+                        emptyMessage="Chưa có tài xế (role driver) hoặc lỗi API"
                     />
                 </CardBody>
             </Card>
 
-            {/* Detail Modal */}
-            <Modal
-                isOpen={!!selectedUser}
-                onClose={() => setSelectedUser(null)}
-                title="Thông tin tài xế"
-            >
-                {selectedUser && (
+            <Modal isOpen={!!selected} onClose={() => setSelected(null)} title="Tài xế & phân công" size="lg">
+                {selected && (
                     <div className="space-y-4">
                         <div className="flex items-center gap-4">
                             <div className="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center text-white text-2xl font-bold">
-                                {selectedUser.name?.charAt(0)?.toUpperCase() || 'U'}
+                                {selected.name?.charAt(0)?.toUpperCase() || 'U'}
                             </div>
                             <div>
-                                <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
-                                    {selectedUser.name}
-                                </h3>
-                                <Badge variant={selectedUser.isActive ? 'success' : 'error'}>
-                                    {selectedUser.isActive ? 'Đang hoạt động' : 'Ngưng hoạt động'}
-                                </Badge>
-                            </div>
-                        </div>
-                        <div className="space-y-3 pt-4 border-t">
-                            <div className="flex items-center gap-3 text-gray-600 dark:text-gray-300">
-                                <Mail size={18} />
-                                <span>{selectedUser.email}</span>
-                            </div>
-                            {selectedUser.phone && (
-                                <div className="flex items-center gap-3 text-gray-600 dark:text-gray-300">
-                                    <Phone size={18} />
-                                    <span>{selectedUser.phone}</span>
+                                <h3 className="text-lg font-semibold text-gray-800 dark:text-white">{selected.name}</h3>
+                                <div className="flex items-center gap-3 text-gray-600 dark:text-gray-300 mt-1">
+                                    <Mail size={16} />
+                                    <span className="text-sm">{selected.email}</span>
                                 </div>
+                                {selected.phone && (
+                                    <div className="flex items-center gap-3 text-gray-600 dark:text-gray-300">
+                                        <Phone size={16} />
+                                        <span className="text-sm">{selected.phone}</span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="border-t pt-3">
+                            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">/drivers/:id/stats</p>
+                            {statsLoading ? (
+                                <p className="text-gray-500 text-sm">Đang tải...</p>
+                            ) : (
+                                <pre className="text-xs bg-gray-50 dark:bg-gray-900 p-3 rounded-lg overflow-auto max-h-64">
+                                    {JSON.stringify(statsDetail, null, 2)}
+                                </pre>
                             )}
                         </div>
-                        <div className="pt-4 border-t">
-                            <p className="text-sm text-gray-500">
-                                Ngày tham gia: {new Date(selectedUser.createdAt).toLocaleDateString('vi-VN')}
-                            </p>
-                            {selectedUser.lastLoginAt && (
-                                <p className="text-sm text-gray-500">
-                                    Đăng nhập lần cuối: {new Date(selectedUser.lastLoginAt).toLocaleString('vi-VN')}
-                                </p>
-                            )}
-                        </div>
-                        <div className="flex justify-end pt-4 border-t">
-                            <Button onClick={() => setSelectedUser(null)}>Đóng</Button>
+                        <div className="flex justify-end pt-2">
+                            <Button onClick={() => setSelected(null)}>Đóng</Button>
                         </div>
                     </div>
                 )}

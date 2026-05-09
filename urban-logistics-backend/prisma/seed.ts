@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
+import { createHash } from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -7,7 +8,20 @@ async function main() {
     console.log('🌱 Starting seed...');
 
     // Clear existing data
-    await prisma.$executeRaw`TRUNCATE TABLE "telemetry", "assignments", "stops", "legs", "shipments", "orders", "restrictions", "road_segments", "docks", "fuel_pumps", "chargers", "facilities", "vehicles", "carriers", "memberships", "role_permissions", "permissions", "roles", "zones", "routes", "users", "organizations" RESTART IDENTITY CASCADE`;
+    await prisma.$executeRaw`TRUNCATE TABLE "telemetry", "assignments", "stops", "legs", "shipments", "orders", "platform_api_clients", "restrictions", "road_segments", "docks", "fuel_pumps", "chargers", "facilities", "vehicles", "carriers", "memberships", "role_permissions", "permissions", "roles", "zones", "routes", "users", "organizations" RESTART IDENTITY CASCADE`;
+
+    // ==================== PLATFORM API (dev key for partner integration tests) ====================
+    const devPartnerApiKey = 'ulc_live_dev_integration_replace_in_production';
+    const devKeyHash = createHash('sha256').update(devPartnerApiKey).digest('hex');
+    await prisma.platformApiClient.create({
+        data: {
+            name: 'Dev shop / TMĐT (test)',
+            keyPrefix: devPartnerApiKey.slice(0, 20),
+            keyHash: devKeyHash,
+            scopes: ['orders:create'],
+        },
+    });
+    console.log(`🔑 Dev partner API key (X-Api-Key): ${devPartnerApiKey}`);
 
     // ==================== ROLES ====================
     console.log('Creating roles...');
@@ -41,7 +55,7 @@ async function main() {
 
     // ==================== USERS ====================
     console.log('Creating users...');
-    const hashedPassword = await bcrypt.hash('123456', 10);
+    const hashedPassword = bcrypt.hashSync('123456', 10);
     const users = await Promise.all([
         prisma.user.create({ data: { email: 'admin@test.com', password: hashedPassword, name: 'Admin System', phone: '0901000001' } }),
         prisma.user.create({ data: { email: 'regulator@test.com', password: hashedPassword, name: 'Nguyễn Văn Quản', phone: '0901000002' } }),
@@ -283,51 +297,69 @@ async function main() {
         )
     );
 
-    // ==================== LEGS ====================
+    // ==================== LEGS (mỗi shipment 1 leg — một phần để trống cho điều phối) ====================
     console.log('Creating legs...');
     const legs = await Promise.all(
-        shipments.slice(0, 15).map((shipment, i) =>
+        shipments.map((shipment, i) =>
             prisma.leg.create({
                 data: {
                     shipmentId: shipment.id,
                     routeId: routes[i % routes.length].id,
                     sequence: 1,
-                    distance: 5 + i,
-                    duration: 20 + i * 5,
-                    status: ['pending', 'in_progress', 'completed'][i % 3]
-                }
-            })
-        )
+                    distance: 5 + (i % 10),
+                    duration: 20 + (i % 10) * 5,
+                    status: 'pending',
+                },
+            }),
+        ),
     );
 
-    // ==================== STOPS ====================
+    // ==================== STOPS (pickup / delivery theo tọa độ đơn — phục vụ gợi ý xe & điều phối) ====================
     console.log('Creating stops...');
-    for (const leg of legs.slice(0, 10)) {
-        for (let j = 0; j < 3; j++) {
+    for (let i = 0; i < legs.length; i++) {
+        const order = orders[i];
+        const leg = legs[i];
+        if (order.pickupLat != null && order.pickupLon != null) {
             await prisma.stop.create({
                 data: {
                     legId: leg.id,
-                    facilityId: facilities[j % facilities.length].id,
-                    sequence: j + 1,
-                    type: ['pickup', 'transit', 'delivery'][j],
-                    latitude: 21.02 + (Math.random() * 0.02),
-                    longitude: 105.82 + (Math.random() * 0.02),
-                    status: 'pending'
-                }
+                    facilityId: facilities[i % facilities.length].id,
+                    sequence: 1,
+                    type: 'pickup',
+                    latitude: order.pickupLat,
+                    longitude: order.pickupLon,
+                    address: order.pickupAddress ?? undefined,
+                    status: 'pending',
+                },
+            });
+        }
+        if (order.deliveryLat != null && order.deliveryLon != null) {
+            await prisma.stop.create({
+                data: {
+                    legId: leg.id,
+                    facilityId: facilities[(i + 1) % facilities.length].id,
+                    sequence: 2,
+                    type: 'delivery',
+                    latitude: order.deliveryLat,
+                    longitude: order.deliveryLon,
+                    address: order.deliveryAddress ?? undefined,
+                    status: 'pending',
+                },
             });
         }
     }
 
-    // ==================== ASSIGNMENTS ====================
-    console.log('Creating assignments...');
-    for (let i = 0; i < 15; i++) {
+    // ==================== ASSIGNMENTS (chỉ gán 6 leg đầu — còn lại vào hàng đợi điều phối) ====================
+    console.log('Creating assignments (6/20 legs assigned, rest unassigned for dispatch queue)...');
+    const assignedLegCount = 6;
+    for (let i = 0; i < assignedLegCount; i++) {
         await prisma.assignment.create({
             data: {
                 vehicleId: vehicles[i % vehicles.length].id,
-                legId: legs[i % legs.length].id,
+                legId: legs[i].id,
                 driverId: users[4 + (i % 2)].id,
-                status: ['assigned', 'in_progress', 'completed'][i % 3]
-            }
+                status: ['assigned', 'in_progress', 'completed'][i % 3],
+            },
         });
     }
 

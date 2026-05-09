@@ -6,6 +6,7 @@ import { vehicleApi, carrierApi } from '@/lib/api';
 import { Vehicle, Carrier } from '@/types';
 import { Truck, Plus, Search, Edit, Trash2, Zap, Fuel } from 'lucide-react';
 import type { Column } from '@/components/ui';
+import { viStatus } from '@/lib/status-labels';
 
 const vehicleTypeOptions = [
     { value: '', label: 'Tất cả loại xe' },
@@ -20,12 +21,6 @@ const statusVariant: Record<string, 'success' | 'info' | 'warning'> = {
     available: 'success',
     in_use: 'info',
     maintenance: 'warning',
-};
-
-const statusLabel: Record<string, string> = {
-    available: 'Sẵn sàng',
-    in_use: 'Đang sử dụng',
-    maintenance: 'Bảo trì',
 };
 
 export default function LogisticsVehiclesPage() {
@@ -186,7 +181,7 @@ export default function LogisticsVehiclesPage() {
             header: 'Trạng thái',
             render: (v) => (
                 <Badge variant={statusVariant[v.status] || 'default'}>
-                    {statusLabel[v.status] || v.status}
+                    {viStatus(v.status)}
                 </Badge>
             ),
         },

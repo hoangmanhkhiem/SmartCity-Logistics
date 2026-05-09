@@ -6,6 +6,7 @@ import { Card, CardBody, CardHeader } from '@/components/ui';
 import { Truck, Package, MapPin, CheckCircle, Clock } from 'lucide-react';
 import { vehicleApi, facilityApi } from '@/lib/api';
 import { Vehicle, Facility } from '@/types';
+import { viStatus } from '@/lib/status-labels';
 
 // Dynamic import for Map to avoid SSR issues
 const MapView = dynamic(() => import('@/components/shared/map'), {
@@ -168,13 +169,15 @@ export default function DeliveryDashboard() {
             pending: 'bg-yellow-100 text-yellow-700',
             in_transit: 'bg-blue-100 text-blue-700',
             delivered: 'bg-green-100 text-green-700',
+            confirmed: 'bg-blue-100 text-blue-700',
+            shipped: 'bg-purple-100 text-purple-700',
+            cancelled: 'bg-red-100 text-red-700',
         };
-        const labels: Record<string, string> = {
-            pending: 'Chờ xử lý',
-            in_transit: 'Đang giao',
-            delivered: 'Hoàn thành',
-        };
-        return <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status]}`}>{labels[status]}</span>;
+        return (
+            <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status] ?? 'bg-gray-100 text-gray-700'}`}>
+                {viStatus(status)}
+            </span>
+        );
     };
 
     // Build map markers from vehicles

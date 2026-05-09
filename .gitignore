@@ -1,0 +1,32 @@
+# dependencies
+urban-logistics-frontend/node_modules
+urban-logistics-backend/node_modules
+
+# build
+urban-logistics-frontend/dist/
+urban-logistics-backend/dist/
+.next/
+build/
+
+# env
+.env
+.env.*
+
+# prisma engine/cache
+urban-logistics-backend/.prisma/
+urban-logistics-backend/.cache/
+
+# typescript
+urban-logistics-backend/*.tsbuildinfo
+
+# logs
+urban-logistics-backend/logs
+urban-logistics-frontend/logs
+urban-logistics-backend/*.log
+urban-logistics-frontend/npm-debug.log*
+
+# OS
+urban-logistics-backend/.DS_Store
+urban-logistics-frontend/.DS_Store
+urban-logistics-backend/Thumbs.db
+urban-logistics-frontend/Thumbs.db

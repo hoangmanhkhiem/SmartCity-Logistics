@@ -68,6 +68,8 @@ export const useAuthStore = create<AuthState>()(
 export const getDashboardPath = (role: UserRole | null): string => {
     switch (role) {
         case 'admin':
+            // Nền tảng / điều phối / API tích hợp nằm dưới /logistics/*
+            return '/logistics/dashboard';
         case 'carrier_mgr':
         case 'dispatcher':
             return '/delivery/dashboard';

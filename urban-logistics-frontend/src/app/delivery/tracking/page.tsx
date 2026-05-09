@@ -4,8 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Card, CardBody, CardHeader, Badge, Button } from '@/components/ui';
 import { vehicleApi, facilityApi } from '@/lib/api';
+import { ShipmentTrackingLookup } from '@/components/logistics/shipment-tracking-lookup';
 import { Vehicle, Telemetry, Facility } from '@/types';
 import { MapPin, Truck, RefreshCw, Battery, Fuel, Navigation, Play, Pause } from 'lucide-react';
+import { viStatus } from '@/lib/status-labels';
 
 // Dynamic import for Map to avoid SSR issues
 const Map = dynamic(() => import('@/components/shared/map'), {
@@ -185,6 +187,11 @@ export default function DeliveryTrackingPage() {
 
     return (
         <div className="space-y-6">
+            <ShipmentTrackingLookup
+                title="Tra cứu vận đơn"
+                description="Mã vận đơn (TRK…), mã đơn hàng, hoặc SĐT người nhận / người gửi (9 số cuối). API công khai, không cần đăng nhập riêng."
+            />
+
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
@@ -293,11 +300,7 @@ export default function DeliveryTrackingPage() {
                                                             : 'warning'
                                                 }
                                             >
-                                                {vehicle.status === 'in_use'
-                                                    ? 'Đang chạy'
-                                                    : vehicle.status === 'available'
-                                                        ? 'Sẵn sàng'
-                                                        : 'Bảo trì'}
+                                                {viStatus(vehicle.status)}
                                             </Badge>
                                         </div>
                                         <p className="text-sm text-gray-500 mt-1">

@@ -13,6 +13,11 @@ export class CreateOrderDto {
     @ApiPropertyOptional() @IsOptional() @IsDateString() timeWindowEnd?: string;
     @ApiPropertyOptional() @IsOptional() @IsInt() priority?: number;
     @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
+    @ApiPropertyOptional() @IsOptional() @IsString() pickupPhone?: string;
+    @ApiPropertyOptional() @IsOptional() @IsString() deliveryPhone?: string;
+    @ApiPropertyOptional() @IsOptional() @IsString() sourceUrl?: string;
+    @ApiPropertyOptional() @IsOptional() @IsString() externalRef?: string;
+    @ApiPropertyOptional() @IsOptional() @IsString() fulfillmentChannel?: string;
 }
 
 export class UpdateOrderDto {
@@ -27,4 +32,9 @@ export class UpdateOrderDto {
     @ApiPropertyOptional() @IsOptional() @IsDateString() timeWindowEnd?: string;
     @ApiPropertyOptional() @IsOptional() @IsInt() priority?: number;
     @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
+    @ApiPropertyOptional() @IsOptional() @IsString() pickupPhone?: string;
+    @ApiPropertyOptional() @IsOptional() @IsString() deliveryPhone?: string;
+    @ApiPropertyOptional() @IsOptional() @IsString() sourceUrl?: string;
+    @ApiPropertyOptional() @IsOptional() @IsString() externalRef?: string;
+    @ApiPropertyOptional() @IsOptional() @IsString() fulfillmentChannel?: string;
 }

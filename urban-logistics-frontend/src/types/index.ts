@@ -106,6 +106,11 @@ export interface Order {
     timeWindowEnd?: string;
     priority: number;
     notes?: string;
+    pickupPhone?: string;
+    deliveryPhone?: string;
+    sourceUrl?: string;
+    externalRef?: string;
+    fulfillmentChannel?: string;
     createdAt: string;
     updatedAt: string;
 }

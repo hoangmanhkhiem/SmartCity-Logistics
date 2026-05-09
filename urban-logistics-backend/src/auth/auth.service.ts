@@ -1,7 +1,17 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
+import { promisify } from 'node:util';
 import { PrismaService } from '../prisma/prisma.service';
+
+const hashPassword = promisify(bcrypt.hash) as (
+    data: string,
+    saltOrRounds: string | number,
+) => Promise<string>;
+const comparePassword = promisify(bcrypt.compare) as (
+    data: string,
+    encrypted: string,
+) => Promise<boolean>;
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
@@ -25,7 +35,7 @@ export class AuthService {
         }
 
         // Hash password
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPassword = await hashPassword(password, 10);
 
         // Create user
         const user = await this.prisma.user.create({
@@ -82,7 +92,7 @@ export class AuthService {
         }
 
         // Check password
-        const isPasswordValid = await bcrypt.compare(password, user.password);
+        const isPasswordValid = await comparePassword(password, user.password);
 
         if (!isPasswordValid) {
             throw new UnauthorizedException('Invalid credentials');

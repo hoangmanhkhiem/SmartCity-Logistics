@@ -1,14 +1,71 @@
 'use client';
 
-import { Card, CardBody, CardHeader } from '@/components/ui';
-import { Building2, Truck, Route, Users, Package, Warehouse, Zap, Fuel } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { Card, CardBody, CardHeader, Button } from '@/components/ui';
+import { analyticsApi } from '@/lib/api';
+import { Building2, Truck, Route, Package, Warehouse, Zap, Fuel, Leaf, AlertCircle } from 'lucide-react';
+
+type PlatformSummary = {
+    orders?: { total?: number; byStatus?: Record<string, number> };
+    vehicles?: { byStatus?: Record<string, number> };
+    environment?: { estimatedCo2GramsTotal?: number };
+    operations?: { unassignedLegs?: number; telemetryPointsLast24h?: number };
+};
 
 export default function LogisticsDashboard() {
+    const [summary, setSummary] = useState<PlatformSummary | null>(null);
+    const [summaryErr, setSummaryErr] = useState(false);
+
+    useEffect(() => {
+        analyticsApi
+            .getPlatformSummary()
+            .then((r) => {
+                setSummary(r.data);
+                setSummaryErr(false);
+            })
+            .catch(() => {
+                setSummary(null);
+                setSummaryErr(true);
+            });
+    }, []);
+
+    const vehicleTotal = summary?.vehicles?.byStatus
+        ? Object.values(summary.vehicles.byStatus).reduce((a, b) => a + b, 0)
+        : null;
+
     const stats = [
-        { label: 'Cơ sở hoạt động', value: '12', icon: <Building2 size={24} />, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-        { label: 'Đội xe', value: '85', icon: <Truck size={24} />, color: 'text-purple-500', bg: 'bg-purple-500/10' },
-        { label: 'Tuyến đường', value: '34', icon: <Route size={24} />, color: 'text-green-500', bg: 'bg-green-500/10' },
-        { label: 'Nhân viên', value: '156', icon: <Users size={24} />, color: 'text-orange-500', bg: 'bg-orange-500/10' },
+        {
+            label: 'Tổng đơn hàng',
+            value: summary?.orders?.total != null ? String(summary.orders.total) : '—',
+            icon: <Package size={24} />,
+            color: 'text-blue-500',
+            bg: 'bg-blue-500/10',
+        },
+        {
+            label: 'Leg chờ điều phối',
+            value: summary?.operations?.unassignedLegs != null ? String(summary.operations.unassignedLegs) : '—',
+            icon: <AlertCircle size={24} />,
+            color: 'text-amber-500',
+            bg: 'bg-amber-500/10',
+        },
+        {
+            label: 'Phương tiện (tổng)',
+            value: vehicleTotal != null ? String(vehicleTotal) : '—',
+            icon: <Truck size={24} />,
+            color: 'text-purple-500',
+            bg: 'bg-purple-500/10',
+        },
+        {
+            label: 'CO₂ ước (routes, g)',
+            value:
+                summary?.environment?.estimatedCo2GramsTotal != null
+                    ? Math.round(summary.environment.estimatedCo2GramsTotal).toLocaleString('vi-VN')
+                    : '—',
+            icon: <Leaf size={24} />,
+            color: 'text-green-600',
+            bg: 'bg-green-500/10',
+        },
     ];
 
     const facilities = [
@@ -27,22 +84,45 @@ export default function LogisticsDashboard() {
 
     return (
         <div className="space-y-6">
-            {/* Organization info */}
             <Card className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-0">
                 <CardBody className="p-6">
-                    <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center">
-                            <Building2 size={32} />
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center">
+                                <Building2 size={32} />
+                            </div>
+                            <div>
+                                <h1 className="text-2xl font-bold">Logistics Operating System</h1>
+                                <p className="text-indigo-200">Điều phối · API đối tác · So sánh carrier · Theo dõi</p>
+                            </div>
                         </div>
-                        <div>
-                            <h1 className="text-2xl font-bold">Công ty TNHH Logistics ABC</h1>
-                            <p className="text-indigo-200">Quản lý vận tải và kho bãi</p>
+                        <div className="flex flex-wrap gap-2">
+                            <Link href="/logistics/dispatch">
+                                <Button variant="outline" className="bg-white/10 border-white/30 text-white hover:bg-white/20">
+                                    Điều phối
+                                </Button>
+                            </Link>
+                            <Link href="/logistics/quotes">
+                                <Button variant="outline" className="bg-white/10 border-white/30 text-white hover:bg-white/20">
+                                    So sánh cước
+                                </Button>
+                            </Link>
+                            <Link href="/logistics/integrations">
+                                <Button variant="outline" className="bg-white/10 border-white/30 text-white hover:bg-white/20">
+                                    API B2B
+                                </Button>
+                            </Link>
                         </div>
                     </div>
                 </CardBody>
             </Card>
 
-            {/* Stats */}
+            {summaryErr && (
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                    Không tải được tổng quan API — đăng nhập và chạy backend (GET /analytics/platform-summary).
+                </p>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {stats.map((stat, i) => (
                     <Card key={i}>
@@ -57,11 +137,30 @@ export default function LogisticsDashboard() {
                 ))}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Facilities */}
+            {summary?.orders?.byStatus && (
                 <Card>
                     <CardHeader>
-                        <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Cơ sở logistics</h2>
+                        <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Đơn theo trạng thái</h2>
+                    </CardHeader>
+                    <CardBody>
+                        <div className="flex flex-wrap gap-2">
+                            {Object.entries(summary.orders.byStatus).map(([k, v]) => (
+                                <span
+                                    key={k}
+                                    className="px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-sm text-gray-800 dark:text-gray-200"
+                                >
+                                    {k}: {v}
+                                </span>
+                            ))}
+                        </div>
+                    </CardBody>
+                </Card>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card>
+                    <CardHeader>
+                        <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Cơ sở (minh họa)</h2>
                     </CardHeader>
                     <CardBody>
                         <div className="space-y-3">
@@ -78,7 +177,7 @@ export default function LogisticsDashboard() {
                                         <div
                                             className={`h-2 rounded-full ${facility.usage > 80 ? 'bg-red-500' : facility.usage > 50 ? 'bg-yellow-500' : 'bg-green-500'}`}
                                             style={{ width: `${facility.usage}%` }}
-                                        ></div>
+                                        />
                                     </div>
                                 </div>
                             ))}
@@ -86,10 +185,12 @@ export default function LogisticsDashboard() {
                     </CardBody>
                 </Card>
 
-                {/* Fleet */}
                 <Card>
                     <CardHeader>
-                        <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Đội xe</h2>
+                        <h2 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center gap-2">
+                            <Route size={20} />
+                            Đội xe (minh họa)
+                        </h2>
                     </CardHeader>
                     <CardBody>
                         <div className="space-y-3">

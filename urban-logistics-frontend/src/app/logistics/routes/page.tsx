@@ -6,6 +6,7 @@ import { routeApi } from '@/lib/api';
 import { Route } from '@/types';
 import { Route as RouteIcon, Plus, Search, Edit, Trash2, MapPin, Leaf } from 'lucide-react';
 import type { Column } from '@/components/ui';
+import { viStatus } from '@/lib/status-labels';
 
 const modeOptions = [
     { value: '', label: 'Tất cả phương thức' },
@@ -17,12 +18,6 @@ const statusVariant: Record<string, 'warning' | 'success' | 'info'> = {
     planned: 'warning',
     active: 'success',
     completed: 'info',
-};
-
-const statusLabel: Record<string, string> = {
-    planned: 'Dự kiến',
-    active: 'Đang chạy',
-    completed: 'Hoàn thành',
 };
 
 export default function LogisticsRoutesPage() {
@@ -130,7 +125,7 @@ export default function LogisticsRoutesPage() {
             header: 'Trạng thái',
             render: (r) => (
                 <Badge variant={statusVariant[r.status] || 'default'}>
-                    {statusLabel[r.status] || r.status}
+                    {viStatus(r.status)}
                 </Badge>
             ),
         },

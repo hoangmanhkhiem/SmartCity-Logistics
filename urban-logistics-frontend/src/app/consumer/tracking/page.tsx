@@ -4,8 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Card, CardBody, CardHeader, Input, Badge, Button } from '@/components/ui';
 import { orderApi } from '@/lib/api';
+import { ShipmentTrackingLookup } from '@/components/logistics/shipment-tracking-lookup';
 import { Order, Telemetry } from '@/types';
 import { MapPin, Package, Truck, Clock, Search, RefreshCw, Play, Pause } from 'lucide-react';
+import { viStatus } from '@/lib/status-labels';
 
 // Dynamic import for Map to avoid SSR issues
 const Map = dynamic(() => import('@/components/shared/map'), {
@@ -24,16 +26,9 @@ const statusVariant: Record<string, 'warning' | 'info' | 'success' | 'error'> = 
     pending: 'warning',
     confirmed: 'info',
     shipped: 'info',
+    in_transit: 'info',
     delivered: 'success',
     cancelled: 'error',
-};
-
-const statusLabel: Record<string, string> = {
-    pending: 'Chờ xử lý',
-    confirmed: 'Đã xác nhận',
-    shipped: 'Đang giao',
-    delivered: 'Đã giao',
-    cancelled: 'Đã hủy',
 };
 
 export default function ConsumerTrackingPage() {
@@ -198,8 +193,12 @@ export default function ConsumerTrackingPage() {
             {/* Header */}
             <div>
                 <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Theo dõi đơn hàng</h1>
-                <p className="text-gray-500 mt-1">Xem vị trí và trạng thái giao hàng theo thời gian thực</p>
+                <p className="text-gray-500 mt-1">
+                    Tra cứu theo mã vận đơn / SĐT bên dưới; hoặc chọn đơn trong danh sách của bạn để xem mô phỏng trên bản đồ.
+                </p>
             </div>
+
+            <ShipmentTrackingLookup />
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Orders List */}
@@ -241,8 +240,8 @@ export default function ConsumerTrackingPage() {
                                             <span className="font-medium text-gray-800 dark:text-white">
                                                 {order.orderNumber}
                                             </span>
-                                            <Badge variant={statusVariant[order.status]}>
-                                                {statusLabel[order.status]}
+                                            <Badge variant={statusVariant[order.status] || 'default'}>
+                                                {viStatus(order.status)}
                                             </Badge>
                                         </div>
                                         <p className="text-sm text-gray-500 mt-1 truncate">
