@@ -114,6 +114,45 @@ export const routeApi = {
     delete: (id: string) => api.delete(`/routes/${id}`),
     optimizeStops: (points: { id?: string; lat: number; lon: number }[]) =>
         api.post('/routes/optimize-stops', { points }),
+    suggestFacilities: (data: {
+        originLat: number;
+        originLon: number;
+        destLat: number;
+        destLon: number;
+        kinds?: string[];
+        bufferMeters?: number;
+        limit?: number;
+        departureTime?: string;
+        restrictionAt?: string;
+        restrictionVehicleType?: string;
+    }) => api.post('/routes/suggest-facilities', data),
+    drivingSegment: (data: {
+        originLat: number;
+        originLon: number;
+        destLat: number;
+        destLon: number;
+        restrictionAt?: string;
+        restrictionVehicleType?: string;
+    }) => api.post('/routes/driving-segment', data),
+};
+
+// Traffic restrictions (cấm / hạn chế đường) — active GeoJSON không cần auth
+export const restrictionApi = {
+    getActiveGeoJson: (params?: { at?: string; vehicleType?: string }) =>
+        api.get('/restrictions/active/geojson', { params }),
+    getAll: () => api.get('/restrictions'),
+    create: (data: Record<string, unknown>) => api.post('/restrictions', data),
+    update: (id: string, data: Record<string, unknown>) => api.patch(`/restrictions/${id}`, data),
+    delete: (id: string) => api.delete(`/restrictions/${id}`),
+};
+
+export const roadSegmentApi = {
+    getAll: (params?: { zoneId?: string; includeInactive?: boolean }) =>
+        api.get('/road-segments', { params }),
+    getById: (id: string) => api.get(`/road-segments/${id}`),
+    create: (data: Record<string, unknown>) => api.post('/road-segments', data),
+    update: (id: string, data: Record<string, unknown>) => api.patch(`/road-segments/${id}`, data),
+    delete: (id: string) => api.delete(`/road-segments/${id}`),
 };
 
 // Telemetry API

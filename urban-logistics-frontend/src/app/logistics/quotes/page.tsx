@@ -17,6 +17,7 @@ const QuoteLocationMapPicker = dynamic(() => import('@/components/logistics/quot
 });
 
 type QuoteRow = {
+    id?: string;
     carrierId: string;
     carrierName: string;
     organization?: string;

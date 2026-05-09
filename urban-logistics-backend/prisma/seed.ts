@@ -204,34 +204,48 @@ async function main() {
     // ==================== ROAD SEGMENTS & RESTRICTIONS ====================
     console.log('Creating road segments and restrictions...');
     const roads = await Promise.all(
-        Array.from({ length: 20 }, (_, i) =>
-            prisma.roadSegment.create({
+        Array.from({ length: 20 }, (_, i) => {
+            const lng0 = 105.78 + (i % 5) * 0.02;
+            const lat0 = 21.0 + (i % 7) * 0.015;
+            const geometry = JSON.stringify({
+                type: 'LineString',
+                coordinates: [
+                    [lng0, lat0],
+                    [lng0 + 0.004, lat0 + 0.003],
+                    [lng0 + 0.008, lat0 + 0.001],
+                ],
+            });
+            return prisma.roadSegment.create({
                 data: {
                     zoneId: zones[i % 8].id,
                     name: `Đường ${['Phạm Hùng', 'Láng Hạ', 'Kim Mã', 'Giải Phóng', 'Nguyễn Trãi', 'Trường Chinh', 'Cầu Giấy', 'Xuân Thủy'][i % 8]} đoạn ${i + 1}`,
                     osmId: `way/${100000 + i}`,
+                    geometry,
                     oneWay: i % 3 === 0,
                     speedLimit: 40 + (i % 3) * 10,
                     lanes: 2 + (i % 3),
-                    roadType: ['primary', 'secondary', 'tertiary'][i % 3]
-                }
-            })
-        )
+                    roadType: ['primary', 'secondary', 'tertiary'][i % 3],
+                },
+            });
+        }),
     );
 
+    const severities = ['prohibited', 'restricted', 'allowed_window'] as const;
     for (let i = 0; i < 10; i++) {
         await prisma.restriction.create({
             data: {
                 roadSegmentId: roads[i % roads.length].id,
                 zoneId: zones[i % 8].id,
                 vehicleType: i % 2 === 0 ? 'truck' : null,
+                vehicleTypes: i % 2 === 0 ? ['truck'] : [],
+                severity: severities[i % 3],
                 maxWeight: i % 2 === 0 ? 3500 : null,
                 timeFrom: '07:00',
                 timeTo: '09:00',
                 daysOfWeek: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
                 allowed: false,
-                description: `Hạn chế ${i + 1}`
-            }
+                description: `Hạn chế ${i + 1}`,
+            },
         });
     }
 

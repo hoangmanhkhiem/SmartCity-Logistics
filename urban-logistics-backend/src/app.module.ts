@@ -19,6 +19,7 @@ import { QuotesModule } from './quotes/quotes.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { DriversModule } from './drivers/drivers.module';
 import { TrackingModule } from './tracking/tracking.module';
+import { TrafficRestrictionModule } from './traffic-restriction/traffic-restriction.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -46,6 +47,7 @@ import { HealthController } from './health.controller';
         AnalyticsModule,
         DriversModule,
         TrackingModule,
+        TrafficRestrictionModule,
     ],
     controllers: [HealthController],
 })

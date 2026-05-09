@@ -21,6 +21,7 @@ import {
     KeyRound,
     PackageSearch,
     LayoutGrid,
+    Warehouse,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -130,6 +131,7 @@ export const logisticsNavItems: NavItem[] = [
     { label: 'So sánh cước', href: '/logistics/quotes', icon: <Scale size={20} /> },
     { label: 'API tích hợp', href: '/logistics/integrations', icon: <KeyRound size={20} /> },
     { label: 'Cơ sở', href: '/logistics/facilities', icon: <Building2 size={20} /> },
+    { label: 'Gợi ý kho/hub', href: '/logistics/facility-suggest', icon: <Warehouse size={20} /> },
     { label: 'Đội xe', href: '/logistics/vehicles', icon: <Truck size={20} /> },
     { label: 'Tuyến', href: '/logistics/routes', icon: <Route size={20} /> },
     { label: 'Nhân viên', href: '/logistics/users', icon: <Users size={20} /> },

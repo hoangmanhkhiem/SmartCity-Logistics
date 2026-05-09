@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import { Card, CardBody, CardHeader, DataTable, Badge, Select, Button, Input, Modal } from '@/components/ui';
 import { facilityApi, zoneApi, organizationApi } from '@/lib/api';
 import { Facility, Zone, Organization } from '@/types';
-import { Building2, Plus, Search, Edit, Trash2, MapPin, Warehouse, Zap, Fuel } from 'lucide-react';
+import { Building2, Plus, Search, Edit, Trash2, MapPin, Warehouse, Zap, Fuel, Crosshair } from 'lucide-react';
 import type { Column } from '@/components/ui';
+import FacilityMapPicker from '@/components/logistics/facility-map-picker';
+import { useAuthStore } from '@/stores/auth-store';
 
 const kindOptions = [
     { value: '', label: 'Tất cả loại' },
@@ -25,8 +27,11 @@ const kindIcons: Record<string, React.ReactNode> = {
 };
 
 export default function LogisticsFacilitiesPage() {
+    const user = useAuthStore((s) => s.user);
     const [facilities, setFacilities] = useState<Facility[]>([]);
     const [zones, setZones] = useState<Zone[]>([]);
+    const [organizations, setOrganizations] = useState<Organization[]>([]);
+    const [pickOnMap, setPickOnMap] = useState(false);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
@@ -35,6 +40,7 @@ export default function LogisticsFacilitiesPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingFacility, setEditingFacility] = useState<Facility | null>(null);
     const [formData, setFormData] = useState({
+        organizationId: '',
         name: '',
         kind: 'hub',
         address: '',
@@ -49,12 +55,15 @@ export default function LogisticsFacilitiesPage() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [facilitiesRes, zonesRes] = await Promise.all([
+            const [facilitiesRes, zonesRes, orgRes] = await Promise.all([
                 facilityApi.getAll({ page, limit: 10, kind: kindFilter || undefined }),
                 zoneApi.getAll({ limit: 50 }),
+                organizationApi.getAll({ limit: 100 }),
             ]);
             setFacilities(facilitiesRes.data.data || facilitiesRes.data);
             setZones(zonesRes.data.data || zonesRes.data);
+            const orgPayload = orgRes.data as { data?: Organization[] };
+            setOrganizations(orgPayload.data || []);
             setTotalPages(facilitiesRes.data.meta?.totalPages || 1);
         } catch (error) {
             console.error('Failed to fetch data:', error);
@@ -70,6 +79,10 @@ export default function LogisticsFacilitiesPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            if (!editingFacility && !formData.organizationId) {
+                alert('Chọn tổ chức sở hữu cơ sở.');
+                return;
+            }
             const data = {
                 ...formData,
                 latitude: Number(formData.latitude) || 0,
@@ -77,9 +90,9 @@ export default function LogisticsFacilitiesPage() {
                 capacity: formData.capacity ? Number(formData.capacity) : undefined,
                 zoneId: formData.zoneId || undefined,
             };
-
             if (editingFacility) {
-                await facilityApi.update(editingFacility.id, data);
+                const { organizationId: _o, ...patch } = data;
+                await facilityApi.update(editingFacility.id, patch);
             } else {
                 await facilityApi.create(data);
             }
@@ -94,7 +107,9 @@ export default function LogisticsFacilitiesPage() {
 
     const handleEdit = (facility: Facility) => {
         setEditingFacility(facility);
+        setPickOnMap(false);
         setFormData({
+            organizationId: facility.organizationId,
             name: facility.name,
             kind: facility.kind,
             address: facility.address || '',
@@ -119,8 +134,14 @@ export default function LogisticsFacilitiesPage() {
         }
     };
 
+    const defaultOrgId = () =>
+        user?.memberships?.[0]?.organization?.id ||
+        organizations[0]?.id ||
+        '';
+
     const resetForm = () => {
         setFormData({
+            organizationId: defaultOrgId(),
             name: '',
             kind: 'hub',
             address: '',
@@ -190,6 +211,11 @@ export default function LogisticsFacilitiesPage() {
         ...zones.map((z) => ({ value: z.id, label: z.name })),
     ];
 
+    const orgOptions = organizations.map((o) => ({ value: o.id, label: o.name }));
+
+    const latNum = formData.latitude ? Number(formData.latitude) : NaN;
+    const lngNum = formData.longitude ? Number(formData.longitude) : NaN;
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -198,7 +224,14 @@ export default function LogisticsFacilitiesPage() {
                     <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Quản lý cơ sở</h1>
                     <p className="text-gray-500 mt-1">Hub, kho bãi, trạm sạc và điểm giao nhận</p>
                 </div>
-                <Button onClick={() => { resetForm(); setEditingFacility(null); setIsModalOpen(true); }}>
+                <Button
+                    onClick={() => {
+                        resetForm();
+                        setEditingFacility(null);
+                        setPickOnMap(false);
+                        setIsModalOpen(true);
+                    }}
+                >
                     <Plus size={18} className="mr-1" />
                     Thêm cơ sở
                 </Button>
@@ -273,6 +306,18 @@ export default function LogisticsFacilitiesPage() {
                 size="lg"
             >
                 <form onSubmit={handleSubmit} className="space-y-4">
+                    {!editingFacility ? (
+                        <Select
+                            label="Tổ chức *"
+                            options={orgOptions.length ? orgOptions : [{ value: '', label: 'Đang tải…' }]}
+                            value={formData.organizationId}
+                            onChange={(v) => setFormData({ ...formData, organizationId: v })}
+                        />
+                    ) : (
+                        <p className="text-sm text-gray-600">
+                            Tổ chức: <strong>{editingFacility.organization?.name || editingFacility.organizationId}</strong>
+                        </p>
+                    )}
                     <div className="grid grid-cols-2 gap-4">
                         <Input
                             label="Tên cơ sở *"
@@ -291,6 +336,29 @@ export default function LogisticsFacilitiesPage() {
                         label="Địa chỉ"
                         value={formData.address}
                         onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                        <Button
+                            type="button"
+                            variant={pickOnMap ? 'primary' : 'outline'}
+                            onClick={() => setPickOnMap((p) => !p)}
+                        >
+                            <Crosshair size={16} className="mr-1" />
+                            {pickOnMap ? 'Đang chọn trên bản đồ…' : 'Chọn tọa độ trên bản đồ'}
+                        </Button>
+                    </div>
+                    <FacilityMapPicker
+                        latitude={Number.isFinite(latNum) ? latNum : null}
+                        longitude={Number.isFinite(lngNum) ? lngNum : null}
+                        pickEnabled={pickOnMap}
+                        onPick={(lat, lng) => {
+                            setFormData((fd) => ({
+                                ...fd,
+                                latitude: String(lat),
+                                longitude: String(lng),
+                            }));
+                            setPickOnMap(false);
+                        }}
                     />
                     <div className="grid grid-cols-2 gap-4">
                         <Input

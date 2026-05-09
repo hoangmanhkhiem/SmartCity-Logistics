@@ -215,13 +215,15 @@ model Restriction {
   id            String   @id @default(uuid())
   roadSegmentId String?  @map("road_segment_id")
   zoneId        String?  @map("zone_id")
-  vehicleType   String?  @map("vehicle_type") // Loại xe bị ảnh hưởng
+  vehicleType   String?  @map("vehicle_type") // (legacy) một loại xe
+  vehicleTypes  String[] @default([]) @map("vehicle_types") // rỗng = áp dụng mọi loại
+  severity      String   @default("restricted") // prohibited | restricted | allowed_window — map màu bản đồ
   maxWeight     Float?   @map("max_weight") // Tải trọng tối đa (kg)
   maxHeight     Float?   @map("max_height") // Chiều cao tối đa (m)
-  timeFrom      String?  @map("time_from") // Thời điểm bắt đầu hạn chế (HH:mm)
-  timeTo        String?  @map("time_to") // Thời điểm kết thúc hạn chế (HH:mm)
-  daysOfWeek    String[] @map("days_of_week") // [Mon, Tue, ...]
-  allowed       Boolean  @default(false) // TRUE nếu được phép lưu thông
+  timeFrom      String?  @map("time_from") // HH:mm — nếu timeFrom > timeTo = khung qua đêm
+  timeTo        String?  @map("time_to") // HH:mm
+  daysOfWeek    String[] @map("days_of_week") // [Mon, Tue, ...] — rỗng = mọi ngày
+  allowed       Boolean  @default(false) // TRUE nếu được phép lưu thông (legacy / mô tả)
   description   String?
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
