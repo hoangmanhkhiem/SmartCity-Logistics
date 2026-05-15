@@ -143,17 +143,35 @@ export interface Telemetry {
     vehicle?: Vehicle;
 }
 
+// Role
+export interface Role {
+    id: string;
+    name: string;
+    description?: string;
+}
+
+// Membership
+export interface Membership {
+    id: string;
+    userId: string;
+    organizationId: string;
+    roleId: string;
+    role?: Role;
+    organization?: Organization;
+}
+
 // User
 export interface User {
     id: string;
     email: string;
-    name: string;
+    name?: string;
     phone?: string;
     avatarUrl?: string;
     isActive: boolean;
     lastLoginAt?: string;
     createdAt: string;
     updatedAt: string;
+    memberships?: Membership[];
 }
 
 // Stats
