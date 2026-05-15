@@ -1,26 +1,63 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardBody, CardHeader, DataTable, Badge, Select, Button, Input, Modal } from '@/components/ui';
+import {
+    Card,
+    Table,
+    Button,
+    Space,
+    Input,
+    Tag,
+    Row,
+    Col,
+    Statistic,
+    Typography,
+    Modal,
+    Form,
+    Select,
+    InputNumber,
+    message,
+    Tooltip,
+    Badge,
+    Progress,
+    Segmented,
+    Drawer,
+    Descriptions,
+} from 'antd';
+import {
+    CarOutlined,
+    PlusOutlined,
+    SearchOutlined,
+    EditOutlined,
+    DeleteOutlined,
+    ThunderboltOutlined,
+    FireOutlined,
+    CheckCircleOutlined,
+    ClockCircleOutlined,
+    ToolOutlined,
+    DashboardOutlined,
+    EnvironmentOutlined,
+} from '@ant-design/icons';
+import type { ColumnsType } from 'antd/es/table';
 import { vehicleApi, carrierApi } from '@/lib/api';
 import { Vehicle, Carrier } from '@/types';
-import { Truck, Plus, Search, Edit, Trash2, Zap, Fuel } from 'lucide-react';
-import type { Column } from '@/components/ui';
-import { viStatus } from '@/lib/status-labels';
+
+const { Title, Text } = Typography;
+const { Search } = Input;
 
 const vehicleTypeOptions = [
-    { value: '', label: 'Tất cả loại xe' },
-    { value: 'motorcycle', label: 'Xe máy' },
-    { value: 'small_truck', label: 'Xe tải nhỏ' },
-    { value: 'large_truck', label: 'Xe tải lớn' },
-    { value: 'van', label: 'Xe van' },
-    { value: 'electric_bike', label: 'Xe điện' },
+    { value: 'motorcycle', label: 'Xe máy', icon: '🏍️', capacity: '10-30kg' },
+    { value: 'electric_bike', label: 'Xe điện', icon: '⚡', capacity: '15-40kg' },
+    { value: 'van', label: 'Xe van', icon: '🚐', capacity: '200-500kg' },
+    { value: 'small_truck', label: 'Xe tải nhỏ', icon: '🚚', capacity: '500-1000kg' },
+    { value: 'large_truck', label: 'Xe tải lớn', icon: '🚛', capacity: '1000-5000kg' },
 ];
 
-const statusVariant: Record<string, 'success' | 'info' | 'warning'> = {
-    available: 'success',
-    in_use: 'info',
-    maintenance: 'warning',
+const statusConfig = {
+    available: { color: 'success', text: 'Sẵn sàng', icon: <CheckCircleOutlined /> },
+    in_use: { color: 'processing', text: 'Đang chạy', icon: <DashboardOutlined /> },
+    maintenance: { color: 'warning', text: 'Bảo trì', icon: <ToolOutlined /> },
+    offline: { color: 'default', text: 'Offline', icon: <ClockCircleOutlined /> },
 };
 
 export default function LogisticsVehiclesPage() {
@@ -29,23 +66,13 @@ export default function LogisticsVehiclesPage() {
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
-    const [typeFilter, setTypeFilter] = useState('');
+    const [typeFilter, setTypeFilter] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [detailDrawerOpen, setDetailDrawerOpen] = useState(false);
+    const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
     const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
-    const [formData, setFormData] = useState({
-        carrierId: '',
-        type: 'motorcycle',
-        plate: '',
-        brand: '',
-        model: '',
-        capacity: '',
-        volume: '',
-        fuelType: 'gasoline',
-        isElectric: false,
-        emissionStandard: '',
-        range: '',
-    });
+    const [form] = Form.useForm();
 
     const fetchCarriers = async () => {
         try {
@@ -60,12 +87,13 @@ export default function LogisticsVehiclesPage() {
         setLoading(true);
         try {
             const params: Record<string, unknown> = { page, limit: 10 };
-            if (typeFilter) params.type = typeFilter;
+            if (typeFilter !== 'all') params.type = typeFilter;
             const response = await vehicleApi.getAll(params);
             setVehicles(response.data.data || response.data);
             setTotalPages(response.data.meta?.totalPages || 1);
         } catch (error) {
             console.error('Failed to fetch vehicles:', error);
+            message.error('Không thể tải danh sách xe');
         } finally {
             setLoading(false);
         }
@@ -79,330 +107,544 @@ export default function LogisticsVehiclesPage() {
         fetchVehicles();
     }, [page, typeFilter]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSubmit = async (values: any) => {
         try {
             const data = {
-                ...formData,
-                capacity: formData.capacity ? Number(formData.capacity) : undefined,
-                volume: formData.volume ? Number(formData.volume) : undefined,
-                range: formData.range ? Number(formData.range) : undefined,
+                ...values,
+                isElectric: values.fuelType === 'electric',
             };
 
             if (editingVehicle) {
                 await vehicleApi.update(editingVehicle.id, data);
+                message.success('Đã cập nhật xe');
             } else {
                 await vehicleApi.create(data);
+                message.success('Đã thêm xe mới');
             }
             setIsModalOpen(false);
             setEditingVehicle(null);
-            resetForm();
+            form.resetFields();
             fetchVehicles();
         } catch (error) {
             console.error('Failed to save vehicle:', error);
+            message.error('Có lỗi xảy ra khi lưu thông tin xe');
         }
     };
 
     const handleEdit = (vehicle: Vehicle) => {
         setEditingVehicle(vehicle);
-        setFormData({
-            carrierId: vehicle.carrierId || '',
+        form.setFieldsValue({
+            carrierId: vehicle.carrierId,
             type: vehicle.type,
             plate: vehicle.plate,
-            brand: vehicle.brand || '',
-            model: vehicle.model || '',
-            capacity: vehicle.capacity?.toString() || '',
-            volume: vehicle.volume?.toString() || '',
-            fuelType: vehicle.fuelType || 'gasoline',
-            isElectric: vehicle.isElectric,
-            emissionStandard: vehicle.emissionStandard || '',
-            range: vehicle.range?.toString() || '',
+            brand: vehicle.brand,
+            model: vehicle.model,
+            capacity: vehicle.capacity,
+            volume: vehicle.volume,
+            fuelType: vehicle.fuelType,
+            emissionStandard: vehicle.emissionStandard,
+            range: vehicle.range,
         });
         setIsModalOpen(true);
     };
 
     const handleDelete = async (id: string) => {
-        if (confirm('Bạn có chắc chắn muốn xóa xe này?')) {
-            try {
-                await vehicleApi.delete(id);
-                fetchVehicles();
-            } catch (error) {
-                console.error('Failed to delete vehicle:', error);
-            }
+        try {
+            await vehicleApi.delete(id);
+            message.success('Đã xóa xe');
+            fetchVehicles();
+        } catch (error) {
+            console.error('Failed to delete vehicle:', error);
+            message.error('Không thể xóa xe');
         }
     };
 
-    const resetForm = () => {
-        setFormData({
-            carrierId: '',
-            type: 'motorcycle',
-            plate: '',
-            brand: '',
-            model: '',
-            capacity: '',
-            volume: '',
-            fuelType: 'gasoline',
-            isElectric: false,
-            emissionStandard: '',
-            range: '',
-        });
-    };
-
-    const columns: Column<Vehicle>[] = [
+    const columns: ColumnsType<Vehicle> = [
         {
+            title: 'Biển số',
+            dataIndex: 'plate',
             key: 'plate',
-            header: 'Biển số',
-            render: (v) => <span className="font-mono font-semibold">{v.plate}</span>
+            render: (text, record) => (
+                <Space direction="vertical" size="small">
+                    <Text strong style={{ fontSize: 16, fontFamily: 'monospace' }}>{text}</Text>
+                    <Space>
+                        {record.isElectric ? (
+                            <Tag icon={<ThunderboltOutlined />} color="green">Điện</Tag>
+                        ) : (
+                            <Tag icon={<FireOutlined />} color="orange">Xăng/Dầu</Tag>
+                        )}
+                    </Space>
+                </Space>
+            ),
         },
         {
+            title: 'Loại xe',
+            dataIndex: 'type',
             key: 'type',
-            header: 'Loại xe',
-            render: (v) => (
-                <div className="flex items-center gap-2">
-                    {v.isElectric ? <Zap size={16} className="text-green-500" /> : <Fuel size={16} className="text-orange-500" />}
-                    {vehicleTypeOptions.find(t => t.value === v.type)?.label || v.type}
+            render: (type) => {
+                const typeOpt = vehicleTypeOptions.find(t => t.value === type);
+                return (
+                    <Space>
+                        <span style={{ fontSize: 20 }}>{typeOpt?.icon}</span>
+                        <div>
+                            <div>{typeOpt?.label || type}</div>
+                            <Text type="secondary" style={{ fontSize: 12 }}>{typeOpt?.capacity}</Text>
+                        </div>
+                    </Space>
+                );
+            },
+        },
+        {
+            title: 'Thông tin',
+            key: 'info',
+            render: (_, record) => (
+                <div>
+                    <div><Text strong>{record.brand} {record.model}</Text></div>
+                    {record.carrier && (
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                            {record.carrier.name}
+                        </Text>
+                    )}
                 </div>
             ),
         },
-        { key: 'brand', header: 'Hãng' },
-        { key: 'model', header: 'Model' },
         {
-            key: 'capacity',
-            header: 'Tải (kg)',
-            render: (v) => v.capacity || '-'
+            title: 'Thông số',
+            key: 'specs',
+            render: (_, record) => (
+                <Space direction="vertical" size="small">
+                    {record.capacity && (
+                        <Text>
+                            <strong>Tải:</strong> {record.capacity} kg
+                        </Text>
+                    )}
+                    {record.volume && (
+                        <Text>
+                            <strong>Thể tích:</strong> {record.volume} m³
+                        </Text>
+                    )}
+                    {record.range && (
+                        <Tag icon={<EnvironmentOutlined />} color="blue">
+                            {record.range} km
+                        </Tag>
+                    )}
+                </Space>
+            ),
         },
         {
-            key: 'volume',
-            header: 'Thể tích (m³)',
-            render: (v) => v.volume || '-'
-        },
-        {
+            title: 'Trạng thái',
+            dataIndex: 'status',
             key: 'status',
-            header: 'Trạng thái',
-            render: (v) => (
-                <Badge variant={statusVariant[v.status] || 'default'}>
-                    {viStatus(v.status)}
-                </Badge>
-            ),
+            render: (status) => {
+                const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.offline;
+                return (
+                    <Tag color={config.color} icon={config.icon}>
+                        {config.text}
+                    </Tag>
+                );
+            },
+            filters: Object.entries(statusConfig).map(([value, config]) => ({
+                text: config.text,
+                value,
+            })),
+            onFilter: (value, record) => record.status === value,
         },
         {
-            key: 'actions',
-            header: '',
-            render: (v) => (
-                <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => handleEdit(v)}>
-                        <Edit size={16} />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(v.id)}>
-                        <Trash2 size={16} className="text-red-500" />
-                    </Button>
-                </div>
+            title: 'Thao tác',
+            key: 'action',
+            render: (_, record) => (
+                <Space size="small">
+                    <Tooltip title="Chi tiết">
+                        <Button
+                            type="link"
+                            size="small"
+                            onClick={() => {
+                                setSelectedVehicle(record);
+                                setDetailDrawerOpen(true);
+                            }}
+                        >
+                            Xem
+                        </Button>
+                    </Tooltip>
+                    <Tooltip title="Chỉnh sửa">
+                        <Button
+                            type="link"
+                            size="small"
+                            icon={<EditOutlined />}
+                            onClick={() => handleEdit(record)}
+                        />
+                    </Tooltip>
+                    <Tooltip title="Xóa">
+                        <Button
+                            type="link"
+                            size="small"
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={() => {
+                                Modal.confirm({
+                                    title: 'Xóa xe',
+                                    content: `Bạn có chắc muốn xóa xe "${record.plate}"?`,
+                                    okText: 'Xóa',
+                                    cancelText: 'Hủy',
+                                    okButtonProps: { danger: true },
+                                    onOk: () => handleDelete(record.id),
+                                });
+                            }}
+                        />
+                    </Tooltip>
+                </Space>
             ),
         },
     ];
 
     const filteredVehicles = vehicles.filter((v) =>
         v.plate.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        v.brand?.toLowerCase().includes(searchQuery.toLowerCase())
+        v.brand?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        v.model?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    const vehiclesByStatus = {
+        available: vehicles.filter(v => v.status === 'available').length,
+        in_use: vehicles.filter(v => v.status === 'in_use').length,
+        maintenance: vehicles.filter(v => v.status === 'maintenance').length,
+    };
+
+    const electricCount = vehicles.filter(v => v.isElectric).length;
+    const utilizationRate = vehicles.length > 0
+        ? Math.round((vehiclesByStatus.in_use / vehicles.length) * 100)
+        : 0;
+
     return (
-        <div className="space-y-6">
+        <Space direction="vertical" size="large" style={{ width: '100%' }}>
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Quản lý phương tiện</h1>
-                    <p className="text-gray-500 mt-1">Đội xe vận tải của công ty</p>
+                    <Title level={2} style={{ margin: 0 }}>
+                        <CarOutlined /> Quản lý đội xe
+                    </Title>
+                    <Text type="secondary">
+                        Fleet management - Theo dõi và điều phối phương tiện
+                    </Text>
                 </div>
-                <Button onClick={() => { resetForm(); setEditingVehicle(null); setIsModalOpen(true); }}>
-                    <Plus size={18} className="mr-1" />
+                <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    size="large"
+                    onClick={() => {
+                        form.resetFields();
+                        setEditingVehicle(null);
+                        setIsModalOpen(true);
+                    }}
+                >
                     Thêm xe
                 </Button>
             </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card>
-                    <CardBody className="flex items-center gap-3">
-                        <div className="p-3 bg-blue-100 dark:bg-blue-900/50 rounded-xl">
-                            <Truck size={24} className="text-blue-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-gray-800 dark:text-white">{vehicles.length}</p>
-                            <p className="text-sm text-gray-500">Tổng xe</p>
-                        </div>
-                    </CardBody>
-                </Card>
-                <Card>
-                    <CardBody className="flex items-center gap-3">
-                        <div className="p-3 bg-green-100 dark:bg-green-900/50 rounded-xl">
-                            <Truck size={24} className="text-green-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-gray-800 dark:text-white">
-                                {vehicles.filter(v => v.status === 'available').length}
-                            </p>
-                            <p className="text-sm text-gray-500">Sẵn sàng</p>
-                        </div>
-                    </CardBody>
-                </Card>
-                <Card>
-                    <CardBody className="flex items-center gap-3">
-                        <div className="p-3 bg-purple-100 dark:bg-purple-900/50 rounded-xl">
-                            <Truck size={24} className="text-purple-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-gray-800 dark:text-white">
-                                {vehicles.filter(v => v.status === 'in_use').length}
-                            </p>
-                            <p className="text-sm text-gray-500">Đang chạy</p>
-                        </div>
-                    </CardBody>
-                </Card>
-                <Card>
-                    <CardBody className="flex items-center gap-3">
-                        <div className="p-3 bg-teal-100 dark:bg-teal-900/50 rounded-xl">
-                            <Zap size={24} className="text-teal-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-gray-800 dark:text-white">
-                                {vehicles.filter(v => v.isElectric).length}
-                            </p>
-                            <p className="text-sm text-gray-500">Xe điện</p>
-                        </div>
-                    </CardBody>
-                </Card>
-            </div>
+            {/* Statistics */}
+            <Row gutter={[16, 16]}>
+                <Col xs={24} sm={12} md={6}>
+                    <Card variant="borderless">
+                        <Statistic
+                            title="Tổng số xe"
+                            value={vehicles.length}
+                            prefix={<CarOutlined style={{ color: '#1677ff' }} />}
+                        />
+                    </Card>
+                </Col>
+                <Col xs={24} sm={12} md={6}>
+                    <Card variant="borderless">
+                        <Statistic
+                            title="Sẵn sàng"
+                            value={vehiclesByStatus.available}
+                            prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
+                            valueStyle={{ color: '#52c41a' }}
+                        />
+                    </Card>
+                </Col>
+                <Col xs={24} sm={12} md={6}>
+                    <Card variant="borderless">
+                        <Statistic
+                            title="Đang hoạt động"
+                            value={vehiclesByStatus.in_use}
+                            prefix={<DashboardOutlined style={{ color: '#1677ff' }} />}
+                            suffix={
+                                <Text type="secondary" style={{ fontSize: 14 }}>
+                                    ({utilizationRate}%)
+                                </Text>
+                            }
+                        />
+                        <Progress
+                            percent={utilizationRate}
+                            strokeColor="#1677ff"
+                            style={{ marginTop: 8 }}
+                        />
+                    </Card>
+                </Col>
+                <Col xs={24} sm={12} md={6}>
+                    <Card variant="borderless">
+                        <Statistic
+                            title="Xe điện"
+                            value={electricCount}
+                            prefix={<ThunderboltOutlined style={{ color: '#52c41a' }} />}
+                            valueStyle={{ color: '#52c41a' }}
+                            suffix={
+                                <Text type="secondary" style={{ fontSize: 14 }}>
+                                    /{vehicles.length}
+                                </Text>
+                            }
+                        />
+                    </Card>
+                </Col>
+            </Row>
 
             {/* Filters */}
             <Card>
-                <CardBody className="flex flex-wrap gap-4 items-end">
-                    <div className="flex-1 min-w-[200px]">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                            <Input
-                                placeholder="Tìm biển số, hãng xe..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-10"
-                            />
-                        </div>
-                    </div>
-                    <div className="w-48">
-                        <Select
-                            options={vehicleTypeOptions}
-                            value={typeFilter}
-                            onChange={(v) => { setTypeFilter(v); setPage(1); }}
+                <Row gutter={16} align="middle">
+                    <Col flex="auto">
+                        <Search
+                            placeholder="Tìm biển số, hãng xe, model..."
+                            allowClear
+                            enterButton={<SearchOutlined />}
+                            size="large"
+                            onChange={(e) => setSearchQuery(e.target.value)}
                         />
-                    </div>
-                </CardBody>
+                    </Col>
+                    <Col>
+                        <Segmented
+                            options={[
+                                { label: 'Tất cả', value: 'all' },
+                                ...vehicleTypeOptions.map(t => ({
+                                    label: `${t.icon} ${t.label}`,
+                                    value: t.value
+                                })),
+                            ]}
+                            value={typeFilter}
+                            onChange={(value) => {
+                                setTypeFilter(value as string);
+                                setPage(1);
+                            }}
+                        />
+                    </Col>
+                </Row>
             </Card>
 
             {/* Table */}
-            <Card>
-                <CardHeader>
-                    <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Danh sách phương tiện</h2>
-                </CardHeader>
-                <CardBody>
-                    <DataTable
-                        columns={columns}
-                        data={filteredVehicles}
-                        loading={loading}
-                        emptyMessage="Chưa có xe nào"
-                        pagination={{ page, totalPages, onPageChange: setPage }}
-                    />
-                </CardBody>
+            <Card title={`Danh sách xe (${filteredVehicles.length})`}>
+                <Table
+                    columns={columns}
+                    dataSource={filteredVehicles}
+                    rowKey="id"
+                    loading={loading}
+                    pagination={{
+                        current: page,
+                        pageSize: 10,
+                        total: totalPages * 10,
+                        onChange: setPage,
+                        showTotal: (total) => `Tổng ${total} xe`,
+                    }}
+                />
             </Card>
 
-            {/* Modal */}
+            {/* Create/Edit Modal */}
             <Modal
-                isOpen={isModalOpen}
-                onClose={() => { setIsModalOpen(false); setEditingVehicle(null); }}
                 title={editingVehicle ? 'Chỉnh sửa xe' : 'Thêm xe mới'}
-                size="lg"
+                open={isModalOpen}
+                onCancel={() => {
+                    setIsModalOpen(false);
+                    setEditingVehicle(null);
+                    form.resetFields();
+                }}
+                onOk={() => form.submit()}
+                width={700}
+                okText={editingVehicle ? 'Cập nhật' : 'Thêm xe'}
+                cancelText="Hủy"
             >
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <Select
-                        label="Đơn vị vận tải *"
-                        options={carriers.map(c => ({ value: c.id, label: c.name }))}
-                        value={formData.carrierId}
-                        onChange={(v) => setFormData({ ...formData, carrierId: v })}
-                        placeholder="Chọn đơn vị vận tải"
-                    />
-                    <div className="grid grid-cols-2 gap-4">
-                        <Input
-                            label="Biển số *"
-                            value={formData.plate}
-                            onChange={(e) => setFormData({ ...formData, plate: e.target.value })}
-                            required
-                        />
-                        <Select
-                            label="Loại xe"
-                            options={vehicleTypeOptions.slice(1)}
-                            value={formData.type}
-                            onChange={(v) => setFormData({ ...formData, type: v })}
-                        />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <Input
-                            label="Hãng xe"
-                            value={formData.brand}
-                            onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-                        />
-                        <Input
-                            label="Model"
-                            value={formData.model}
-                            onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                        />
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
-                        <Input
-                            label="Tải trọng (kg)"
-                            type="number"
-                            value={formData.capacity}
-                            onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
-                        />
-                        <Input
-                            label="Thể tích (m³)"
-                            type="number"
-                            value={formData.volume}
-                            onChange={(e) => setFormData({ ...formData, volume: e.target.value })}
-                        />
-                        <Input
-                            label="Phạm vi (km)"
-                            type="number"
-                            value={formData.range}
-                            onChange={(e) => setFormData({ ...formData, range: e.target.value })}
-                        />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <Select
-                            label="Nhiên liệu"
-                            options={[
-                                { value: 'gasoline', label: 'Xăng' },
-                                { value: 'diesel', label: 'Dầu' },
-                                { value: 'electric', label: 'Điện' },
-                            ]}
-                            value={formData.fuelType}
-                            onChange={(v) => setFormData({ ...formData, fuelType: v, isElectric: v === 'electric' })}
-                        />
-                        <Input
-                            label="Tiêu chuẩn khí thải"
-                            value={formData.emissionStandard}
-                            onChange={(e) => setFormData({ ...formData, emissionStandard: e.target.value })}
-                            placeholder="Euro 4, Euro 5..."
-                        />
-                    </div>
-                    <div className="flex justify-end gap-2 pt-4 border-t">
-                        <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
-                            Hủy
-                        </Button>
-                        <Button type="submit">
-                            {editingVehicle ? 'Cập nhật' : 'Thêm xe'}
-                        </Button>
-                    </div>
-                </form>
+                <Form form={form} layout="vertical" onFinish={handleSubmit}>
+                    <Form.Item
+                        label="Đơn vị vận tải"
+                        name="carrierId"
+                        rules={[{ required: true, message: 'Vui lòng chọn đơn vị vận tải' }]}
+                    >
+                        <Select placeholder="Chọn carrier" size="large">
+                            {carriers.map(c => (
+                                <Select.Option key={c.id} value={c.id}>{c.name}</Select.Option>
+                            ))}
+                        </Select>
+                    </Form.Item>
+
+                    <Row gutter={16}>
+                        <Col span={12}>
+                            <Form.Item
+                                label="Biển số"
+                                name="plate"
+                                rules={[{ required: true, message: 'Vui lòng nhập biển số' }]}
+                            >
+                                <Input size="large" placeholder="51A-12345" style={{ fontFamily: 'monospace' }} />
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item
+                                label="Loại xe"
+                                name="type"
+                                rules={[{ required: true }]}
+                            >
+                                <Select size="large">
+                                    {vehicleTypeOptions.map(t => (
+                                        <Select.Option key={t.value} value={t.value}>
+                                            {t.icon} {t.label}
+                                        </Select.Option>
+                                    ))}
+                                </Select>
+                            </Form.Item>
+                        </Col>
+                    </Row>
+
+                    <Row gutter={16}>
+                        <Col span={12}>
+                            <Form.Item label="Hãng xe" name="brand">
+                                <Input size="large" placeholder="Honda, Hyundai..." />
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item label="Model" name="model">
+                                <Input size="large" placeholder="City, Porter..." />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+
+                    <Row gutter={16}>
+                        <Col span={8}>
+                            <Form.Item label="Tải trọng (kg)" name="capacity">
+                                <InputNumber style={{ width: '100%' }} min={0} placeholder="500" />
+                            </Form.Item>
+                        </Col>
+                        <Col span={8}>
+                            <Form.Item label="Thể tích (m³)" name="volume">
+                                <InputNumber style={{ width: '100%' }} min={0} step={0.1} placeholder="2.5" />
+                            </Form.Item>
+                        </Col>
+                        <Col span={8}>
+                            <Form.Item label="Phạm vi (km)" name="range">
+                                <InputNumber style={{ width: '100%' }} min={0} placeholder="150" />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+
+                    <Row gutter={16}>
+                        <Col span={12}>
+                            <Form.Item
+                                label="Nhiên liệu"
+                                name="fuelType"
+                                rules={[{ required: true }]}
+                            >
+                                <Select size="large">
+                                    <Select.Option value="gasoline">
+                                        <Space><FireOutlined /> Xăng</Space>
+                                    </Select.Option>
+                                    <Select.Option value="diesel">
+                                        <Space><FireOutlined /> Dầu diesel</Space>
+                                    </Select.Option>
+                                    <Select.Option value="electric">
+                                        <Space><ThunderboltOutlined /> Điện</Space>
+                                    </Select.Option>
+                                </Select>
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item label="Tiêu chuẩn khí thải" name="emissionStandard">
+                                <Input size="large" placeholder="Euro 4, Euro 5..." />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                </Form>
             </Modal>
-        </div>
+
+            {/* Detail Drawer */}
+            <Drawer
+                title="Chi tiết xe"
+                placement="right"
+                width={500}
+                onClose={() => setDetailDrawerOpen(false)}
+                open={detailDrawerOpen}
+            >
+                {selectedVehicle && (
+                    <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: 48, marginBottom: 16 }}>
+                                {vehicleTypeOptions.find(t => t.value === selectedVehicle.type)?.icon || '🚗'}
+                            </div>
+                            <Title level={3} style={{ margin: 0, fontFamily: 'monospace' }}>
+                                {selectedVehicle.plate}
+                            </Title>
+                            <Space style={{ marginTop: 8 }}>
+                                {statusConfig[selectedVehicle.status as keyof typeof statusConfig] && (
+                                    <Tag
+                                        color={statusConfig[selectedVehicle.status as keyof typeof statusConfig].color}
+                                        icon={statusConfig[selectedVehicle.status as keyof typeof statusConfig].icon}
+                                    >
+                                        {statusConfig[selectedVehicle.status as keyof typeof statusConfig].text}
+                                    </Tag>
+                                )}
+                                {selectedVehicle.isElectric && (
+                                    <Tag icon={<ThunderboltOutlined />} color="green">Xe điện</Tag>
+                                )}
+                            </Space>
+                        </div>
+
+                        <Descriptions column={1} bordered>
+                            <Descriptions.Item label="Loại xe">
+                                {vehicleTypeOptions.find(t => t.value === selectedVehicle.type)?.label}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Hãng - Model">
+                                {selectedVehicle.brand} {selectedVehicle.model}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Đơn vị vận tải">
+                                {selectedVehicle.carrier?.name || '—'}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Tải trọng">
+                                {selectedVehicle.capacity ? `${selectedVehicle.capacity} kg` : '—'}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Thể tích">
+                                {selectedVehicle.volume ? `${selectedVehicle.volume} m³` : '—'}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Nhiên liệu">
+                                {selectedVehicle.fuelType === 'electric' ? '⚡ Điện' :
+                                    selectedVehicle.fuelType === 'diesel' ? '🔥 Dầu diesel' : '🔥 Xăng'}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Phạm vi">
+                                {selectedVehicle.range ? `${selectedVehicle.range} km` : '—'}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Tiêu chuẩn khí thải">
+                                {selectedVehicle.emissionStandard || '—'}
+                            </Descriptions.Item>
+                        </Descriptions>
+
+                        <Space>
+                            <Button type="primary" icon={<EditOutlined />} onClick={() => {
+                                setDetailDrawerOpen(false);
+                                handleEdit(selectedVehicle);
+                            }}>
+                                Chỉnh sửa
+                            </Button>
+                            <Button danger icon={<DeleteOutlined />} onClick={() => {
+                                Modal.confirm({
+                                    title: 'Xóa xe',
+                                    content: `Bạn có chắc muốn xóa xe "${selectedVehicle.plate}"?`,
+                                    okText: 'Xóa',
+                                    cancelText: 'Hủy',
+                                    okButtonProps: { danger: true },
+                                    onOk: () => {
+                                        handleDelete(selectedVehicle.id);
+                                        setDetailDrawerOpen(false);
+                                    },
+                                });
+                            }}>
+                                Xóa xe
+                            </Button>
+                        </Space>
+                    </Space>
+                )}
+            </Drawer>
+        </Space>
     );
 }

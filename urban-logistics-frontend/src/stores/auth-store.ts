@@ -68,14 +68,16 @@ export const useAuthStore = create<AuthState>()(
 export const getDashboardPath = (role: UserRole | null): string => {
     switch (role) {
         case 'admin':
-            // Nền tảng / điều phối / API tích hợp nằm dưới /logistics/*
+            // Admin/Logistics panel với navbar phân cấp theo 4 nhóm chức năng
             return '/logistics/dashboard';
         case 'carrier_mgr':
         case 'dispatcher':
-            return '/delivery/dashboard';
+            // Carrier dashboard với mega menu
+            return '/carrier/monitor';
         case 'regulator':
-            return '/regulator/dashboard';
+            // Regulator dashboard
+            return '/regulator/reports';
         default:
-            return '/consumer';
+            return '/';
     }
 };

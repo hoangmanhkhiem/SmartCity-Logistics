@@ -1,44 +1,80 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardBody, CardHeader, DataTable, Badge, Select, Button, Input, Modal } from '@/components/ui';
+import {
+    Card,
+    Table,
+    Button,
+    Space,
+    Input,
+    Tag,
+    Row,
+    Col,
+    Statistic,
+    Typography,
+    Modal,
+    Form,
+    Select,
+    TimePicker,
+    InputNumber,
+    message,
+    Tooltip,
+    Segmented,
+    Badge,
+    Descriptions,
+    Drawer,
+} from 'antd';
+import {
+    ShopOutlined,
+    PlusOutlined,
+    SearchOutlined,
+    EnvironmentOutlined,
+    ThunderboltOutlined,
+    FireOutlined,
+    HomeOutlined,
+    InboxOutlined,
+    EditOutlined,
+    DeleteOutlined,
+    CheckCircleOutlined,
+    CloseCircleOutlined,
+    AimOutlined,
+    FilterOutlined,
+    ClockCircleOutlined,
+} from '@ant-design/icons';
+import type { ColumnsType } from 'antd/es/table';
 import { facilityApi, zoneApi, organizationApi } from '@/lib/api';
 import { Facility, Zone, Organization } from '@/types';
-import { Building2, Plus, Search, Edit, Trash2, MapPin, Warehouse, Zap, Fuel, Crosshair } from 'lucide-react';
-import type { Column } from '@/components/ui';
 import FacilityMapPicker from '@/components/logistics/facility-map-picker';
 import { useAuthStore } from '@/stores/auth-store';
+import dayjs from 'dayjs';
+
+const { Title, Text } = Typography;
+const { Search } = Input;
 
 const kindOptions = [
-    { value: '', label: 'Tất cả loại' },
-    { value: 'hub', label: 'Hub giao nhận' },
-    { value: 'warehouse', label: 'Kho bãi' },
-    { value: 'charging_station', label: 'Trạm sạc' },
-    { value: 'fuel_station', label: 'Trạm xăng' },
-    { value: 'pickup_point', label: 'Điểm giao nhận' },
+    { value: 'hub', label: 'Hub giao nhận', icon: <HomeOutlined />, color: '#1677ff' },
+    { value: 'warehouse', label: 'Kho bãi', icon: <InboxOutlined />, color: '#722ed1' },
+    { value: 'charging_station', label: 'Trạm sạc', icon: <ThunderboltOutlined />, color: '#52c41a' },
+    { value: 'fuel_station', label: 'Trạm xăng', icon: <FireOutlined />, color: '#faad14' },
+    { value: 'pickup_point', label: 'Điểm giao nhận', icon: <EnvironmentOutlined />, color: '#13c2c2' },
 ];
-
-const kindIcons: Record<string, React.ReactNode> = {
-    hub: <Building2 size={16} />,
-    warehouse: <Warehouse size={16} />,
-    charging_station: <Zap size={16} />,
-    fuel_station: <Fuel size={16} />,
-    pickup_point: <MapPin size={16} />,
-};
 
 export default function LogisticsFacilitiesPage() {
     const user = useAuthStore((s) => s.user);
     const [facilities, setFacilities] = useState<Facility[]>([]);
     const [zones, setZones] = useState<Zone[]>([]);
     const [organizations, setOrganizations] = useState<Organization[]>([]);
-    const [pickOnMap, setPickOnMap] = useState(false);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
-    const [kindFilter, setKindFilter] = useState('');
+    const [kindFilter, setKindFilter] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [detailDrawerOpen, setDetailDrawerOpen] = useState(false);
+    const [selectedFacility, setSelectedFacility] = useState<Facility | null>(null);
     const [editingFacility, setEditingFacility] = useState<Facility | null>(null);
+    const [pickOnMap, setPickOnMap] = useState(false);
+    const [form] = Form.useForm();
     const [formData, setFormData] = useState({
         organizationId: '',
         name: '',
@@ -56,7 +92,11 @@ export default function LogisticsFacilitiesPage() {
         setLoading(true);
         try {
             const [facilitiesRes, zonesRes, orgRes] = await Promise.all([
-                facilityApi.getAll({ page, limit: 10, kind: kindFilter || undefined }),
+                facilityApi.getAll({
+                    page,
+                    limit: 10,
+                    kind: kindFilter !== 'all' ? kindFilter : undefined
+                }),
                 zoneApi.getAll({ limit: 50 }),
                 organizationApi.getAll({ limit: 100 }),
             ]);
@@ -67,6 +107,7 @@ export default function LogisticsFacilitiesPage() {
             setTotalPages(facilitiesRes.data.meta?.totalPages || 1);
         } catch (error) {
             console.error('Failed to fetch data:', error);
+            message.error('Không thể tải dữ liệu cơ sở');
         } finally {
             setLoading(false);
         }
@@ -76,127 +117,181 @@ export default function LogisticsFacilitiesPage() {
         fetchData();
     }, [page, kindFilter]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSubmit = async (values: any) => {
         try {
-            if (!editingFacility && !formData.organizationId) {
-                alert('Chọn tổ chức sở hữu cơ sở.');
-                return;
-            }
             const data = {
-                ...formData,
-                latitude: Number(formData.latitude) || 0,
-                longitude: Number(formData.longitude) || 0,
-                capacity: formData.capacity ? Number(formData.capacity) : undefined,
-                zoneId: formData.zoneId || undefined,
+                ...values,
+                latitude: Number(values.latitude) || 0,
+                longitude: Number(values.longitude) || 0,
+                capacity: values.capacity ? Number(values.capacity) : undefined,
+                openingTime: values.openingTime ? dayjs(values.openingTime).format('HH:mm') : undefined,
+                closingTime: values.closingTime ? dayjs(values.closingTime).format('HH:mm') : undefined,
             };
+
             if (editingFacility) {
                 const { organizationId: _o, ...patch } = data;
                 await facilityApi.update(editingFacility.id, patch);
+                message.success('Đã cập nhật cơ sở');
             } else {
                 await facilityApi.create(data);
+                message.success('Đã tạo cơ sở mới');
             }
             setIsModalOpen(false);
             setEditingFacility(null);
-            resetForm();
+            form.resetFields();
             fetchData();
         } catch (error) {
             console.error('Failed to save facility:', error);
+            message.error('Có lỗi xảy ra khi lưu cơ sở');
         }
     };
 
     const handleEdit = (facility: Facility) => {
         setEditingFacility(facility);
         setPickOnMap(false);
-        setFormData({
+        form.setFieldsValue({
             organizationId: facility.organizationId,
             name: facility.name,
             kind: facility.kind,
             address: facility.address || '',
-            latitude: facility.latitude?.toString() || '',
-            longitude: facility.longitude?.toString() || '',
-            capacity: facility.capacity?.toString() || '',
-            openingTime: facility.openingTime || '',
-            closingTime: facility.closingTime || '',
+            latitude: facility.latitude || '',
+            longitude: facility.longitude || '',
+            capacity: facility.capacity || '',
+            openingTime: facility.openingTime ? dayjs(facility.openingTime, 'HH:mm') : null,
+            closingTime: facility.closingTime ? dayjs(facility.closingTime, 'HH:mm') : null,
             zoneId: facility.zoneId || '',
         });
         setIsModalOpen(true);
     };
 
     const handleDelete = async (id: string) => {
-        if (confirm('Bạn có chắc chắn muốn xóa cơ sở này?')) {
-            try {
-                await facilityApi.delete(id);
-                fetchData();
-            } catch (error) {
-                console.error('Failed to delete facility:', error);
-            }
+        try {
+            await facilityApi.delete(id);
+            message.success('Đã xóa cơ sở');
+            fetchData();
+        } catch (error) {
+            console.error('Failed to delete facility:', error);
+            message.error('Không thể xóa cơ sở');
         }
     };
 
-    const defaultOrgId = () =>
-        user?.memberships?.[0]?.organization?.id ||
-        organizations[0]?.id ||
-        '';
-
-    const resetForm = () => {
-        setFormData({
-            organizationId: defaultOrgId(),
-            name: '',
-            kind: 'hub',
-            address: '',
-            latitude: '',
-            longitude: '',
-            capacity: '',
-            openingTime: '',
-            closingTime: '',
-            zoneId: '',
-        });
+    const handleViewDetail = (facility: Facility) => {
+        setSelectedFacility(facility);
+        setDetailDrawerOpen(true);
     };
 
-    const columns: Column<Facility>[] = [
+    const columns: ColumnsType<Facility> = [
         {
+            title: 'Tên cơ sở',
+            dataIndex: 'name',
             key: 'name',
-            header: 'Tên cơ sở',
-            render: (f) => (
-                <div className="flex items-center gap-2">
-                    <span className="text-gray-500">{kindIcons[f.kind]}</span>
-                    <span className="font-medium">{f.name}</span>
-                </div>
+            render: (text, record) => {
+                const kindOpt = kindOptions.find(k => k.value === record.kind);
+                return (
+                    <div>
+                        <Space>
+                            <span style={{ color: kindOpt?.color }}>{kindOpt?.icon}</span>
+                            <Text strong>{text}</Text>
+                        </Space>
+                        <div style={{ marginTop: 4 }}>
+                            <Tag color={kindOpt?.color}>{kindOpt?.label}</Tag>
+                        </div>
+                    </div>
+                );
+            },
+            sorter: (a, b) => a.name.localeCompare(b.name),
+        },
+        {
+            title: 'Địa chỉ',
+            dataIndex: 'address',
+            key: 'address',
+            render: (text) => (
+                <Space>
+                    <EnvironmentOutlined style={{ color: '#1677ff' }} />
+                    <Text ellipsis style={{ maxWidth: 300 }}>{text || '—'}</Text>
+                </Space>
             ),
         },
         {
-            key: 'kind',
-            header: 'Loại',
-            render: (f) => kindOptions.find(k => k.value === f.kind)?.label || f.kind,
-        },
-        { key: 'address', header: 'Địa chỉ' },
-        {
+            title: 'Sức chứa',
+            dataIndex: 'capacity',
             key: 'capacity',
-            header: 'Sức chứa',
-            render: (f) => f.capacity || '-',
+            render: (capacity) => capacity ? <Text strong>{capacity}</Text> : '—',
+            sorter: (a, b) => (a.capacity || 0) - (b.capacity || 0),
         },
         {
+            title: 'Giờ hoạt động',
+            key: 'hours',
+            render: (_, record) => {
+                if (record.openingTime && record.closingTime) {
+                    return (
+                        <Space>
+                            <ClockCircleOutlined />
+                            <Text>{record.openingTime} - {record.closingTime}</Text>
+                        </Space>
+                    );
+                }
+                return '24/7';
+            },
+        },
+        {
+            title: 'Trạng thái',
+            dataIndex: 'isActive',
             key: 'isActive',
-            header: 'Trạng thái',
-            render: (f) => (
-                <Badge variant={f.isActive ? 'success' : 'error'}>
-                    {f.isActive ? 'Hoạt động' : 'Đóng cửa'}
-                </Badge>
-            ),
+            render: (isActive) =>
+                isActive ? (
+                    <Badge status="success" text="Hoạt động" />
+                ) : (
+                    <Badge status="error" text="Đóng cửa" />
+                ),
+            filters: [
+                { text: 'Hoạt động', value: true },
+                { text: 'Đóng cửa', value: false },
+            ],
+            onFilter: (value, record) => record.isActive === value,
         },
         {
-            key: 'actions',
-            header: '',
-            render: (f) => (
-                <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => handleEdit(f)}>
-                        <Edit size={16} />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(f.id)}>
-                        <Trash2 size={16} className="text-red-500" />
-                    </Button>
-                </div>
+            title: 'Thao tác',
+            key: 'action',
+            render: (_, record) => (
+                <Space size="small">
+                    <Tooltip title="Xem chi tiết">
+                        <Button
+                            type="link"
+                            size="small"
+                            icon={<EnvironmentOutlined />}
+                            onClick={() => handleViewDetail(record)}
+                        >
+                            Chi tiết
+                        </Button>
+                    </Tooltip>
+                    <Tooltip title="Chỉnh sửa">
+                        <Button
+                            type="link"
+                            size="small"
+                            icon={<EditOutlined />}
+                            onClick={() => handleEdit(record)}
+                        />
+                    </Tooltip>
+                    <Tooltip title="Xóa">
+                        <Button
+                            type="link"
+                            size="small"
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={() => {
+                                Modal.confirm({
+                                    title: 'Xóa cơ sở',
+                                    content: `Bạn có chắc muốn xóa "${record.name}"?`,
+                                    okText: 'Xóa',
+                                    cancelText: 'Hủy',
+                                    okButtonProps: { danger: true },
+                                    onOk: () => handleDelete(record.id),
+                                });
+                            }}
+                        />
+                    </Tooltip>
+                </Space>
             ),
         },
     ];
@@ -206,212 +301,353 @@ export default function LogisticsFacilitiesPage() {
         f.address?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    const zoneOptions = [
-        { value: '', label: 'Chọn khu vực' },
-        ...zones.map((z) => ({ value: z.id, label: z.name })),
-    ];
+    const facilityStats = kindOptions.map(kind => ({
+        ...kind,
+        count: facilities.filter(f => f.kind === kind.value).length,
+    }));
 
-    const orgOptions = organizations.map((o) => ({ value: o.id, label: o.name }));
-
-    const latNum = formData.latitude ? Number(formData.latitude) : NaN;
-    const lngNum = formData.longitude ? Number(formData.longitude) : NaN;
+    const totalCapacity = facilities.reduce((sum, f) => sum + (f.capacity || 0), 0);
+    const activeCount = facilities.filter(f => f.isActive).length;
 
     return (
-        <div className="space-y-6">
+        <Space orientation="vertical" size="large" style={{ width: '100%' }}>
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Quản lý cơ sở</h1>
-                    <p className="text-gray-500 mt-1">Hub, kho bãi, trạm sạc và điểm giao nhận</p>
+                    <Title level={2} style={{ margin: 0 }}>
+                        <ShopOutlined /> Quản lý cơ sở logistics
+                    </Title>
+                    <Text type="secondary">
+                        Hub giao nhận, kho bãi, trạm sạc và điểm phục vụ
+                    </Text>
                 </div>
                 <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    size="large"
                     onClick={() => {
-                        resetForm();
+                        form.resetFields();
                         setEditingFacility(null);
                         setPickOnMap(false);
                         setIsModalOpen(true);
                     }}
                 >
-                    <Plus size={18} className="mr-1" />
                     Thêm cơ sở
                 </Button>
             </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {['hub', 'warehouse', 'charging_station', 'fuel_station'].map((kind) => (
-                    <Card key={kind}>
-                        <CardBody className="flex items-center gap-3">
-                            <div className="p-3 bg-blue-100 dark:bg-blue-900/50 rounded-xl text-blue-600">
-                                {kindIcons[kind]}
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold text-gray-800 dark:text-white">
-                                    {facilities.filter(f => f.kind === kind).length}
-                                </p>
-                                <p className="text-sm text-gray-500">
-                                    {kindOptions.find(k => k.value === kind)?.label}
-                                </p>
-                            </div>
-                        </CardBody>
-                    </Card>
+            {/* Statistics */}
+            <Row gutter={[16, 16]}>
+                {facilityStats.map((stat) => (
+                    <Col xs={24} sm={12} md={8} lg={4} key={stat.value}>
+                        <Card variant="borderless" hoverable>
+                            <Statistic
+                                title={stat.label}
+                                value={stat.count}
+                                prefix={
+                                    <span style={{ color: stat.color, fontSize: 24 }}>
+                                        {stat.icon}
+                                    </span>
+                                }
+                                styles={{ content: { color: stat.color } }}
+                            />
+                        </Card>
+                    </Col>
                 ))}
-            </div>
+                <Col xs={24} sm={12} md={8} lg={4}>
+                    <Card variant="borderless" hoverable>
+                        <Statistic
+                            title="Đang hoạt động"
+                            value={activeCount}
+                            prefix={<CheckCircleOutlined style={{ color: '#52c41a', fontSize: 24 }} />}
+                            styles={{ content: { color: '#52c41a' } }}
+                        />
+                    </Card>
+                </Col>
+                <Col xs={24} sm={12} md={8} lg={4}>
+                    <Card variant="borderless" hoverable>
+                        <Statistic
+                            title="Tổng sức chứa"
+                            value={totalCapacity}
+                            prefix={<InboxOutlined style={{ color: '#faad14', fontSize: 24 }} />}
+                            styles={{ content: { color: '#faad14' } }}
+                        />
+                    </Card>
+                </Col>
+            </Row>
 
             {/* Filters */}
             <Card>
-                <CardBody className="flex flex-wrap gap-4 items-end">
-                    <div className="flex-1 min-w-[200px]">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                            <Input
-                                placeholder="Tìm tên, địa chỉ..."
-                                value={searchQuery}
+                <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
+                    <Row gutter={16} align="middle">
+                        <Col flex="auto">
+                            <Search
+                                placeholder="Tìm tên cơ sở, địa chỉ..."
+                                allowClear
+                                enterButton={<SearchOutlined />}
+                                size="large"
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-10"
                             />
-                        </div>
-                    </div>
-                    <div className="w-48">
-                        <Select
-                            options={kindOptions}
-                            value={kindFilter}
-                            onChange={(v) => { setKindFilter(v); setPage(1); }}
-                        />
-                    </div>
-                </CardBody>
+                        </Col>
+                        <Col>
+                            <Space>
+                                <FilterOutlined />
+                                <Segmented
+                                    options={[
+                                        { label: 'Tất cả', value: 'all' },
+                                        ...kindOptions.map(k => ({ label: k.label, value: k.value })),
+                                    ]}
+                                    value={kindFilter}
+                                    onChange={(value) => {
+                                        setKindFilter(value as string);
+                                        setPage(1);
+                                    }}
+                                />
+                            </Space>
+                        </Col>
+                    </Row>
+                </Space>
             </Card>
 
             {/* Table */}
-            <Card>
-                <CardHeader>
-                    <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Danh sách cơ sở</h2>
-                </CardHeader>
-                <CardBody>
-                    <DataTable
-                        columns={columns}
-                        data={filteredFacilities}
-                        loading={loading}
-                        emptyMessage="Chưa có cơ sở nào"
-                        pagination={{ page, totalPages, onPageChange: setPage }}
-                    />
-                </CardBody>
+            <Card title={`Danh sách cơ sở (${filteredFacilities.length})`}>
+                <Table
+                    columns={columns}
+                    dataSource={filteredFacilities}
+                    rowKey="id"
+                    loading={loading}
+                    pagination={{
+                        current: page,
+                        pageSize: 10,
+                        total: totalPages * 10,
+                        onChange: setPage,
+                        showTotal: (total) => `Tổng ${total} cơ sở`,
+                        showSizeChanger: false,
+                    }}
+                />
             </Card>
 
-            {/* Modal */}
+            {/* Create/Edit Modal */}
             <Modal
-                isOpen={isModalOpen}
-                onClose={() => { setIsModalOpen(false); setEditingFacility(null); }}
                 title={editingFacility ? 'Chỉnh sửa cơ sở' : 'Thêm cơ sở mới'}
-                size="lg"
+                open={isModalOpen}
+                onCancel={() => {
+                    setIsModalOpen(false);
+                    setEditingFacility(null);
+                    form.resetFields();
+                }}
+                onOk={() => form.submit()}
+                width={800}
+                okText={editingFacility ? 'Cập nhật' : 'Tạo cơ sở'}
+                cancelText="Hủy"
             >
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    {!editingFacility ? (
-                        <Select
-                            label="Tổ chức *"
-                            options={orgOptions.length ? orgOptions : [{ value: '', label: 'Đang tải…' }]}
-                            value={formData.organizationId}
-                            onChange={(v) => setFormData({ ...formData, organizationId: v })}
-                        />
-                    ) : (
-                        <p className="text-sm text-gray-600">
-                            Tổ chức: <strong>{editingFacility.organization?.name || editingFacility.organizationId}</strong>
-                        </p>
-                    )}
-                    <div className="grid grid-cols-2 gap-4">
-                        <Input
-                            label="Tên cơ sở *"
-                            value={formData.name}
-                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                            required
-                        />
-                        <Select
-                            label="Loại cơ sở"
-                            options={kindOptions.slice(1)}
-                            value={formData.kind}
-                            onChange={(v) => setFormData({ ...formData, kind: v })}
-                        />
-                    </div>
-                    <Input
-                        label="Địa chỉ"
-                        value={formData.address}
-                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    />
-                    <div className="flex flex-wrap gap-2">
-                        <Button
-                            type="button"
-                            variant={pickOnMap ? 'primary' : 'outline'}
-                            onClick={() => setPickOnMap((p) => !p)}
+                <Form form={form} layout="vertical" onFinish={handleSubmit}>
+                    {!editingFacility && (
+                        <Form.Item
+                            label="Tổ chức"
+                            name="organizationId"
+                            rules={[{ required: true, message: 'Vui lòng chọn tổ chức' }]}
                         >
-                            <Crosshair size={16} className="mr-1" />
-                            {pickOnMap ? 'Đang chọn trên bản đồ…' : 'Chọn tọa độ trên bản đồ'}
+                            <Select placeholder="Chọn tổ chức" size="large">
+                                {organizations.map(org => (
+                                    <Select.Option key={org.id} value={org.id}>
+                                        {org.name}
+                                    </Select.Option>
+                                ))}
+                            </Select>
+                        </Form.Item>
+                    )}
+
+                    <Row gutter={16}>
+                        <Col span={12}>
+                            <Form.Item
+                                label="Tên cơ sở"
+                                name="name"
+                                rules={[{ required: true, message: 'Vui lòng nhập tên' }]}
+                            >
+                                <Input size="large" placeholder="Ví dụ: Hub Quận 1" />
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item
+                                label="Loại cơ sở"
+                                name="kind"
+                                rules={[{ required: true }]}
+                            >
+                                <Select size="large">
+                                    {kindOptions.map(kind => (
+                                        <Select.Option key={kind.value} value={kind.value}>
+                                            <Space>
+                                                <span style={{ color: kind.color }}>{kind.icon}</span>
+                                                {kind.label}
+                                            </Space>
+                                        </Select.Option>
+                                    ))}
+                                </Select>
+                            </Form.Item>
+                        </Col>
+                    </Row>
+
+                    <Form.Item label="Địa chỉ" name="address">
+                        <Input size="large" placeholder="Nhập địa chỉ đầy đủ" />
+                    </Form.Item>
+
+                    <Space style={{ marginBottom: 16 }}>
+                        <Button
+                            type={pickOnMap ? 'primary' : 'default'}
+                            icon={<AimOutlined />}
+                            onClick={() => setPickOnMap(!pickOnMap)}
+                        >
+                            {pickOnMap ? 'Đang chọn trên bản đồ...' : 'Chọn tọa độ trên bản đồ'}
                         </Button>
-                    </div>
-                    <FacilityMapPicker
-                        latitude={Number.isFinite(latNum) ? latNum : null}
-                        longitude={Number.isFinite(lngNum) ? lngNum : null}
-                        pickEnabled={pickOnMap}
-                        onPick={(lat, lng) => {
-                            setFormData((fd) => ({
-                                ...fd,
-                                latitude: String(lat),
-                                longitude: String(lng),
-                            }));
-                            setPickOnMap(false);
+                    </Space>
+
+                    <Form.Item noStyle shouldUpdate>
+                        {() => {
+                            const lat = form.getFieldValue('latitude');
+                            const lng = form.getFieldValue('longitude');
+                            return (
+                                <FacilityMapPicker
+                                    latitude={lat ? Number(lat) : null}
+                                    longitude={lng ? Number(lng) : null}
+                                    pickEnabled={pickOnMap}
+                                    onPick={(pickedLat, pickedLng) => {
+                                        form.setFieldsValue({
+                                            latitude: pickedLat.toString(),
+                                            longitude: pickedLng.toString(),
+                                        });
+                                        setPickOnMap(false);
+                                    }}
+                                />
+                            );
                         }}
-                    />
-                    <div className="grid grid-cols-2 gap-4">
-                        <Input
-                            label="Vĩ độ"
-                            type="number"
-                            step="any"
-                            value={formData.latitude}
-                            onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
-                        />
-                        <Input
-                            label="Kinh độ"
-                            type="number"
-                            step="any"
-                            value={formData.longitude}
-                            onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
-                        />
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
-                        <Input
-                            label="Sức chứa"
-                            type="number"
-                            value={formData.capacity}
-                            onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
-                        />
-                        <Input
-                            label="Giờ mở cửa"
-                            type="time"
-                            value={formData.openingTime}
-                            onChange={(e) => setFormData({ ...formData, openingTime: e.target.value })}
-                        />
-                        <Input
-                            label="Giờ đóng cửa"
-                            type="time"
-                            value={formData.closingTime}
-                            onChange={(e) => setFormData({ ...formData, closingTime: e.target.value })}
-                        />
-                    </div>
-                    <Select
-                        label="Khu vực"
-                        options={zoneOptions}
-                        value={formData.zoneId}
-                        onChange={(v) => setFormData({ ...formData, zoneId: v })}
-                    />
-                    <div className="flex justify-end gap-2 pt-4 border-t">
-                        <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
-                            Hủy
-                        </Button>
-                        <Button type="submit">
-                            {editingFacility ? 'Cập nhật' : 'Thêm cơ sở'}
-                        </Button>
-                    </div>
-                </form>
+                    </Form.Item>
+
+                    <Row gutter={16}>
+                        <Col span={12}>
+                            <Form.Item label="Vĩ độ" name="latitude">
+                                <InputNumber style={{ width: '100%' }} step={0.000001} placeholder="21.0285" />
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item label="Kinh độ" name="longitude">
+                                <InputNumber style={{ width: '100%' }} step={0.000001} placeholder="105.8542" />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+
+                    <Row gutter={16}>
+                        <Col span={8}>
+                            <Form.Item label="Sức chứa" name="capacity">
+                                <InputNumber style={{ width: '100%' }} min={1} placeholder="500" />
+                            </Form.Item>
+                        </Col>
+                        <Col span={8}>
+                            <Form.Item label="Giờ mở cửa" name="openingTime">
+                                <TimePicker style={{ width: '100%' }} format="HH:mm" />
+                            </Form.Item>
+                        </Col>
+                        <Col span={8}>
+                            <Form.Item label="Giờ đóng cửa" name="closingTime">
+                                <TimePicker style={{ width: '100%' }} format="HH:mm" />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+
+                    <Form.Item label="Khu vực" name="zoneId">
+                        <Select placeholder="Chọn khu vực" allowClear size="large">
+                            {zones.map(zone => (
+                                <Select.Option key={zone.id} value={zone.id}>
+                                    {zone.name}
+                                </Select.Option>
+                            ))}
+                        </Select>
+                    </Form.Item>
+                </Form>
             </Modal>
-        </div>
+
+            {/* Detail Drawer */}
+            <Drawer
+                title="Chi tiết cơ sở"
+                placement="right"
+                size={600}
+                onClose={() => setDetailDrawerOpen(false)}
+                open={detailDrawerOpen}
+            >
+                {selectedFacility && (
+                    <Space orientation="vertical" size="large" style={{ width: '100%' }}>
+                        <div style={{ textAlign: 'center' }}>
+                            {(() => {
+                                const kindOpt = kindOptions.find(k => k.value === selectedFacility.kind);
+                                return (
+                                    <>
+                                        <div style={{ fontSize: 48, color: kindOpt?.color, marginBottom: 16 }}>
+                                            {kindOpt?.icon}
+                                        </div>
+                                        <Title level={3} style={{ margin: 0 }}>{selectedFacility.name}</Title>
+                                        <Tag color={kindOpt?.color} style={{ marginTop: 8 }}>
+                                            {kindOpt?.label}
+                                        </Tag>
+                                    </>
+                                );
+                            })()}
+                        </div>
+
+                        <Descriptions column={1} bordered>
+                            <Descriptions.Item label="Địa chỉ">
+                                {selectedFacility.address || '—'}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Tọa độ">
+                                {selectedFacility.latitude && selectedFacility.longitude
+                                    ? `${selectedFacility.latitude}, ${selectedFacility.longitude}`
+                                    : '—'}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Sức chứa">
+                                {selectedFacility.capacity || '—'}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Giờ hoạt động">
+                                {selectedFacility.openingTime && selectedFacility.closingTime
+                                    ? `${selectedFacility.openingTime} - ${selectedFacility.closingTime}`
+                                    : '24/7'}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Khu vực">
+                                {zones.find(z => z.id === selectedFacility.zoneId)?.name || '—'}
+                            </Descriptions.Item>
+                            <Descriptions.Item label="Trạng thái">
+                                {selectedFacility.isActive ? (
+                                    <Badge status="success" text="Hoạt động" />
+                                ) : (
+                                    <Badge status="error" text="Đóng cửa" />
+                                )}
+                            </Descriptions.Item>
+                        </Descriptions>
+
+                        <Space>
+                            <Button type="primary" icon={<EditOutlined />} onClick={() => {
+                                setDetailDrawerOpen(false);
+                                handleEdit(selectedFacility);
+                            }}>
+                                Chỉnh sửa
+                            </Button>
+                            <Button danger icon={<DeleteOutlined />} onClick={() => {
+                                Modal.confirm({
+                                    title: 'Xóa cơ sở',
+                                    content: `Bạn có chắc muốn xóa "${selectedFacility.name}"?`,
+                                    okText: 'Xóa',
+                                    cancelText: 'Hủy',
+                                    okButtonProps: { danger: true },
+                                    onOk: () => {
+                                        handleDelete(selectedFacility.id);
+                                        setDetailDrawerOpen(false);
+                                    },
+                                });
+                            }}>
+                                Xóa cơ sở
+                            </Button>
+                        </Space>
+                    </Space>
+                )}
+            </Drawer>
+        </Space>
     );
 }
