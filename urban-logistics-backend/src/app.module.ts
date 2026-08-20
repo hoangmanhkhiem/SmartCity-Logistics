@@ -11,13 +11,10 @@ import { ZoneModule } from './zone/zone.module';
 import { OrderModule } from './order/order.module';
 import { RouteModule } from './route/route.module';
 import { TelemetryModule } from './telemetry/telemetry.module';
-import { ResearchModule } from './research/research.module';
 import { PartnerModule } from './partner/partner.module';
 import { IntegrationsModule } from './integrations/integrations.module';
-import { DispatchModule } from './dispatch/dispatch.module';
-import { QuotesModule } from './quotes/quotes.module';
 import { AnalyticsModule } from './analytics/analytics.module';
-import { DriversModule } from './drivers/drivers.module';
+import { ShippersModule } from './shippers/shippers.module';
 import { TrackingModule } from './tracking/tracking.module';
 import { TrafficRestrictionModule } from './traffic-restriction/traffic-restriction.module';
 import { HealthController } from './health.controller';
@@ -39,13 +36,10 @@ import { HealthController } from './health.controller';
         OrderModule,
         RouteModule,
         TelemetryModule,
-        ResearchModule,
         PartnerModule,
         IntegrationsModule,
-        DispatchModule,
-        QuotesModule,
         AnalyticsModule,
-        DriversModule,
+        ShippersModule,
         TrackingModule,
         TrafficRestrictionModule,
     ],

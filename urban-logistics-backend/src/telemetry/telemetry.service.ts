@@ -10,7 +10,7 @@ export class TelemetryService {
         return this.prisma.telemetry.create({ data: dto, include: { vehicle: true } });
     }
 
-    async findByVehicle(vehicleId: string, page = 1, limit = 100, from?: Date, to?: Date) {
+    async findByVehicle(vehicleId: number, page = 1, limit = 100, from?: Date, to?: Date) {
         const pageNum = Number(page) || 1; const limitNum = Number(limit) || 10; const skip = (pageNum - 1) * limitNum;
         const where = {
             vehicleId,
@@ -23,7 +23,7 @@ export class TelemetryService {
         return { data, meta: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) } };
     }
 
-    async getLatest(vehicleId: string) {
+    async getLatest(vehicleId: number) {
         const t = await this.prisma.telemetry.findFirst({ where: { vehicleId }, orderBy: { timestamp: 'desc' }, include: { vehicle: true } });
         if (!t) throw new NotFoundException(`No telemetry for vehicle ${vehicleId}`);
         return t;

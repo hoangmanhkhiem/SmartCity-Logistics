@@ -1,37 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import {
-    Card,
-    Table,
-    Button,
-    Space,
-    Input,
-    Alert,
-    Form,
-    Row,
-    Col,
-    Statistic,
-    Typography,
-    message,
-    Tag,
-} from 'antd';
-import {
-    ApiOutlined,
-    PlusOutlined,
-    CopyOutlined,
-    ShoppingOutlined,
-    LinkOutlined,
-    SafetyOutlined,
-} from '@ant-design/icons';
-import type { ColumnsType } from 'antd/es/table';
-import { integrationsApi } from '@/lib/api';
-
-const { Title, Text } = Typography;
+import { Card, CardBody, CardHeader, DataTable, Badge, Tag, Button, Input, Select } from '@/components/ui';
+import { integrationsApi, carrierApi } from '@/lib/api';
+import { Plug, Plus, Copy, ShoppingBag, Link2, ShieldCheck } from 'lucide-react';
+import type { Column } from '@/components/ui';
+import type { Carrier } from '@/types';
+import { formatDateTime } from '@/lib/utils';
 
 type ClientRow = {
-    id: string;
+    id: number;
     name: string;
+    carrierId?: number | null;
     keyPrefix: string;
     isActive: boolean;
     createdAt: string;
@@ -40,9 +20,13 @@ type ClientRow = {
 
 export default function LogisticsIntegrationsPage() {
     const [clients, setClients] = useState<ClientRow[]>([]);
+    const [carriers, setCarriers] = useState<Carrier[]>([]);
     const [loading, setLoading] = useState(true);
+    const [creating, setCreating] = useState(false);
+    const [name, setName] = useState('');
+    const [carrierId, setCarrierId] = useState('');
     const [createdKey, setCreatedKey] = useState<string | null>(null);
-    const [form] = Form.useForm();
+    const [copied, setCopied] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -51,7 +35,6 @@ export default function LogisticsIntegrationsPage() {
             setClients(res.data);
         } catch (e) {
             console.error(e);
-            message.error('Không thể tải danh sách API clients');
         } finally {
             setLoading(false);
         }
@@ -59,74 +42,79 @@ export default function LogisticsIntegrationsPage() {
 
     useEffect(() => {
         load();
+        carrierApi.getAll({ limit: 100 }).then((res) => setCarriers(res.data.data ?? res.data)).catch(() => setCarriers([]));
     }, [load]);
 
-    const handleCreate = async (values: { name: string }) => {
+    const carrierName = (id?: number | null) => carriers.find((c) => c.id === id)?.name;
+
+    const handleCreate = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!name.trim()) return;
+        setCreating(true);
         try {
-            const res = await integrationsApi.createApiClient(values.name.trim());
+            const res = await integrationsApi.createApiClient(name.trim(), carrierId ? Number(carrierId) : undefined);
             setCreatedKey(res.data.apiKey);
-            form.resetFields();
+            setName('');
+            setCarrierId('');
             load();
-            message.success('Đã tạo API client thành công');
         } catch (err) {
             console.error(err);
-            message.error('Có lỗi khi tạo API client');
+        } finally {
+            setCreating(false);
         }
     };
 
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text);
-        message.success('Đã sao chép API key vào clipboard');
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
     };
 
-    const columns: ColumnsType<ClientRow> = [
+    const columns: Column<ClientRow>[] = [
         {
-            title: 'Tên đối tác',
-            dataIndex: 'name',
             key: 'name',
-            render: (text) => (
+            header: 'Tên đối tác',
+            render: (c) => (
                 <div>
-                    <div style={{ fontWeight: 500 }}>{text}</div>
-                    <Tag color="blue">B2B Partner</Tag>
+                    <p className="font-medium text-slate-800 dark:text-white">{c.name}</p>
+                    <div className="flex gap-1 mt-0.5">
+                        <Tag color="blue">B2B Partner</Tag>
+                        {c.carrierId && <Tag color="purple">{carrierName(c.carrierId) ?? `Carrier #${c.carrierId}`}</Tag>}
+                    </div>
                 </div>
             ),
         },
         {
-            title: 'Key Prefix',
-            dataIndex: 'keyPrefix',
             key: 'keyPrefix',
-            render: (text) => (
-                <code style={{ background: '#f5f5f5', padding: '4px 8px', borderRadius: 4 }}>
-                    {text}…
+            header: 'Key Prefix',
+            render: (c) => (
+                <code className="px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-xs">
+                    {c.keyPrefix}…
                 </code>
             ),
         },
         {
-            title: 'Đơn qua API',
-            key: '_count',
-            render: (_, record) => (
-                <Space>
-                    <ShoppingOutlined style={{ color: '#1677ff' }} />
-                    <span>{record._count?.orders ?? 0}</span>
-                </Space>
+            key: 'orders',
+            header: 'Đơn qua API',
+            render: (c) => (
+                <div className="flex items-center gap-2">
+                    <ShoppingBag size={16} className="text-indigo-500" />
+                    <span>{c._count?.orders ?? 0}</span>
+                </div>
             ),
-            sorter: (a, b) => (a._count?.orders ?? 0) - (b._count?.orders ?? 0),
         },
         {
-            title: 'Ngày tạo',
-            dataIndex: 'createdAt',
             key: 'createdAt',
-            render: (date) => new Date(date).toLocaleString('vi-VN'),
-            sorter: (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+            header: 'Ngày tạo',
+            render: (c) => formatDateTime(c.createdAt),
         },
         {
-            title: 'Trạng thái',
-            dataIndex: 'isActive',
             key: 'isActive',
-            render: (isActive) => (
-                <Tag color={isActive ? 'success' : 'default'}>
-                    {isActive ? 'Hoạt động' : 'Vô hiệu'}
-                </Tag>
+            header: 'Trạng thái',
+            render: (c) => (
+                <Badge variant={c.isActive ? 'success' : 'default'}>
+                    {c.isActive ? 'Hoạt động' : 'Vô hiệu'}
+                </Badge>
             ),
         },
     ];
@@ -135,127 +123,131 @@ export default function LogisticsIntegrationsPage() {
     const activeClients = clients.filter((c) => c.isActive).length;
 
     return (
-        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        <div className="space-y-6">
             {/* Header */}
             <div>
-                <Title level={2} style={{ margin: 0 }}>
-                    API Tích hợp (B2B)
-                </Title>
-                <Text type="secondary">
+                <h1 className="text-2xl font-bold text-slate-800 dark:text-white">API Tích hợp (B2B)</h1>
+                <p className="text-slate-500 mt-1">
                     Tạo khóa cho shop / sàn TMĐT — gọi{' '}
-                    <code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: 4 }}>
+                    <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-xs">
                         POST /api/v1/partner/orders
                     </code>{' '}
                     với header{' '}
-                    <code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: 4 }}>
+                    <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-xs">
                         X-Api-Key
                     </code>
-                </Text>
+                </p>
             </div>
 
-            {/* Statistics */}
-            <Row gutter={16}>
-                <Col xs={24} sm={8}>
-                    <Card variant="borderless">
-                        <Statistic
-                            title="Tổng API Clients"
-                            value={clients.length}
-                            prefix={<ApiOutlined style={{ color: '#1677ff' }} />}
-                        />
-                    </Card>
-                </Col>
-                <Col xs={24} sm={8}>
-                    <Card variant="borderless">
-                        <Statistic
-                            title="Đang hoạt động"
-                            value={activeClients}
-                            prefix={<LinkOutlined style={{ color: '#52c41a' }} />}
-                            valueStyle={{ color: '#52c41a' }}
-                        />
-                    </Card>
-                </Col>
-                <Col xs={24} sm={8}>
-                    <Card variant="borderless">
-                        <Statistic
-                            title="Tổng đơn qua API"
-                            value={totalOrders}
-                            prefix={<ShoppingOutlined style={{ color: '#faad14' }} />}
-                        />
-                    </Card>
-                </Col>
-            </Row>
+            {/* Stats */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Card>
+                    <CardBody className="flex items-center gap-3">
+                        <div className="p-3 bg-indigo-100 dark:bg-indigo-900/50 rounded-xl">
+                            <Plug size={24} className="text-indigo-600" />
+                        </div>
+                        <div>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{clients.length}</p>
+                            <p className="text-sm text-slate-500">Tổng API Clients</p>
+                        </div>
+                    </CardBody>
+                </Card>
+                <Card>
+                    <CardBody className="flex items-center gap-3">
+                        <div className="p-3 bg-green-100 dark:bg-green-900/50 rounded-xl">
+                            <Link2 size={24} className="text-green-600" />
+                        </div>
+                        <div>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{activeClients}</p>
+                            <p className="text-sm text-slate-500">Đang hoạt động</p>
+                        </div>
+                    </CardBody>
+                </Card>
+                <Card>
+                    <CardBody className="flex items-center gap-3">
+                        <div className="p-3 bg-yellow-100 dark:bg-yellow-900/50 rounded-xl">
+                            <ShoppingBag size={24} className="text-yellow-600" />
+                        </div>
+                        <div>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{totalOrders}</p>
+                            <p className="text-sm text-slate-500">Tổng đơn qua API</p>
+                        </div>
+                    </CardBody>
+                </Card>
+            </div>
 
-            {/* Created Key Alert */}
+            {/* Created key alert */}
             {createdKey && (
-                <Alert
-                    message="Lưu ngay — chỉ hiện một lần!"
-                    description={
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                            <code
-                                style={{
-                                    display: 'block',
-                                    padding: 12,
-                                    background: '#fff',
-                                    borderRadius: 4,
-                                    wordBreak: 'break-all',
-                                }}
-                            >
-                                {createdKey}
-                            </code>
-                            <Space>
-                                <Button
-                                    icon={<CopyOutlined />}
-                                    onClick={() => copyToClipboard(createdKey)}
-                                >
-                                    Sao chép
-                                </Button>
-                                <Button onClick={() => setCreatedKey(null)}>Đã lưu</Button>
-                            </Space>
-                        </Space>
-                    }
-                    type="warning"
-                    icon={<SafetyOutlined />}
-                    showIcon
-                    closable
-                    onClose={() => setCreatedKey(null)}
-                />
+                <Card className="border-yellow-300 dark:border-yellow-700">
+                    <CardBody className="space-y-3">
+                        <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400 font-medium">
+                            <ShieldCheck size={18} />
+                            Lưu ngay — chỉ hiện một lần!
+                        </div>
+                        <code className="block p-3 rounded-lg bg-slate-50 dark:bg-slate-900 break-all text-sm">
+                            {createdKey}
+                        </code>
+                        <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" onClick={() => copyToClipboard(createdKey)}>
+                                <Copy size={14} className="mr-1" />
+                                {copied ? 'Đã sao chép' : 'Sao chép'}
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => setCreatedKey(null)}>
+                                Đã lưu
+                            </Button>
+                        </div>
+                    </CardBody>
+                </Card>
             )}
 
-            {/* Create Form */}
-            <Card title={<><PlusOutlined /> Tạo API Client mới</>}>
-                <Form form={form} layout="inline" onFinish={handleCreate}>
-                    <Form.Item
-                        name="name"
-                        rules={[{ required: true, message: 'Vui lòng nhập tên' }]}
-                        style={{ flex: 1, minWidth: 250 }}
-                    >
-                        <Input
-                            placeholder="Tên đối tác (vd: Shop Shopee ABC)"
-                            size="large"
-                        />
-                    </Form.Item>
-                    <Form.Item>
-                        <Button type="primary" htmlType="submit" size="large" icon={<PlusOutlined />}>
+            {/* Create form */}
+            <Card>
+                <CardHeader>
+                    <h2 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                        <Plus size={18} /> Tạo API Client mới
+                    </h2>
+                </CardHeader>
+                <CardBody>
+                    <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-3">
+                        <div className="flex-1 min-w-[220px]">
+                            <Input
+                                label="Tên đối tác"
+                                placeholder="vd: Shop Shopee ABC"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                            />
+                        </div>
+                        <div className="w-56">
+                            <Select
+                                label="Carrier nhận đơn (tuỳ chọn)"
+                                placeholder="Không gán carrier"
+                                options={carriers.map((c) => ({ value: String(c.id), label: c.name }))}
+                                value={carrierId}
+                                onChange={setCarrierId}
+                            />
+                        </div>
+                        <Button type="submit" isLoading={creating}>
+                            <Plus size={16} className="mr-1" />
                             Tạo khóa
                         </Button>
-                    </Form.Item>
-                </Form>
+                    </form>
+                </CardBody>
             </Card>
 
             {/* Table */}
-            <Card title="Danh sách API Clients">
-                <Table
-                    columns={columns}
-                    dataSource={clients}
-                    rowKey="id"
-                    loading={loading}
-                    pagination={{
-                        pageSize: 10,
-                        showTotal: (total) => `Tổng ${total} clients`,
-                    }}
-                    locale={{ emptyText: 'Chưa có client nào' }}
-                />
+            <Card>
+                <CardHeader>
+                    <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Danh sách API Clients</h2>
+                </CardHeader>
+                <CardBody>
+                    <DataTable
+                        columns={columns}
+                        data={clients}
+                        loading={loading}
+                        emptyMessage="Chưa có client nào"
+                    />
+                </CardBody>
             </Card>
-        </Space>
+        </div>
     );
 }

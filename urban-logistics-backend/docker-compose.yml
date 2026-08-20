@@ -1,43 +1,42 @@
 services:
-  postgres:
-    image: postgis/postgis:16-3.4
+  mysql:
+    image: mysql:8.0
     container_name: urban-logistics-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-urban_logistics}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-logistic}
+      MYSQL_USER: ${MYSQL_USER:-urban}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-urban}
     ports:
-      - "5433:5432"
+      - "3307:3306"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
     networks:
       - urban-logistics-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-urban_logistics}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: urban-logistics-pgadmin
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: urban-logistics-phpmyadmin
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin123
+      PMA_HOST: mysql
+      PMA_USER: root
+      PMA_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
     ports:
       - "5050:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
     networks:
       - urban-logistics-network
     depends_on:
-      - postgres
+      - mysql
 
 volumes:
-  postgres_data:
-  pgadmin_data:
+  mysql_data:
 
 networks:
   urban-logistics-network:

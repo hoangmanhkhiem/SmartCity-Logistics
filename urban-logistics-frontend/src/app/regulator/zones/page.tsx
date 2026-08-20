@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Card, CardBody, CardHeader, DataTable, Badge, Select, Button, Input, Modal } from '@/components/ui';
+import { useEffect, useState } from 'react';
+import { Card, CardBody, CardHeader, DataTable, Badge, Select, Input, Modal } from '@/components/ui';
 import { zoneApi } from '@/lib/api';
 import { Zone } from '@/types';
-import { MapPin, Plus, Search, Edit, Trash2 } from 'lucide-react';
+import { MapPin, Search, Eye } from 'lucide-react';
 import type { Column } from '@/components/ui';
+import Map from '@/components/shared/map';
 
 const typeOptions = [
     { value: '', label: 'Tất cả loại' },
@@ -21,9 +22,7 @@ export default function RegulatorZonesPage() {
     const [totalPages, setTotalPages] = useState(1);
     const [typeFilter, setTypeFilter] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingZone, setEditingZone] = useState<Zone | null>(null);
-    const [formData, setFormData] = useState({ name: '', type: 'low_emission', description: '' });
+    const [viewingZone, setViewingZone] = useState<Zone | null>(null);
 
     const fetchZones = async () => {
         setLoading(true);
@@ -42,31 +41,14 @@ export default function RegulatorZonesPage() {
 
     useEffect(() => { fetchZones(); }, [page, typeFilter]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    let viewingPolygon: GeoJSON.Polygon | null = null;
+    if (viewingZone?.boundary) {
         try {
-            if (editingZone) await zoneApi.update(editingZone.id, formData);
-            else await zoneApi.create(formData);
-            setIsModalOpen(false);
-            setEditingZone(null);
-            setFormData({ name: '', type: 'low_emission', description: '' });
-            fetchZones();
-        } catch (error) {
-            console.error('Failed to save zone:', error);
+            viewingPolygon = JSON.parse(viewingZone.boundary) as GeoJSON.Polygon;
+        } catch {
+            viewingPolygon = null;
         }
-    };
-
-    const handleEdit = (zone: Zone) => {
-        setEditingZone(zone);
-        setFormData({ name: zone.name, type: zone.type || 'low_emission', description: zone.description || '' });
-        setIsModalOpen(true);
-    };
-
-    const handleDelete = async (id: string) => {
-        if (confirm('Xóa vùng này?')) {
-            try { await zoneApi.delete(id); fetchZones(); } catch (e) { console.error(e); }
-        }
-    };
+    }
 
     const columns: Column<Zone>[] = [
         { key: 'name', header: 'Tên vùng' },
@@ -75,34 +57,32 @@ export default function RegulatorZonesPage() {
         { key: 'isActive', header: 'Trạng thái', render: (z) => <Badge variant={z.isActive ? 'success' : 'error'}>{z.isActive ? 'Hoạt động' : 'Tắt'}</Badge> },
         {
             key: 'actions', header: '', render: (z) => (
-                <div className="flex gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => handleEdit(z)}><Edit size={16} /></Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(z.id)}><Trash2 size={16} className="text-red-500" /></Button>
-                </div>
+                <button
+                    type="button"
+                    onClick={() => setViewingZone(z)}
+                    className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                    <Eye size={14} /> Xem
+                </button>
             )
         },
     ];
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Quản lý vùng</h1>
-                    <p className="text-gray-500 mt-1">LEZ, vùng hạn chế và phân vùng giao hàng</p>
-                </div>
-                <Button onClick={() => { setFormData({ name: '', type: 'low_emission', description: '' }); setEditingZone(null); setIsModalOpen(true); }}>
-                    <Plus size={18} className="mr-1" />Thêm vùng
-                </Button>
+            <div>
+                <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Quản lý vùng</h1>
+                <p className="text-slate-500 mt-1">LEZ, vùng hạn chế và phân vùng giao hàng — chỉ xem (Admin là nơi tạo/sửa)</p>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
-                <Card><CardBody className="flex items-center gap-3"><div className="p-3 bg-blue-100 rounded-xl"><MapPin size={24} className="text-blue-600" /></div><div><p className="text-2xl font-bold">{zones.length}</p><p className="text-sm text-gray-500">Tổng vùng</p></div></CardBody></Card>
-                <Card><CardBody className="flex items-center gap-3"><div className="p-3 bg-green-100 rounded-xl"><MapPin size={24} className="text-green-600" /></div><div><p className="text-2xl font-bold">{zones.filter(z => z.isActive).length}</p><p className="text-sm text-gray-500">Hoạt động</p></div></CardBody></Card>
-                <Card><CardBody className="flex items-center gap-3"><div className="p-3 bg-purple-100 rounded-xl"><MapPin size={24} className="text-purple-600" /></div><div><p className="text-2xl font-bold">{zones.filter(z => z.type === 'low_emission').length}</p><p className="text-sm text-gray-500">LEZ</p></div></CardBody></Card>
+                <Card><CardBody className="flex items-center gap-3"><div className="p-3 bg-indigo-100 rounded-xl"><MapPin size={24} className="text-indigo-600" /></div><div><p className="text-2xl font-bold">{zones.length}</p><p className="text-sm text-slate-500">Tổng vùng</p></div></CardBody></Card>
+                <Card><CardBody className="flex items-center gap-3"><div className="p-3 bg-green-100 rounded-xl"><MapPin size={24} className="text-green-600" /></div><div><p className="text-2xl font-bold">{zones.filter(z => z.isActive).length}</p><p className="text-sm text-slate-500">Hoạt động</p></div></CardBody></Card>
+                <Card><CardBody className="flex items-center gap-3"><div className="p-3 bg-purple-100 rounded-xl"><MapPin size={24} className="text-purple-600" /></div><div><p className="text-2xl font-bold">{zones.filter(z => z.type === 'low_emission').length}</p><p className="text-sm text-slate-500">LEZ</p></div></CardBody></Card>
             </div>
 
             <Card><CardBody className="flex gap-4">
-                <div className="flex-1 relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} /><Input placeholder="Tìm..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" /></div>
+                <div className="flex-1 relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><Input placeholder="Tìm..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" /></div>
                 <div className="w-48"><Select options={typeOptions} value={typeFilter} onChange={setTypeFilter} /></div>
             </CardBody></Card>
 
@@ -110,13 +90,14 @@ export default function RegulatorZonesPage() {
                 <DataTable columns={columns} data={zones.filter(z => z.name.toLowerCase().includes(searchQuery.toLowerCase()))} loading={loading} emptyMessage="Chưa có vùng" pagination={{ page, totalPages, onPageChange: setPage }} />
             </CardBody></Card>
 
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingZone ? 'Sửa vùng' : 'Thêm vùng'}>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <Input label="Tên *" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required />
-                    <Select label="Loại" options={typeOptions.slice(1)} value={formData.type} onChange={(v) => setFormData({ ...formData, type: v })} />
-                    <Input label="Mô tả" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
-                    <div className="flex justify-end gap-2 pt-4 border-t"><Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Hủy</Button><Button type="submit">{editingZone ? 'Cập nhật' : 'Thêm'}</Button></div>
-                </form>
+            <Modal isOpen={!!viewingZone} onClose={() => setViewingZone(null)} title={viewingZone ? `Ranh giới: ${viewingZone.name}` : ''} size="lg">
+                {viewingPolygon ? (
+                    <div className="h-[380px] w-full overflow-hidden rounded-lg border border-slate-300 dark:border-slate-600">
+                        <Map drawMode="polygon" initialDrawFeature={{ type: 'Feature', properties: {}, geometry: viewingPolygon }} zoom={12} />
+                    </div>
+                ) : (
+                    <p className="text-sm text-slate-500">Vùng này chưa có ranh giới được vẽ.</p>
+                )}
             </Modal>
         </div>
     );

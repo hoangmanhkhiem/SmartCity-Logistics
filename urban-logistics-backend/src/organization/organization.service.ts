@@ -37,7 +37,7 @@ export class OrganizationService {
         };
     }
 
-    async findOne(id: string) {
+    async findOne(id: number) {
         const org = await this.prisma.organization.findUnique({
             where: { id },
             include: {
@@ -51,7 +51,7 @@ export class OrganizationService {
         return org;
     }
 
-    async update(id: string, updateDto: UpdateOrganizationDto) {
+    async update(id: number, updateDto: UpdateOrganizationDto) {
         await this.findOne(id);
         return this.prisma.organization.update({
             where: { id },
@@ -59,7 +59,7 @@ export class OrganizationService {
         });
     }
 
-    async remove(id: string) {
+    async remove(id: number) {
         await this.findOne(id);
         return this.prisma.organization.delete({ where: { id } });
     }

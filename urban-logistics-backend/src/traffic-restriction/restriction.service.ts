@@ -37,9 +37,13 @@ function parseLineStringFromGeometryString(geometry: string | null): { type: 'Li
     return null;
 }
 
+function asStringArray(value: unknown): string[] {
+    return Array.isArray(value) ? (value as string[]) : [];
+}
+
 function matchesVehicleType(r: Restriction, vehicleType?: string): boolean {
     if (!vehicleType) return true;
-    const list = r.vehicleTypes ?? [];
+    const list = asStringArray(r.vehicleTypes);
     const legacy = r.vehicleType;
     if (!list.length && !legacy) return true;
     if (list.length) return list.includes(vehicleType);
@@ -82,7 +86,7 @@ export class RestrictionService {
         });
     }
 
-    async findOne(id: string) {
+    async findOne(id: number) {
         const r = await this.prisma.restriction.findUnique({
             where: { id },
             include: { roadSegment: true, zone: true },
@@ -91,7 +95,7 @@ export class RestrictionService {
         return r;
     }
 
-    async update(id: string, dto: UpdateRestrictionDto) {
+    async update(id: number, dto: UpdateRestrictionDto) {
         await this.findOne(id);
         return this.prisma.restriction.update({
             where: { id },
@@ -100,7 +104,7 @@ export class RestrictionService {
         });
     }
 
-    async remove(id: string) {
+    async remove(id: number) {
         await this.findOne(id);
         return this.prisma.restriction.delete({ where: { id } });
     }
@@ -117,7 +121,7 @@ export class RestrictionService {
         const features: GeoJsonFeatureCollection['features'] = [];
 
         for (const r of rows) {
-            if (!matchesDayOfWeek(at, r.daysOfWeek)) continue;
+            if (!matchesDayOfWeek(at, asStringArray(r.daysOfWeek))) continue;
             if (!matchesTimeWindow(at, r.timeFrom, r.timeTo)) continue;
             if (!matchesVehicleType(r, vehicleType)) continue;
 
@@ -141,12 +145,39 @@ export class RestrictionService {
                     description: r.description,
                     timeFrom: r.timeFrom,
                     timeTo: r.timeTo,
-                    daysOfWeek: r.daysOfWeek,
-                    vehicleTypes: r.vehicleTypes?.length ? r.vehicleTypes : r.vehicleType ? [r.vehicleType] : [],
+                    daysOfWeek: asStringArray(r.daysOfWeek),
+                    vehicleTypes: asStringArray(r.vehicleTypes).length ? asStringArray(r.vehicleTypes) : r.vehicleType ? [r.vehicleType] : [],
                 },
             });
         }
 
         return { type: 'FeatureCollection', features };
+    }
+
+    /**
+     * Kiểm tra xe (loại/tải trọng) có được phép lưu thông trong 1 zone tại thời điểm `at`.
+     * Trả về danh sách vi phạm (rỗng = hợp lệ). Dùng khi tạo Route để cảnh báo/chặn.
+     */
+    async checkVehicleAllowedInZone(
+        vehicleType: string,
+        zoneId: number,
+        at: Date,
+        weightKg?: number,
+    ): Promise<Array<{ restrictionId: number; severity: string; description: string | null }>> {
+        const rows = await this.prisma.restriction.findMany({
+            where: { isActive: true, zoneId },
+        });
+
+        const violations: Array<{ restrictionId: number; severity: string; description: string | null }> = [];
+        for (const r of rows) {
+            if (!matchesDayOfWeek(at, asStringArray(r.daysOfWeek))) continue;
+            if (!matchesTimeWindow(at, r.timeFrom, r.timeTo)) continue;
+            if (!matchesVehicleType(r, vehicleType)) continue;
+            if (r.maxWeight != null && weightKg != null && weightKg <= r.maxWeight) continue;
+            if (r.severity === 'allowed_window') continue;
+
+            violations.push({ restrictionId: r.id, severity: r.severity, description: r.description });
+        }
+        return violations;
     }
 }

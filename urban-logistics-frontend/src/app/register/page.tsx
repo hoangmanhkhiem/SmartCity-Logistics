@@ -50,10 +50,10 @@ export default function RegisterPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 p-4">
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-indigo-900 to-slate-900 p-4">
             {/* Background decoration */}
             <div className="absolute inset-0 overflow-hidden">
-                <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl"></div>
+                <div className="absolute -top-40 -right-40 w-80 h-80 bg-indigo-500/20 rounded-full blur-3xl"></div>
                 <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl"></div>
             </div>
 
@@ -61,11 +61,11 @@ export default function RegisterPage() {
                 <CardBody className="p-8">
                     {/* Logo */}
                     <div className="flex flex-col items-center mb-8">
-                        <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mb-4">
+                        <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mb-4">
                             <Truck size={32} className="text-white" />
                         </div>
                         <h1 className="text-2xl font-bold text-white">Tạo tài khoản</h1>
-                        <p className="text-gray-400 mt-1">Đăng ký để sử dụng hệ thống</p>
+                        <p className="text-slate-400 mt-1">Đăng ký để sử dụng hệ thống</p>
                     </div>
 
                     {/* Error message */}
@@ -83,7 +83,7 @@ export default function RegisterPage() {
                             value={formData.name}
                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                             required
-                            className="bg-white/10 border-white/20 text-white placeholder:text-gray-500"
+                            className="bg-white/10 border-white/20 text-white placeholder:text-slate-500"
                         />
                         <Input
                             label="Email"
@@ -92,14 +92,14 @@ export default function RegisterPage() {
                             value={formData.email}
                             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                             required
-                            className="bg-white/10 border-white/20 text-white placeholder:text-gray-500"
+                            className="bg-white/10 border-white/20 text-white placeholder:text-slate-500"
                         />
                         <Input
                             label="Số điện thoại"
                             placeholder="0912345678"
                             value={formData.phone}
                             onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                            className="bg-white/10 border-white/20 text-white placeholder:text-gray-500"
+                            className="bg-white/10 border-white/20 text-white placeholder:text-slate-500"
                         />
                         <Input
                             label="Mật khẩu"
@@ -108,7 +108,7 @@ export default function RegisterPage() {
                             value={formData.password}
                             onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                             required
-                            className="bg-white/10 border-white/20 text-white placeholder:text-gray-500"
+                            className="bg-white/10 border-white/20 text-white placeholder:text-slate-500"
                         />
                         <Input
                             label="Xác nhận mật khẩu"
@@ -117,7 +117,7 @@ export default function RegisterPage() {
                             value={formData.confirmPassword}
                             onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                             required
-                            className="bg-white/10 border-white/20 text-white placeholder:text-gray-500"
+                            className="bg-white/10 border-white/20 text-white placeholder:text-slate-500"
                         />
 
                         <Button type="submit" className="w-full" size="lg" isLoading={loading}>
@@ -126,9 +126,9 @@ export default function RegisterPage() {
                     </form>
 
                     {/* Login link */}
-                    <p className="mt-6 text-center text-gray-400">
+                    <p className="mt-6 text-center text-slate-400">
                         Đã có tài khoản?{' '}
-                        <Link href="/login" className="text-blue-400 hover:text-blue-300 font-medium">
+                        <Link href="/login" className="text-indigo-400 hover:text-indigo-300 font-medium">
                             Đăng nhập
                         </Link>
                     </p>

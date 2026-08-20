@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, ParseIntPipe, Body, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { FacilityService } from './facility.service';
 import { CreateFacilityDto, UpdateFacilityDto } from './dto';
@@ -19,11 +19,11 @@ export class FacilityController {
     findAll(@Query('page') page?: number, @Query('limit') limit?: number, @Query('organizationId') orgId?: string, @Query('kind') kind?: string, @Query('zoneId') zoneId?: string) { return this.service.findAll(page, limit, orgId, kind, zoneId); }
 
     @Get(':id') @ApiOperation({ summary: 'Get facility by ID' })
-    findOne(@Param('id') id: string) { return this.service.findOne(id); }
+    findOne(@Param('id', ParseIntPipe) id: number) { return this.service.findOne(id); }
 
     @Patch(':id') @ApiOperation({ summary: 'Update facility' })
-    update(@Param('id') id: string, @Body() dto: UpdateFacilityDto) { return this.service.update(id, dto); }
+    update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateFacilityDto) { return this.service.update(id, dto); }
 
     @Delete(':id') @ApiOperation({ summary: 'Delete facility' })
-    remove(@Param('id') id: string) { return this.service.remove(id); }
+    remove(@Param('id', ParseIntPipe) id: number) { return this.service.remove(id); }
 }

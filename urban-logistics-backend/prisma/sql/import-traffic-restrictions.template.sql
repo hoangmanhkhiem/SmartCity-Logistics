@@ -1,8 +1,8 @@
 -- =============================================================================
--- Import nhanh dữ liệu cấm / hạn chế đường (PostgreSQL)
+-- Import nhanh dữ liệu cấm / hạn chế đường (MySQL)
 -- Bảng: road_segments (geometry GeoJSON) -> restrictions (khung giờ, loại xe, mức độ)
--- Chạy: psql "$DATABASE_URL" -f prisma/sql/import-traffic-restrictions.template.sql
--- Hoặc dán vào GUI (DBeaver / pgAdmin) sau khi sửa ID / geometry.
+-- Chạy: mysql -u root -p logistic < prisma/sql/import-traffic-restrictions.template.sql
+-- Hoặc dán vào GUI (DBeaver / phpMyAdmin) sau khi sửa ID / geometry.
 -- =============================================================================
 --
 -- Thứ tự quan hệ:
@@ -11,58 +11,55 @@
 --
 -- Quy ước tọa độ trong "geometry": [lng, lat] (chuẩn GeoJSON), không đảo lat/lng.
 --
--- days_of_week: Mon, Tue, Wed, Thu, Fri, Sat, Sun (theo mã trong code).
---                Mảng rỗng {} = mọi ngày (miễn khớp khung giờ).
---
--- vehicle_types: mảng TEXT, ví dụ ARRAY['truck'].
---                Rỗng {} = áp dụng mọi loại xe.
+-- days_of_week / vehicle_types: cột JSON (MySQL không có kiểu mảng native).
+--                Ví dụ: '["Mon","Tue"]'. Mảng rỗng '[]' = mọi ngày / mọi loại xe.
 --
 -- severity (màu bản đồ): prohibited | restricted | allowed_window
+--
+-- id là AUTO_INCREMENT — không truyền cột id, MySQL tự sinh.
 --
 -- =============================================================================
 -- Bước 0: (tuỳ chọn) lấy zone_id có sẵn để gắn vào đoạn đường
 -- =============================================================================
--- SELECT id, name FROM zones WHERE "isActive" = true;
+-- SELECT id, name FROM zones WHERE isActive = true;
 
 -- =============================================================================
--- Mẫu 1 hàng: INSERT một đoạn đường + một restriction (CTE một lần chạy)
+-- Mẫu 1 hàng: INSERT một đoạn đường rồi dùng LAST_INSERT_ID() cho restriction
+-- (MySQL không hỗ trợ CTE + RETURNING như PostgreSQL)
 -- =============================================================================
 
-BEGIN;
+START TRANSACTION;
 
-WITH new_segment AS (
-    INSERT INTO road_segments (
-        id,
-        zone_id,
-        name,
-        osm_id,
-        geometry,
-        one_way,
-        speed_limit,
-        lanes,
-        road_type,
-        "isActive",
-        "createdAt",
-        "updatedAt"
-    )
-    VALUES (
-        gen_random_uuid()::text,
-        NULL, -- hoặc thay bằng UUID zone: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
-        N'Ví dụ — phố X (sửa tên)',
-        NULL,
-        '{"type":"LineString","coordinates":[[105.84,21.024],[105.842,21.026],[105.845,21.028]]}'::text,
-        false,
-        NULL,
-        NULL,
-        'primary',
-        true,
-        NOW(),
-        NOW()
-    )
-    RETURNING id
+INSERT INTO road_segments (
+    zone_id,
+    name,
+    osm_id,
+    geometry,
+    one_way,
+    speed_limit,
+    lanes,
+    road_type,
+    isActive,
+    createdAt,
+    updatedAt
 )
+VALUES (
+    NULL, -- hoặc thay bằng id zone thật
+    'Ví dụ — phố X (sửa tên)',
+    NULL,
+    '{"type":"LineString","coordinates":[[105.84,21.024],[105.842,21.026],[105.845,21.028]]}',
+    false,
+    NULL,
+    NULL,
+    'primary',
+    true,
+    NOW(),
+    NOW()
+);
+
+SET @new_segment_id = LAST_INSERT_ID();
+
 INSERT INTO restrictions (
-    id,
     road_segment_id,
     zone_id,
     vehicle_type,
@@ -75,35 +72,39 @@ INSERT INTO restrictions (
     days_of_week,
     allowed,
     description,
-    "isActive",
-    "createdAt",
-    "updatedAt"
+    isActive,
+    createdAt,
+    updatedAt
 )
-SELECT
-    gen_random_uuid()::text,
-    new_segment.id,
+VALUES (
+    @new_segment_id,
     NULL,
     NULL,
-    ARRAY['truck']::text[], -- để array rỗng áp mọi xe: ARRAY[]::text[]
+    JSON_ARRAY('truck'), -- để rỗng áp mọi xe: JSON_ARRAY()
     'prohibited',
     NULL,
     NULL,
     '07:00',
     '09:00',
-    ARRAY['Mon','Tue','Wed','Thu','Fri']::text[], -- cả tuần: ARRAY[]::text[]
+    JSON_ARRAY('Mon', 'Tue', 'Wed', 'Thu', 'Fri'), -- cả tuần: JSON_ARRAY()
     false,
-    N'Cấm xe tải khung giờ cao điểm (mẫu SQL)',
+    'Cấm xe tải khung giờ cao điểm (mẫu SQL)',
     true,
     NOW(),
     NOW()
-FROM new_segment;
+);
 
 COMMIT;
 
 -- =============================================================================
--- COPY CSV (khi có nhiều dòng segment — cần file .csv đúng thứ tự cột)
--- Tạo file road_segments.csv với header, rồi:
---   \copy road_segments (id, zone_id, name, osm_id, geometry, one_way, speed_limit, lanes, road_type, "isActive", "createdAt", "updatedAt") FROM 'road_segments.csv' WITH (FORMAT csv, HEADER true);
+-- LOAD DATA (khi có nhiều dòng segment — cần file .csv đúng thứ tự cột)
+-- Tạo file road_segments.csv với header (không có cột id), rồi:
+-- LOAD DATA LOCAL INFILE 'road_segments.csv'
+--   INTO TABLE road_segments
+--   FIELDS TERMINATED BY ',' ENCLOSED BY '"'
+--   LINES TERMINATED BY '\n'
+--   IGNORE 1 ROWS
+--   (zone_id, name, osm_id, geometry, one_way, speed_limit, lanes, road_type, isActive, createdAt, updatedAt);
 -- Lưu ý: geometry là một ô text JSON, cần escape dấu ngoặc kép trong CSV theo chuẩn RFC.
--- Với người mới, INSERT/CTE ở trên thường dễ hơn \copy.
+-- Với người mới, INSERT ở trên thường dễ hơn LOAD DATA.
 -- =============================================================================

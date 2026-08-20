@@ -21,6 +21,10 @@ export function normalizeLineStringCoordinates(coords: number[][]): number[][] {
     });
 }
 
+export function normalizePolygonCoordinates(rings: number[][][]): number[][][] {
+    return rings.map((ring) => normalizeLineStringCoordinates(ring));
+}
+
 /** Chuẩn hóa FeatureCollection từ API (LineString [lng,lat]). */
 export function normalizeRestrictionFeatureCollection(fc: unknown): unknown {
     const c = fc as {

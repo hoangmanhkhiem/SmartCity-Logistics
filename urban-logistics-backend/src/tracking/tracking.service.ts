@@ -1,27 +1,14 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
-const shipmentDetailInclude = {
-    order: {
-        select: {
-            id: true,
-            orderNumber: true,
-            status: true,
-            pickupAddress: true,
-            deliveryAddress: true,
-            pickupPhone: true,
-            deliveryPhone: true,
-            createdAt: true,
-        },
-    },
-    legs: {
+const orderDetailInclude = {
+    stops: {
+        orderBy: { sequence: 'asc' as const },
         include: {
-            route: { select: { id: true, name: true, status: true } },
-            stops: { orderBy: { sequence: 'asc' as const } },
-            assignments: {
+            route: {
                 include: {
                     vehicle: { select: { id: true, plate: true, type: true } },
-                    driver: { select: { id: true, name: true, phone: true } },
+                    shipper: { select: { id: true, name: true, phone: true } },
                 },
             },
         },
@@ -33,12 +20,12 @@ export class TrackingService {
     constructor(private readonly prisma: PrismaService) {}
 
     async getByTrackingNo(trackingNo: string) {
-        const shipment = await this.prisma.shipment.findUnique({
+        const order = await this.prisma.order.findUnique({
             where: { trackingNo },
-            include: shipmentDetailInclude,
+            include: orderDetailInclude,
         });
-        if (!shipment) throw new NotFoundException('Không tìm thấy mã vận đơn');
-        return shipment;
+        if (!order) throw new NotFoundException('Không tìm thấy mã vận đơn');
+        return order;
     }
 
     /**
@@ -50,53 +37,53 @@ export class TrackingService {
             throw new BadRequestException('Thiếu tham số q (mã vận đơn, mã đơn hoặc SĐT)');
         }
 
-        const byTracking = await this.prisma.shipment.findUnique({
+        const byTracking = await this.prisma.order.findUnique({
             where: { trackingNo: q },
-            include: shipmentDetailInclude,
+            include: orderDetailInclude,
         });
         if (byTracking) {
-            return { matchType: 'trackingNo' as const, shipment: byTracking };
+            return { matchType: 'trackingNo' as const, order: byTracking };
         }
 
-        const byOrderNumber = await this.prisma.shipment.findMany({
-            where: { order: { orderNumber: q } },
+        const byOrderNumber = await this.prisma.order.findMany({
+            where: { orderNumber: q },
             orderBy: { createdAt: 'desc' },
             take: 15,
-            include: shipmentDetailInclude,
+            include: orderDetailInclude,
         });
         if (byOrderNumber.length === 1) {
-            return { matchType: 'orderNumber' as const, shipment: byOrderNumber[0] };
+            return { matchType: 'orderNumber' as const, order: byOrderNumber[0] };
         }
         if (byOrderNumber.length > 1) {
             return {
                 matchType: 'orderNumber' as const,
                 multiple: true as const,
-                shipments: byOrderNumber,
+                orders: byOrderNumber,
             };
         }
 
         const digits = q.replace(/\D/g, '');
         if (digits.length >= 9) {
             const tail = digits.slice(-9);
-            const byPhone = await this.prisma.shipment.findMany({
+            const byPhone = await this.prisma.order.findMany({
                 where: {
                     OR: [
-                        { order: { deliveryPhone: { contains: tail, mode: 'insensitive' } } },
-                        { order: { pickupPhone: { contains: tail, mode: 'insensitive' } } },
+                        { deliveryPhone: { contains: tail } },
+                        { pickupPhone: { contains: tail } },
                     ],
                 },
                 orderBy: { createdAt: 'desc' },
                 take: 15,
-                include: shipmentDetailInclude,
+                include: orderDetailInclude,
             });
             if (byPhone.length === 1) {
-                return { matchType: 'phone' as const, shipment: byPhone[0] };
+                return { matchType: 'phone' as const, order: byPhone[0] };
             }
             if (byPhone.length > 1) {
                 return {
                     matchType: 'phone' as const,
                     multiple: true as const,
-                    shipments: byPhone,
+                    orders: byPhone,
                 };
             }
         }

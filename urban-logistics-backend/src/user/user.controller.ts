@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Delete, Param, ParseIntPipe, Body, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { UpdateUserDto } from './dto';
@@ -21,19 +21,19 @@ export class UserController {
 
     @Get(':id')
     @ApiOperation({ summary: 'Get user by ID' })
-    findOne(@Param('id') id: string) {
+    findOne(@Param('id', ParseIntPipe) id: number) {
         return this.userService.findOne(id);
     }
 
     @Patch(':id')
     @ApiOperation({ summary: 'Update user' })
-    update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
+    update(@Param('id', ParseIntPipe) id: number, @Body() updateUserDto: UpdateUserDto) {
         return this.userService.update(id, updateUserDto);
     }
 
     @Delete(':id')
     @ApiOperation({ summary: 'Delete user' })
-    remove(@Param('id') id: string) {
+    remove(@Param('id', ParseIntPipe) id: number) {
         return this.userService.remove(id);
     }
 }

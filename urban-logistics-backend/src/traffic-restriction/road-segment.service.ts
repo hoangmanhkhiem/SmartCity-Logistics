@@ -31,13 +31,13 @@ export class RoadSegmentService {
 
     findAll(zoneId?: string, includeInactive?: boolean) {
         return this.prisma.roadSegment.findMany({
-            where: { ...(zoneId && { zoneId }), ...(!includeInactive && { isActive: true }) },
+            where: { ...(zoneId && { zoneId: Number(zoneId) }), ...(!includeInactive && { isActive: true }) },
             include: { zone: true, restrictions: true },
             orderBy: { name: 'asc' },
         });
     }
 
-    async findOne(id: string) {
+    async findOne(id: number) {
         const s = await this.prisma.roadSegment.findUnique({
             where: { id },
             include: { zone: true, restrictions: true },
@@ -46,7 +46,7 @@ export class RoadSegmentService {
         return s;
     }
 
-    async update(id: string, dto: UpdateRoadSegmentDto) {
+    async update(id: number, dto: UpdateRoadSegmentDto) {
         await this.findOne(id);
         let data: UpdateRoadSegmentDto = { ...dto };
         if (dto.geometry) {
@@ -60,7 +60,7 @@ export class RoadSegmentService {
         });
     }
 
-    async remove(id: string) {
+    async remove(id: number) {
         await this.findOne(id);
         return this.prisma.roadSegment.delete({ where: { id } });
     }

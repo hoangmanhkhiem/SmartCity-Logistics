@@ -14,7 +14,7 @@ export class FacilityService {
         const pageNum = Number(page) || 1;
         const limitNum = Number(limit) || 10;
         const skip = (pageNum - 1) * limitNum;
-        const where = { ...(organizationId && { organizationId }), ...(kind && { kind }), ...(zoneId && { zoneId }) };
+        const where = { ...(organizationId && { organizationId: Number(organizationId) }), ...(kind && { kind }), ...(zoneId && { zoneId: Number(zoneId) }) };
         const [data, total] = await Promise.all([
             this.prisma.facility.findMany({ where, skip, take: limitNum, include: { organization: true, zone: true, _count: { select: { chargers: true, fuelPumps: true, docks: true } } }, orderBy: { createdAt: 'desc' } }),
             this.prisma.facility.count({ where }),
@@ -22,18 +22,18 @@ export class FacilityService {
         return { data, meta: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) } };
     }
 
-    async findOne(id: string) {
+    async findOne(id: number) {
         const f = await this.prisma.facility.findUnique({ where: { id }, include: { organization: true, zone: true, chargers: true, fuelPumps: true, docks: true } });
         if (!f) throw new NotFoundException(`Facility ${id} not found`);
         return f;
     }
 
-    async update(id: string, dto: UpdateFacilityDto) {
+    async update(id: number, dto: UpdateFacilityDto) {
         await this.findOne(id);
         return this.prisma.facility.update({ where: { id }, data: dto, include: { organization: true, zone: true } });
     }
 
-    async remove(id: string) {
+    async remove(id: number) {
         await this.findOne(id);
         return this.prisma.facility.delete({ where: { id } });
     }

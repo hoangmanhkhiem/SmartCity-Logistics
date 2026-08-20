@@ -83,8 +83,8 @@ export default function FacilityMapPicker({
 
     return (
         <div className="space-y-2">
-            <div ref={containerRef} className={`h-[220px] w-full overflow-hidden rounded-lg border border-gray-200 ${className}`} />
-            <p className="text-xs text-gray-500">
+            <div ref={containerRef} className={`h-[220px] w-full overflow-hidden rounded-lg border border-slate-200 ${className}`} />
+            <p className="text-xs text-slate-500">
                 {pickEnabled ? 'Nhấp trên bản đồ để đặt vị trí cơ sở.' : 'Bật “Chọn trên bản đồ” để đặt lại tọa độ.'}
             </p>
         </div>

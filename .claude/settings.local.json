@@ -1,7 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(rm -rf \"f:/SmartCity-Logistics/urban-logistics-backend/prisma/migrations\")",
+      "Bash(npx prisma *)",
+      "Bash(rm -f \"f:/SmartCity-Logistics/urban-logistics-backend/scripts/_reset-db.ts\")",
+      "Bash(powershell -Command 'Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '\\\\''*nest start*'\\\\'' -or $_.CommandLine -like '\\\\''*main.js*'\\\\'' } | Select-Object ProcessId,CommandLine')",
+      "Bash(powershell -Command 'Stop-Process -Id 9900 -Force -ErrorAction SilentlyContinue; Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '\\\\''*node*main.js*'\\\\'' -or $_.Name -eq '\\\\''node.exe'\\\\'' } | Select-Object ProcessId,CommandLine')",
+      "Bash(powershell -Command \"Stop-Process -Id 22032,22656 -Force -ErrorAction SilentlyContinue\")",
+      "Bash(npx tsc *)",
+      "Bash(npx nest *)",
+      "Bash(npm run *)"
     ]
   }
 }

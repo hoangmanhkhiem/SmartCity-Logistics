@@ -11,9 +11,9 @@ import { Search, MapPin, Building2, Zap, Fuel, Warehouse, Clock, Phone, Navigati
 const MapView = dynamic(() => import('@/components/shared/map'), {
     ssr: false,
     loading: () => (
-        <div className="h-80 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
-            <div className="flex items-center gap-2 text-gray-500">
-                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="h-80 bg-slate-100 dark:bg-slate-700 rounded-lg flex items-center justify-center">
+            <div className="flex items-center gap-2 text-slate-500">
+                <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
                 Đang tải bản đồ...
             </div>
         </div>
@@ -38,7 +38,7 @@ const kindIcons: Record<string, React.ReactNode> = {
 };
 
 const kindColors: Record<string, string> = {
-    hub: 'bg-blue-500',
+    hub: 'bg-indigo-500',
     warehouse: 'bg-purple-500',
     charging_station: 'bg-green-500',
     fuel_station: 'bg-orange-500',
@@ -97,13 +97,13 @@ export default function ConsumerSearchPage() {
             f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             f.address?.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesKind = !kindFilter || f.kind === kindFilter;
-        const matchesZone = !zoneFilter || f.zoneId === zoneFilter;
+        const matchesZone = !zoneFilter || String(f.zoneId) === zoneFilter;
         return matchesSearch && matchesKind && matchesZone;
     });
 
     const zoneOptions = [
         { value: '', label: 'Tất cả khu vực' },
-        ...zones.map((z) => ({ value: z.id, label: z.name })),
+        ...zones.map((z) => ({ value: String(z.id), label: z.name })),
     ];
 
     // Route config for directions
@@ -130,11 +130,13 @@ export default function ConsumerSearchPage() {
         },
     ] : [];
 
-    // All facilities markers for main map view
+    // All facilities markers for main map view — dùng đúng loại cơ sở để icon/màu khác nhau trên bản đồ
     const allFacilitiesMarkers = facilities.map((f) => ({
         id: f.id,
         coordinates: [f.longitude, f.latitude] as [number, number],
-        type: 'facility' as const,
+        type: (['hub', 'warehouse', 'charging_station', 'fuel_station', 'mfc', 'pickup_point'] as const).includes(f.kind as never)
+            ? (f.kind as 'hub' | 'warehouse' | 'charging_station' | 'fuel_station' | 'mfc' | 'pickup_point')
+            : ('facility' as const),
         label: f.name,
         popup: `${facilityKindOptions.find(k => k.value === f.kind)?.label || f.kind}<br/>${f.address || ''}`,
     }));
@@ -142,14 +144,14 @@ export default function ConsumerSearchPage() {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Tìm kiếm cơ sở</h1>
-                <p className="text-gray-500 mt-1">Tìm Hub, trạm sạc, điểm giao nhận gần bạn</p>
+                <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Tìm kiếm cơ sở</h1>
+                <p className="text-slate-500 mt-1">Tìm Hub, trạm sạc, điểm giao nhận gần bạn</p>
             </div>
 
             <Card>
                 <CardBody className="space-y-4">
                     <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                         <Input
                             placeholder="Tìm kiếm theo tên hoặc địa chỉ..."
                             value={searchQuery}
@@ -174,18 +176,20 @@ export default function ConsumerSearchPage() {
             {/* Map overview */}
             <Card>
                 <CardHeader>
-                    <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Bản đồ cơ sở</h2>
+                    <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Bản đồ cơ sở</h2>
                 </CardHeader>
-                <CardBody>
-                    <div className="h-64">
+                <CardBody className="!p-0">
+                    <div className="h-[480px]">
                         <MapView
                             center={userLocation}
                             zoom={12}
                             markers={allFacilitiesMarkers}
                             onMarkerClick={(id) => {
-                                const facility = facilities.find(f => f.id === id);
+                                const facility = facilities.find(f => f.id === Number(id));
                                 if (facility) setSelectedFacility(facility);
                             }}
+                            showZonesAndRestrictions
+                            className="rounded-none rounded-b-xl"
                         />
                     </div>
                 </CardBody>
@@ -194,13 +198,13 @@ export default function ConsumerSearchPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {loading ? (
                     <div className="col-span-full flex justify-center py-12">
-                        <div className="flex items-center gap-2 text-gray-500">
-                            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                        <div className="flex items-center gap-2 text-slate-500">
+                            <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
                             Đang tải...
                         </div>
                     </div>
                 ) : filteredFacilities.length === 0 ? (
-                    <div className="col-span-full text-center py-12 text-gray-500">
+                    <div className="col-span-full text-center py-12 text-slate-500">
                         <Building2 size={48} className="mx-auto mb-2 opacity-50" />
                         <p>Không tìm thấy cơ sở phù hợp</p>
                     </div>
@@ -210,12 +214,12 @@ export default function ConsumerSearchPage() {
                             <Card hover>
                                 <CardBody>
                                     <div className="flex items-start gap-3">
-                                        <div className={`p-3 rounded-xl text-white ${kindColors[facility.kind] || 'bg-gray-500'}`}>
+                                        <div className={`p-3 rounded-xl text-white ${kindColors[facility.kind] || 'bg-slate-500'}`}>
                                             {kindIcons[facility.kind] || <Building2 size={20} />}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <h3 className="font-semibold text-gray-800 dark:text-white truncate">{facility.name}</h3>
-                                            <p className="text-sm text-gray-500 mt-1 truncate">{facility.address || 'Chưa có địa chỉ'}</p>
+                                            <h3 className="font-semibold text-slate-800 dark:text-white truncate">{facility.name}</h3>
+                                            <p className="text-sm text-slate-500 mt-1 truncate">{facility.address || 'Chưa có địa chỉ'}</p>
                                             <div className="flex items-center gap-2 mt-2">
                                                 <Badge variant="secondary">{facilityKindOptions.find((k) => k.value === facility.kind)?.label || facility.kind}</Badge>
                                                 {facility.isActive ? <Badge variant="success">Hoạt động</Badge> : <Badge variant="error">Đóng cửa</Badge>}
@@ -233,22 +237,22 @@ export default function ConsumerSearchPage() {
             {selectedFacility && !showDirections && (
                 <Card className="fixed bottom-0 left-0 right-0 md:left-auto md:right-6 md:bottom-6 md:w-96 shadow-2xl z-40">
                     <CardHeader className="flex items-center justify-between">
-                        <h3 className="font-semibold text-gray-800 dark:text-white">{selectedFacility.name}</h3>
+                        <h3 className="font-semibold text-slate-800 dark:text-white">{selectedFacility.name}</h3>
                         <Button variant="ghost" size="sm" onClick={() => setSelectedFacility(null)}>✕</Button>
                     </CardHeader>
                     <CardBody className="space-y-3">
-                        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
+                        <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                             <MapPin size={16} />
                             <span>{selectedFacility.address || 'Chưa có địa chỉ'}</span>
                         </div>
                         {selectedFacility.openingTime && (
-                            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
+                            <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                                 <Clock size={16} />
                                 <span>{selectedFacility.openingTime} - {selectedFacility.closingTime}</span>
                             </div>
                         )}
                         {selectedFacility.capacity && (
-                            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
+                            <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                                 <Warehouse size={16} />
                                 <span>Sức chứa: {selectedFacility.capacity}</span>
                             </div>
@@ -279,40 +283,41 @@ export default function ConsumerSearchPage() {
                                 zoom={13}
                                 markers={directionsMarkers}
                                 route={routeConfig}
+                                showZonesAndRestrictions
                             />
                         </div>
 
                         {/* Route info */}
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                            <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
                                 <div className="flex items-center gap-2 mb-1">
-                                    <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Điểm xuất phát</span>
+                                    <div className="w-3 h-3 bg-indigo-500 rounded-full"></div>
+                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Điểm xuất phát</span>
                                 </div>
-                                <p className="text-sm text-gray-500">Vị trí hiện tại của bạn</p>
+                                <p className="text-sm text-slate-500">Vị trí hiện tại của bạn</p>
                             </div>
                             <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
                                 <div className="flex items-center gap-2 mb-1">
                                     <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Điểm đến</span>
+                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Điểm đến</span>
                                 </div>
-                                <p className="text-sm text-gray-500 truncate">{selectedFacility.address || selectedFacility.name}</p>
+                                <p className="text-sm text-slate-500 truncate">{selectedFacility.address || selectedFacility.name}</p>
                             </div>
                         </div>
 
                         {/* Facility info */}
-                        <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                        <div className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
                             <div className="flex items-center gap-3">
-                                <div className={`p-3 rounded-xl text-white ${kindColors[selectedFacility.kind] || 'bg-gray-500'}`}>
+                                <div className={`p-3 rounded-xl text-white ${kindColors[selectedFacility.kind] || 'bg-slate-500'}`}>
                                     {kindIcons[selectedFacility.kind] || <Building2 size={20} />}
                                 </div>
                                 <div>
-                                    <h4 className="font-semibold text-gray-800 dark:text-white">{selectedFacility.name}</h4>
-                                    <p className="text-sm text-gray-500">{facilityKindOptions.find(k => k.value === selectedFacility.kind)?.label || selectedFacility.kind}</p>
+                                    <h4 className="font-semibold text-slate-800 dark:text-white">{selectedFacility.name}</h4>
+                                    <p className="text-sm text-slate-500">{facilityKindOptions.find(k => k.value === selectedFacility.kind)?.label || selectedFacility.kind}</p>
                                 </div>
                             </div>
                             {selectedFacility.openingTime && (
-                                <div className="mt-3 flex items-center gap-2 text-sm text-gray-600">
+                                <div className="mt-3 flex items-center gap-2 text-sm text-slate-600">
                                     <Clock size={14} />
                                     <span>Giờ mở cửa: {selectedFacility.openingTime} - {selectedFacility.closingTime}</span>
                                 </div>

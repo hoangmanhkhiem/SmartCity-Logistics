@@ -1,8 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class CreateRoadSegmentDto {
-    @ApiPropertyOptional() @IsOptional() @IsUUID() zoneId?: string;
+    @ApiPropertyOptional() @IsOptional() @IsInt() zoneId?: number;
     @ApiProperty() @IsString() name: string;
     @ApiPropertyOptional({ description: 'GeoJSON LineString hoặc Feature chứa LineString (JSON string)' })
     @IsOptional()

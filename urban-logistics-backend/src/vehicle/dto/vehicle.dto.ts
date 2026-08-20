@@ -1,8 +1,8 @@
-import { IsString, IsOptional, IsBoolean, IsNumber, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsNumber, IsInt } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateVehicleDto {
-    @ApiProperty() @IsUUID() carrierId: string;
+    @ApiProperty() @IsInt() carrierId: number;
     @ApiProperty() @IsString() type: string;
     @ApiProperty() @IsString() plate: string;
     @ApiPropertyOptional() @IsOptional() @IsString() brand?: string;

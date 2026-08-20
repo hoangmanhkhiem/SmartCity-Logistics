@@ -1,13 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { lineString, point, pointToLineDistance } from '@turf/turf';
+import { lineString, point, pointToLineDistance, nearestPointOnLine, destination, bearing } from '@turf/turf';
 import { PrismaService } from '../prisma/prisma.service';
 import { haversineKm } from '../common/utils/geo';
 import {
     getVietnamMinutesFromMidnight,
     parseHHmmToMinutes,
 } from '../traffic-restriction/utils/restriction-time.util';
-import { CreateRouteDto, UpdateRouteDto } from './dto';
+import { CreateRouteFromOrdersDto, UpdateRouteDto } from './dto';
 import { StopPointDto } from './dto/optimize-stops.dto';
 import { SuggestFacilitiesDto } from './dto/suggest-facilities.dto';
 import { DrivingSegmentDto } from './dto/driving-segment.dto';
@@ -22,27 +22,205 @@ export class RouteService {
         private readonly restrictionService: RestrictionService,
     ) { }
 
-    async create(dto: CreateRouteDto) { return this.prisma.route.create({ data: dto, include: { legs: true } }); }
+    /** Đơn hàng chưa gom vào route nào (status=pending) của 1 carrier, lọc theo zone tuỳ chọn. */
+    unassignedOrders(carrierId: number, zoneId?: number) {
+        return this.prisma.order.findMany({
+            where: { carrierId, status: 'pending', ...(zoneId && { zoneId }) },
+            include: { zone: true, customer: { select: { id: true, name: true, phone: true } } },
+            orderBy: { createdAt: 'asc' },
+        });
+    }
 
-    async findAll(page = 1, limit = 10, mode?: string, status?: string) {
+    /** Gợi ý xe + shipper đang rảnh (on_shift) gần zone nhất theo telemetry mới nhất. */
+    async suggestVehicleAndShipperForZone(carrierId: number, zoneId?: number) {
+        const shippers = await this.prisma.shipperProfile.findMany({
+            where: { carrierId, status: 'on_shift', currentVehicleId: { not: null } },
+            include: {
+                user: { select: { id: true, name: true, phone: true } },
+                currentVehicle: {
+                    include: { telemetries: { orderBy: { timestamp: 'desc' }, take: 1 } },
+                },
+            },
+        });
+
+        const zone = zoneId ? await this.prisma.zone.findUnique({ where: { id: zoneId } }) : null;
+
+        const candidates = shippers
+            .filter((s) => s.currentVehicle)
+            .map((s) => {
+                const t = s.currentVehicle!.telemetries[0];
+                return { shipper: s, vehicle: s.currentVehicle!, telemetry: t };
+            });
+
+        if (!candidates.length) {
+            return { suggestion: null, note: 'Không có shipper đang trong ca (on_shift) của carrier này' };
+        }
+
+        // Không có tâm zone chính xác (chỉ có boundary GeoJSON) — nếu không xác định được, trả candidate đầu tiên có telemetry.
+        const withTelemetry = candidates.filter((c) => c.telemetry);
+        const chosen = withTelemetry[0] ?? candidates[0];
+
+        return {
+            suggestion: {
+                shipperId: chosen.shipper.userId,
+                shipperName: chosen.shipper.user.name,
+                vehicleId: chosen.vehicle.id,
+                plate: chosen.vehicle.plate,
+            },
+            zone: zone ? { id: zone.id, name: zone.name } : null,
+            usedTelemetry: Boolean(chosen.telemetry),
+        };
+    }
+
+    /** Gom N order cùng carrier/zone thành 1 Route cho 1 vehicle + 1 shipper trong 1 ca. */
+    async createRouteFromOrders(dto: CreateRouteFromOrdersDto) {
+        const vehicle = await this.prisma.vehicle.findUnique({ where: { id: dto.vehicleId } });
+        if (!vehicle || vehicle.carrierId !== dto.carrierId) {
+            throw new BadRequestException('Vehicle không thuộc carrier');
+        }
+        const shipperProfile = await this.prisma.shipperProfile.findUnique({ where: { userId: dto.shipperId } });
+        if (!shipperProfile || shipperProfile.carrierId !== dto.carrierId) {
+            throw new BadRequestException('Shipper không thuộc carrier');
+        }
+
+        const uniqueOrderIds = [...new Set(dto.orderIds)];
+        const orders = await this.prisma.order.findMany({ where: { id: { in: uniqueOrderIds } } });
+        if (orders.length !== uniqueOrderIds.length) {
+            throw new NotFoundException('Một số order không tồn tại');
+        }
+        const invalid = orders.find((o) => o.carrierId !== dto.carrierId || o.status !== 'pending');
+        if (invalid) {
+            throw new BadRequestException(`Order ${invalid.id} không thuộc carrier hoặc không ở trạng thái pending`);
+        }
+
+        // Validate restriction (chặn trừ khi force=true)
+        if (dto.zoneId && !dto.force) {
+            const totalWeight = orders.reduce((s, o) => s + (o.weightKg ?? 0), 0);
+            const at = dto.plannedStartAt ? new Date(dto.plannedStartAt) : new Date();
+            const violations = await this.restrictionService.checkVehicleAllowedInZone(
+                vehicle.type,
+                dto.zoneId,
+                at,
+                totalWeight,
+            );
+            if (violations.length) {
+                throw new BadRequestException({
+                    message: 'Vi phạm quy định hạn chế giao thông trong zone — dùng force=true để bỏ qua',
+                    violations,
+                });
+            }
+        }
+
+        // Tối ưu thứ tự điểm (pickup + delivery mỗi order)
+        const points: StopPointDto[] = [];
+        for (const o of orders) {
+            if (o.pickupLat != null && o.pickupLon != null) {
+                points.push({ id: `pickup:${o.id}`, lat: o.pickupLat, lon: o.pickupLon });
+            }
+            if (o.deliveryLat != null && o.deliveryLon != null) {
+                points.push({ id: `delivery:${o.id}`, lat: o.deliveryLat, lon: o.deliveryLon });
+            }
+        }
+        const optimized = points.length ? this.optimizeStopSequence(points) : null;
+        const orderedPoints = optimized?.orderedPoints ?? points;
+
+        const code = `RT-${dto.shiftDate.replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+
+        return this.prisma.$transaction(async (tx) => {
+            const route = await tx.route.create({
+                data: {
+                    carrierId: dto.carrierId,
+                    vehicleId: dto.vehicleId,
+                    shipperId: dto.shipperId,
+                    zoneId: dto.zoneId,
+                    code,
+                    shiftDate: new Date(dto.shiftDate),
+                    status: 'planned',
+                    plannedStartAt: dto.plannedStartAt ? new Date(dto.plannedStartAt) : undefined,
+                    totalDistanceKm: optimized?.approximateTotalKm,
+                },
+            });
+
+            let sequence = 1;
+            for (const p of orderedPoints) {
+                const [type, orderIdStr] = (p.id ?? '').split(':');
+                const order = orders.find((o) => o.id === Number(orderIdStr));
+                if (!order) continue;
+                await tx.stop.create({
+                    data: {
+                        routeId: route.id,
+                        orderId: order.id,
+                        sequence: sequence++,
+                        type,
+                        address: type === 'pickup' ? order.pickupAddress : order.deliveryAddress,
+                        latitude: p.lat,
+                        longitude: p.lon,
+                        contactPhone: type === 'pickup' ? order.pickupPhone : order.deliveryPhone,
+                        timeWindowStart: order.timeWindowStart,
+                        timeWindowEnd: order.timeWindowEnd,
+                        ...(type === 'delivery' && { codAmountDue: order.codAmount ?? 0 }),
+                    },
+                });
+            }
+
+            await tx.order.updateMany({
+                where: { id: { in: uniqueOrderIds } },
+                data: { status: 'assigned' },
+            });
+
+            return tx.route.findUnique({
+                where: { id: route.id },
+                include: { stops: { orderBy: { sequence: 'asc' } }, vehicle: true, shipper: true },
+            });
+        });
+    }
+
+    async findAll(page = 1, limit = 10, carrierId?: string, status?: string, shipperId?: string) {
         const pageNum = Number(page) || 1; const limitNum = Number(limit) || 10; const skip = (pageNum - 1) * limitNum;
-        const where = { ...(mode && { mode }), ...(status && { status }) };
+        const where = {
+            ...(carrierId && { carrierId: Number(carrierId) }),
+            ...(status && { status }),
+            ...(shipperId && { shipperId: Number(shipperId) }),
+        };
         const [data, total] = await Promise.all([
-            this.prisma.route.findMany({ where, skip, take: limitNum, include: { _count: { select: { legs: true } } }, orderBy: { createdAt: 'desc' } }),
+            this.prisma.route.findMany({
+                where,
+                skip,
+                take: limitNum,
+                include: { vehicle: true, shipper: { select: { id: true, name: true, phone: true } }, _count: { select: { stops: true } } },
+                orderBy: { createdAt: 'desc' },
+            }),
             this.prisma.route.count({ where }),
         ]);
         return { data, meta: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) } };
     }
 
-    async findOne(id: string) {
-        const r = await this.prisma.route.findUnique({ where: { id }, include: { legs: { include: { stops: true, assignments: { include: { vehicle: true } } } } } });
+    async findOne(id: number) {
+        const r = await this.prisma.route.findUnique({
+            where: { id },
+            include: {
+                vehicle: true,
+                shipper: { select: { id: true, name: true, phone: true } },
+                stops: { orderBy: { sequence: 'asc' }, include: { order: true } },
+            },
+        });
         if (!r) throw new NotFoundException(`Route ${id} not found`);
         return r;
     }
 
-    async update(id: string, dto: UpdateRouteDto) { await this.findOne(id); return this.prisma.route.update({ where: { id }, data: dto }); }
+    async update(id: number, dto: UpdateRouteDto) {
+        await this.findOne(id);
+        return this.prisma.route.update({
+            where: { id },
+            data: {
+                ...dto,
+                plannedStartAt: dto.plannedStartAt ? new Date(dto.plannedStartAt) : undefined,
+                plannedEndAt: dto.plannedEndAt ? new Date(dto.plannedEndAt) : undefined,
+            },
+        });
+    }
 
-    async remove(id: string) { await this.findOne(id); return this.prisma.route.delete({ where: { id } }); }
+    async remove(id: number) { await this.findOne(id); return this.prisma.route.delete({ where: { id } }); }
 
     /** Thứ tự điểm giao gần đúng TSP/VRP (nearest neighbor từ điểm đầu). */
     optimizeStopSequence(points: StopPointDto[]) {
@@ -87,6 +265,7 @@ export class RouteService {
 
     /**
      * Một đoạn lái xe: lấy nhiều phương án Mapbox (`alternatives`) rồi chọn tuyến có ít chồng lấp nhất với đoạn cấm/hạn chế.
+     * Nếu tuyến tốt nhất vẫn chồng lấn đoạn `prohibited`, thử ép vòng qua 1 waypoint né hẳn khu vực đó.
      */
     async drivingSegmentAvoidingRestrictions(dto: DrivingSegmentDto) {
         const token = this.requireMapboxToken();
@@ -105,7 +284,35 @@ export class RouteService {
         if (!routes.length) {
             throw new BadRequestException('Không lấy được tuyến từ Mapbox');
         }
-        const route = this.pickBestRouteAmongAlternatives(routes, restrictions);
+        let route = this.pickBestRouteAmongAlternatives(routes, restrictions);
+        let usedWaypoint = false;
+
+        const prohibitedOverlap = this.findProhibitedOverlap(route.geometry.coordinates, restrictions);
+        if (prohibitedOverlap) {
+            const waypoint = this.computeAvoidanceWaypoint(prohibitedOverlap);
+            try {
+                const waypointRoutes = await this.fetchMapboxDrivingAlternatives(
+                    dto.originLon,
+                    dto.originLat,
+                    dto.destLon,
+                    dto.destLat,
+                    token,
+                    [waypoint],
+                );
+                if (waypointRoutes.length) {
+                    const bestWithWaypoint = this.pickBestRouteAmongAlternatives(waypointRoutes, restrictions);
+                    const currentPenalty = this.restrictionOverlapPenalty(route.geometry.coordinates, restrictions);
+                    const waypointPenalty = this.restrictionOverlapPenalty(bestWithWaypoint.geometry.coordinates, restrictions);
+                    if (waypointPenalty < currentPenalty) {
+                        route = bestWithWaypoint;
+                        usedWaypoint = true;
+                    }
+                }
+            } catch {
+                /* giữ tuyến gốc nếu gọi Mapbox với waypoint thất bại */
+            }
+        }
+
         return {
             route: {
                 distance: route.distance,
@@ -113,9 +320,48 @@ export class RouteService {
                 geometry: route.geometry,
             },
             restrictionsGeoJson: restrictions,
-            routingNote:
-                'Trong các phương án Mapbox, chọn tuyến có điểm phạt thấp nhất khi lệch gần đoạn cấm/hạn chế (ước lượng; không thay cho cấm đường chính thức).',
+            avoidedProhibited: usedWaypoint,
+            routingNote: usedWaypoint
+                ? 'Đã chèn điểm vòng để né đoạn cấm hoàn toàn (severity=prohibited).'
+                : 'Trong các phương án Mapbox, chọn tuyến có điểm phạt thấp nhất khi lệch gần đoạn cấm/hạn chế (ước lượng; không thay cho cấm đường chính thức).',
         };
+    }
+
+    /** Tìm restriction `prohibited` (LineString) mà tuyến hiện tại đi sát/qua (trong 40m). */
+    private findProhibitedOverlap(
+        routeCoords: [number, number][],
+        restrictions: GeoJsonFeatureCollection,
+        thresholdM = 40,
+    ): number[][] | null {
+        for (const f of restrictions.features ?? []) {
+            if (f.properties?.severity !== 'prohibited') continue;
+            const g = f.geometry as { type?: string; coordinates?: number[][] };
+            if (g?.type !== 'LineString' || !g.coordinates?.length || g.coordinates.length < 2) continue;
+            try {
+                const rl = lineString(g.coordinates);
+                const step = Math.max(1, Math.ceil(routeCoords.length / 60));
+                for (let i = 0; i < routeCoords.length; i += step) {
+                    const d = pointToLineDistance(point(routeCoords[i]), rl, { units: 'meters' });
+                    if (d < thresholdM) return g.coordinates;
+                }
+            } catch {
+                continue;
+            }
+        }
+        return null;
+    }
+
+    /** Điểm lệch vuông góc ~200m khỏi trung điểm đoạn cấm, dùng làm waypoint ép Mapbox vòng qua. */
+    private computeAvoidanceWaypoint(prohibitedCoords: number[][]): [number, number] {
+        const rl = lineString(prohibitedCoords);
+        const midIdx = Math.floor(prohibitedCoords.length / 2);
+        const midPoint = point(prohibitedCoords[midIdx]);
+        const nearest = nearestPointOnLine(rl, midPoint);
+        const segBearing = bearing(point(prohibitedCoords[Math.max(0, midIdx - 1)]), point(prohibitedCoords[midIdx]));
+        const perpendicular = segBearing + 90;
+        const offset = destination(nearest, 0.2, perpendicular, { units: 'kilometers' });
+        const [lon, lat] = offset.geometry.coordinates;
+        return [lon, lat];
     }
 
     /** Gợi ý kho/hub gần tuyến lái xe tối ưu (Mapbox) trong buffer mét. */
@@ -214,13 +460,18 @@ export class RouteService {
         destLon: number,
         destLat: number,
         token: string,
+        waypoints: Array<[number, number]> = [],
     ): Promise<Array<{ distance: number; duration: number; geometry: { coordinates: [number, number][] } }>> {
-        const coordsStr = `${originLon},${originLat};${destLon},${destLat}`;
+        const waypointsStr = waypoints.map(([lon, lat]) => `${lon},${lat}`).join(';');
+        const coordsStr = waypointsStr
+            ? `${originLon},${originLat};${waypointsStr};${destLon},${destLat}`
+            : `${originLon},${originLat};${destLon},${destLat}`;
         const params = new URLSearchParams({
             geometries: 'geojson',
             overview: 'full',
             access_token: token,
-            alternatives: 'true',
+            // Mapbox không hỗ trợ alternatives khi có waypoint trung gian
+            alternatives: waypoints.length ? 'false' : 'true',
         });
         const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordsStr}?${params.toString()}`;
         const res = await fetch(url);

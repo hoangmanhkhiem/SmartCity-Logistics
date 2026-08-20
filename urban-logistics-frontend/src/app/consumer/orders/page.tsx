@@ -5,17 +5,18 @@ import dynamic from 'next/dynamic';
 import { Card, CardBody, CardHeader, DataTable, Badge, Select, Button, Input, Modal } from '@/components/ui';
 import { orderApi } from '@/lib/api';
 import { Order } from '@/types';
-import { Package, Search, Eye, MapPin, Navigation, Truck } from 'lucide-react';
+import { Package, Search, Eye, MapPin, Navigation, Truck, Plus } from 'lucide-react';
 import type { Column } from '@/components/ui';
 import { viStatus, ORDER_STATUS_OPTIONS } from '@/lib/status-labels';
+import NewOrderModal from '@/components/consumer/new-order-modal';
 
 // Dynamic import for Map to avoid SSR issues
 const MapView = dynamic(() => import('@/components/shared/map'), {
     ssr: false,
     loading: () => (
-        <div className="h-64 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
-            <div className="flex items-center gap-2 text-gray-500">
-                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="h-64 bg-slate-100 dark:bg-slate-700 rounded-lg flex items-center justify-center">
+            <div className="flex items-center gap-2 text-slate-500">
+                <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
                 Đang tải bản đồ...
             </div>
         </div>
@@ -42,6 +43,7 @@ export default function ConsumerOrdersPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
     const [showTrackingModal, setShowTrackingModal] = useState(false);
+    const [showNewOrderModal, setShowNewOrderModal] = useState(false);
 
     // Route animation state
     const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([]);
@@ -229,12 +231,17 @@ export default function ConsumerOrdersPage() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Đơn hàng của tôi</h1>
-                    <p className="text-gray-500 mt-1">Theo dõi và quản lý đơn hàng</p>
+                    <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Đơn hàng của tôi</h1>
+                    <p className="text-slate-500 mt-1">Theo dõi và quản lý đơn hàng</p>
                 </div>
-                <div className="flex items-center gap-2">
-                    <Package className="text-blue-500" size={24} />
-                    <span className="text-2xl font-bold text-gray-800 dark:text-white">{orders.length}</span>
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                        <Package className="text-indigo-500" size={24} />
+                        <span className="text-2xl font-bold text-slate-800 dark:text-white">{orders.length}</span>
+                    </div>
+                    <Button onClick={() => setShowNewOrderModal(true)}>
+                        <Plus size={16} className="mr-1 inline" /> Đặt đơn mới
+                    </Button>
                 </div>
             </div>
 
@@ -243,7 +250,7 @@ export default function ConsumerOrdersPage() {
                 <CardBody className="flex flex-wrap gap-4 items-end">
                     <div className="flex-1 min-w-[200px]">
                         <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                             <Input
                                 placeholder="Tìm kiếm đơn hàng..."
                                 value={searchQuery}
@@ -266,7 +273,7 @@ export default function ConsumerOrdersPage() {
             {/* Orders Table */}
             <Card>
                 <CardHeader>
-                    <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Danh sách đơn hàng</h2>
+                    <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Danh sách đơn hàng</h2>
                 </CardHeader>
                 <CardBody>
                     <DataTable
@@ -315,20 +322,21 @@ export default function ConsumerOrdersPage() {
                                 markers={mapMarkers}
                                 route={routeConfig}
                                 onRouteLoaded={handleRouteLoaded}
+                                showZonesAndRestrictions
                             />
                         </div>
 
                         {/* Progress bar */}
                         {routeCoordinates.length > 0 && (
                             <div>
-                                <div className="flex justify-between text-sm text-gray-500 mb-1">
+                                <div className="flex justify-between text-sm text-slate-500 mb-1">
                                     <span>Điểm lấy hàng</span>
-                                    <span className="font-medium text-blue-600">{Math.floor(progress * 100)}%</span>
+                                    <span className="font-medium text-indigo-600">{Math.floor(progress * 100)}%</span>
                                     <span>Điểm giao hàng</span>
                                 </div>
-                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div className="w-full bg-slate-200 rounded-full h-2">
                                     <div
-                                        className="bg-blue-600 h-2 rounded-full transition-all duration-100"
+                                        className="bg-indigo-600 h-2 rounded-full transition-all duration-100"
                                         style={{ width: `${progress * 100}%` }}
                                     />
                                 </div>
@@ -340,14 +348,14 @@ export default function ConsumerOrdersPage() {
                             <div className="flex items-center gap-2">
                                 <MapPin size={16} className="text-green-500" />
                                 <div>
-                                    <p className="text-xs text-gray-500">Điểm lấy hàng</p>
+                                    <p className="text-xs text-slate-500">Điểm lấy hàng</p>
                                     <p className="text-sm font-medium truncate">{selectedOrder.pickupAddress || 'Kho hàng'}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
                                 <MapPin size={16} className="text-red-500" />
                                 <div>
-                                    <p className="text-xs text-gray-500">Điểm giao</p>
+                                    <p className="text-xs text-slate-500">Điểm giao</p>
                                     <p className="text-sm font-medium truncate">{selectedOrder.deliveryAddress || 'Chưa có'}</p>
                                 </div>
                             </div>
@@ -371,34 +379,34 @@ export default function ConsumerOrdersPage() {
                     <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <p className="text-sm text-gray-500">Trạng thái</p>
+                                <p className="text-sm text-slate-500">Trạng thái</p>
                                 <Badge variant={statusVariant[selectedOrder.status] || 'default'}>
                                     {viStatus(selectedOrder.status)}
                                 </Badge>
                             </div>
                             <div>
-                                <p className="text-sm text-gray-500">Độ ưu tiên</p>
+                                <p className="text-sm text-slate-500">Độ ưu tiên</p>
                                 <p className="font-medium">{selectedOrder.priority || 1}</p>
                             </div>
                         </div>
                         <div>
-                            <p className="text-sm text-gray-500">Địa chỉ lấy hàng</p>
+                            <p className="text-sm text-slate-500">Địa chỉ lấy hàng</p>
                             <p className="font-medium">{selectedOrder.pickupAddress || 'Chưa có'}</p>
                         </div>
                         <div>
-                            <p className="text-sm text-gray-500">Địa chỉ giao hàng</p>
+                            <p className="text-sm text-slate-500">Địa chỉ giao hàng</p>
                             <p className="font-medium">{selectedOrder.deliveryAddress || 'Chưa có'}</p>
                         </div>
                         {selectedOrder.timeWindowStart && (
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <p className="text-sm text-gray-500">Thời gian bắt đầu</p>
+                                    <p className="text-sm text-slate-500">Thời gian bắt đầu</p>
                                     <p className="font-medium">
                                         {new Date(selectedOrder.timeWindowStart).toLocaleString('vi-VN')}
                                     </p>
                                 </div>
                                 <div>
-                                    <p className="text-sm text-gray-500">Thời gian kết thúc</p>
+                                    <p className="text-sm text-slate-500">Thời gian kết thúc</p>
                                     <p className="font-medium">
                                         {selectedOrder.timeWindowEnd
                                             ? new Date(selectedOrder.timeWindowEnd).toLocaleString('vi-VN')
@@ -409,7 +417,7 @@ export default function ConsumerOrdersPage() {
                         )}
                         {selectedOrder.notes && (
                             <div>
-                                <p className="text-sm text-gray-500">Ghi chú</p>
+                                <p className="text-sm text-slate-500">Ghi chú</p>
                                 <p className="font-medium">{selectedOrder.notes}</p>
                             </div>
                         )}
@@ -430,6 +438,15 @@ export default function ConsumerOrdersPage() {
                     </div>
                 )}
             </Modal>
+
+            <NewOrderModal
+                isOpen={showNewOrderModal}
+                onClose={() => setShowNewOrderModal(false)}
+                onCreated={() => {
+                    setShowNewOrderModal(false);
+                    fetchOrders();
+                }}
+            />
         </div>
     );
 }

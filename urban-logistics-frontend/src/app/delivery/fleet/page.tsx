@@ -100,7 +100,7 @@ export default function DeliveryFleetPage() {
         setIsModalOpen(true);
     };
 
-    const handleDelete = async (id: string) => {
+    const handleDelete = async (id: number) => {
         if (confirm('Bạn có chắc chắn muốn xóa xe này?')) {
             try {
                 await vehicleApi.delete(id);
@@ -192,8 +192,8 @@ export default function DeliveryFleetPage() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Quản lý đội xe</h1>
-                    <p className="text-gray-500 mt-1">Quản lý phương tiện vận chuyển</p>
+                    <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Quản lý đội xe</h1>
+                    <p className="text-slate-500 mt-1">Quản lý phương tiện vận chuyển</p>
                 </div>
                 <Button onClick={() => { resetForm(); setEditingVehicle(null); setIsModalOpen(true); }}>
                     <Plus size={18} className="mr-1" />
@@ -205,12 +205,12 @@ export default function DeliveryFleetPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Card>
                     <CardBody className="flex items-center gap-3">
-                        <div className="p-3 bg-blue-100 dark:bg-blue-900/50 rounded-xl">
-                            <Truck size={24} className="text-blue-600" />
+                        <div className="p-3 bg-indigo-100 dark:bg-indigo-900/50 rounded-xl">
+                            <Truck size={24} className="text-indigo-600" />
                         </div>
                         <div>
-                            <p className="text-2xl font-bold text-gray-800 dark:text-white">{stats.total}</p>
-                            <p className="text-sm text-gray-500">Tổng xe</p>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{stats.total}</p>
+                            <p className="text-sm text-slate-500">Tổng xe</p>
                         </div>
                     </CardBody>
                 </Card>
@@ -220,8 +220,8 @@ export default function DeliveryFleetPage() {
                             <Truck size={24} className="text-green-600" />
                         </div>
                         <div>
-                            <p className="text-2xl font-bold text-gray-800 dark:text-white">{stats.available}</p>
-                            <p className="text-sm text-gray-500">Sẵn sàng</p>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{stats.available}</p>
+                            <p className="text-sm text-slate-500">Sẵn sàng</p>
                         </div>
                     </CardBody>
                 </Card>
@@ -231,8 +231,8 @@ export default function DeliveryFleetPage() {
                             <Truck size={24} className="text-purple-600" />
                         </div>
                         <div>
-                            <p className="text-2xl font-bold text-gray-800 dark:text-white">{stats.inUse}</p>
-                            <p className="text-sm text-gray-500">Đang sử dụng</p>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{stats.inUse}</p>
+                            <p className="text-sm text-slate-500">Đang sử dụng</p>
                         </div>
                     </CardBody>
                 </Card>
@@ -242,8 +242,8 @@ export default function DeliveryFleetPage() {
                             <Zap size={24} className="text-teal-600" />
                         </div>
                         <div>
-                            <p className="text-2xl font-bold text-gray-800 dark:text-white">{stats.electric}</p>
-                            <p className="text-sm text-gray-500">Xe điện</p>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{stats.electric}</p>
+                            <p className="text-sm text-slate-500">Xe điện</p>
                         </div>
                     </CardBody>
                 </Card>
@@ -254,7 +254,7 @@ export default function DeliveryFleetPage() {
                 <CardBody className="flex flex-wrap gap-4 items-end">
                     <div className="flex-1 min-w-[200px]">
                         <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                             <Input
                                 placeholder="Tìm biển số, hãng xe..."
                                 value={searchQuery}
@@ -283,7 +283,7 @@ export default function DeliveryFleetPage() {
             {/* Table */}
             <Card>
                 <CardHeader>
-                    <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Danh sách xe</h2>
+                    <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Danh sách xe</h2>
                 </CardHeader>
                 <CardBody>
                     <DataTable
@@ -362,9 +362,9 @@ export default function DeliveryFleetPage() {
                             id="isElectric"
                             checked={formData.isElectric}
                             onChange={(e) => setFormData({ ...formData, isElectric: e.target.checked })}
-                            className="w-4 h-4 rounded border-gray-300"
+                            className="w-4 h-4 rounded border-slate-300"
                         />
-                        <label htmlFor="isElectric" className="text-sm text-gray-700 dark:text-gray-300">
+                        <label htmlFor="isElectric" className="text-sm text-slate-700 dark:text-slate-300">
                             Xe điện
                         </label>
                     </div>

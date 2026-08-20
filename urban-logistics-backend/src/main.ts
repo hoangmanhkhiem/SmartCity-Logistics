@@ -41,16 +41,15 @@ async function bootstrap() {
         .addTag('facilities', 'Facility management')
         .addTag('zones', 'Zone management')
         .addTag('orders', 'Order management')
-        .addTag('routes', 'Route management')
+        .addTag('routes', 'Route planning (chuyến giao / gom đơn theo zone)')
         .addTag('telemetry', 'Telemetry data')
-        .addTag('research', 'Research / field collection data')
         .addTag('partner', 'B2B partner API (X-Api-Key)')
         .addTag('integrations', 'API keys for partners')
-        .addTag('dispatch', 'Dispatch & assignment')
-        .addTag('quotes', 'Carrier quote comparison')
         .addTag('analytics', 'Platform analytics')
-        .addTag('drivers', 'Drivers')
+        .addTag('shippers', 'Shipper management & self-service')
         .addTag('tracking', 'Public shipment tracking')
+        .addTag('restrictions', 'Traffic restrictions (LEZ / giờ cấm tải)')
+        .addTag('road-segments', 'Road segments')
         .addApiKey(
             { type: 'apiKey', name: 'X-Api-Key', in: 'header', description: 'Partner integration key' },
             'partner-api-key',

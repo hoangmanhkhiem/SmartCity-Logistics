@@ -12,7 +12,7 @@ export class VehicleService {
 
     async findAll(page = 1, limit = 10, carrierId?: string, type?: string) {
         const pageNum = Number(page) || 1; const limitNum = Number(limit) || 10; const skip = (pageNum - 1) * limitNum;
-        const where = { ...(carrierId && { carrierId }), ...(type && { type }) };
+        const where = { ...(carrierId && { carrierId: Number(carrierId) }), ...(type && { type }) };
         const [data, total] = await Promise.all([
             this.prisma.vehicle.findMany({
                 where,
@@ -26,7 +26,7 @@ export class VehicleService {
         return { data, meta: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) } };
     }
 
-    async findOne(id: string) {
+    async findOne(id: number) {
         const v = await this.prisma.vehicle.findUnique({
             where: { id },
             include: { carrier: { select: { id: true, name: true, organizationId: true } } },
@@ -35,12 +35,12 @@ export class VehicleService {
         return v;
     }
 
-    async update(id: string, dto: UpdateVehicleDto) {
+    async update(id: number, dto: UpdateVehicleDto) {
         await this.findOne(id);
         return this.prisma.vehicle.update({ where: { id }, data: dto, include: { carrier: true } });
     }
 
-    async remove(id: string) {
+    async remove(id: number) {
         await this.findOne(id);
         return this.prisma.vehicle.delete({ where: { id } });
     }

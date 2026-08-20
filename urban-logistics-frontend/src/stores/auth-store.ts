@@ -1,17 +1,17 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export type UserRole = 'admin' | 'regulator' | 'carrier_mgr' | 'dispatcher' | 'consumer' | 'viewer';
+export type UserRole = 'admin' | 'regulator' | 'carrier_ops' | 'shipper' | 'consumer';
 
 export interface User {
-    id: string;
+    id: number;
     email: string;
     name: string;
     phone?: string;
     avatarUrl?: string;
     memberships?: {
-        organization: { id: string; name: string; type: string };
-        role: { id: string; name: string };
+        organization: { id: number; name: string; type: string };
+        role: { id: number; name: string };
     }[];
 }
 
@@ -26,6 +26,14 @@ interface AuthState {
     logout: () => void;
 }
 
+const ROLE_NAME_MAP: Record<string, UserRole> = {
+    platform_admin: 'admin',
+    regulator: 'regulator',
+    carrier_ops: 'carrier_ops',
+    shipper: 'shipper',
+    consumer: 'consumer',
+};
+
 export const useAuthStore = create<AuthState>()(
     persist(
         (set) => ({
@@ -39,7 +47,8 @@ export const useAuthStore = create<AuthState>()(
                     localStorage.setItem('accessToken', token);
                 }
                 // Determine role from memberships
-                const primaryRole = user.memberships?.[0]?.role?.name as UserRole || 'consumer';
+                const rawRole = user.memberships?.[0]?.role?.name;
+                const primaryRole = (rawRole && ROLE_NAME_MAP[rawRole]) || 'consumer';
                 set({ user, accessToken: token, isAuthenticated: true, currentRole: primaryRole });
             },
 
@@ -68,15 +77,15 @@ export const useAuthStore = create<AuthState>()(
 export const getDashboardPath = (role: UserRole | null): string => {
     switch (role) {
         case 'admin':
-            // Admin/Logistics panel với navbar phân cấp theo 4 nhóm chức năng
             return '/logistics/dashboard';
-        case 'carrier_mgr':
-        case 'dispatcher':
-            // Carrier dashboard với mega menu
-            return '/carrier/monitor';
+        case 'carrier_ops':
+            return '/delivery/dashboard';
+        case 'shipper':
+            return '/shipper/today';
         case 'regulator':
-            // Regulator dashboard
             return '/regulator/reports';
+        case 'consumer':
+            return '/consumer';
         default:
             return '/';
     }

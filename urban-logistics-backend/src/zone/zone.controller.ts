@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, ParseIntPipe, Body, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ZoneService } from './zone.service';
 import { CreateZoneDto, UpdateZoneDto } from './dto';
@@ -19,11 +19,11 @@ export class ZoneController {
     findAll(@Query('page') page?: number, @Query('limit') limit?: number, @Query('type') type?: string) { return this.service.findAll(page, limit, type); }
 
     @Get(':id') @ApiOperation({ summary: 'Get zone by ID' })
-    findOne(@Param('id') id: string) { return this.service.findOne(id); }
+    findOne(@Param('id', ParseIntPipe) id: number) { return this.service.findOne(id); }
 
     @Patch(':id') @ApiOperation({ summary: 'Update zone' })
-    update(@Param('id') id: string, @Body() dto: UpdateZoneDto) { return this.service.update(id, dto); }
+    update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateZoneDto) { return this.service.update(id, dto); }
 
     @Delete(':id') @ApiOperation({ summary: 'Delete zone' })
-    remove(@Param('id') id: string) { return this.service.remove(id); }
+    remove(@Param('id', ParseIntPipe) id: number) { return this.service.remove(id); }
 }

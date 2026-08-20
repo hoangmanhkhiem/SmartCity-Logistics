@@ -1,391 +1,150 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import {
-    Card,
-    Form,
-    Input,
-    Button,
-    Space,
-    Typography,
-    Row,
-    Col,
-    Tabs,
-    Switch,
-    Select,
-    Divider,
-    Spin,
-    message,
-    Alert,
-} from 'antd';
-import {
-    SettingOutlined,
-    BuildOutlined,
-    MailOutlined,
-    PhoneOutlined,
-    GlobalOutlined,
-    EnvironmentOutlined,
-    SaveOutlined,
-    BellOutlined,
-    SafetyOutlined,
-    ControlOutlined,
-} from '@ant-design/icons';
+import { Card, CardBody, Button, Input, Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui';
+import { Settings, Building2, Save, Bell, Shield, Cog } from 'lucide-react';
 import { organizationApi } from '@/lib/api';
 import { Organization } from '@/types';
 
-const { Title, Text } = Typography;
-const { TextArea } = Input;
+function ToggleRow({ label, description, defaultChecked }: { label: string; description: string; defaultChecked?: boolean }) {
+    const [checked, setChecked] = useState(!!defaultChecked);
+    return (
+        <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-700 last:border-0">
+            <div>
+                <p className="text-sm font-medium text-slate-800 dark:text-white">{label}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{description}</p>
+            </div>
+            <button
+                onClick={() => setChecked((c) => !c)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${checked ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+            >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+        </div>
+    );
+}
 
 export default function LogisticsSettingsPage() {
+    const [tab, setTab] = useState('general');
     const [organization, setOrganization] = useState<Organization | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [form] = Form.useForm();
+    const [saved, setSaved] = useState(false);
+    const [formData, setFormData] = useState({
+        name: '', description: '', address: '', phone: '', email: '', website: '',
+    });
 
     useEffect(() => {
-        const fetchOrg = async () => {
-            try {
-                const response = await organizationApi.getAll({ limit: 1 });
-                const orgs = response.data.data || response.data;
-                if (orgs.length > 0) {
-                    setOrganization(orgs[0]);
-                    form.setFieldsValue({
-                        name: orgs[0].name || '',
-                        description: orgs[0].description || '',
-                        address: orgs[0].address || '',
-                        phone: orgs[0].phone || '',
-                        email: orgs[0].email || '',
-                        website: orgs[0].website || '',
-                    });
-                }
-            } catch (error) {
-                console.error('Failed to fetch organization:', error);
-                message.error('Không thể tải thông tin tổ chức');
-            } finally {
-                setLoading(false);
+        organizationApi.getAll({ limit: 1 }).then((res) => {
+            const orgs = res.data.data || res.data;
+            if (orgs.length > 0) {
+                const o = orgs[0];
+                setOrganization(o);
+                setFormData({
+                    name: o.name || '', description: o.description || '', address: o.address || '',
+                    phone: o.phone || '', email: o.email || '', website: o.website || '',
+                });
             }
-        };
-        fetchOrg();
-    }, [form]);
+        }).catch((e) => console.error(e)).finally(() => setLoading(false));
+    }, []);
 
-    const handleSubmit = async (values: any) => {
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
         if (!organization) return;
         setSaving(true);
+        setSaved(false);
         try {
-            await organizationApi.update(organization.id, values);
-            message.success('Đã lưu thay đổi thành công!');
+            await organizationApi.update(organization.id, formData);
+            setSaved(true);
+            setTimeout(() => setSaved(false), 3000);
         } catch (error) {
             console.error(error);
-            message.error('Có lỗi xảy ra khi lưu');
         } finally {
             setSaving(false);
         }
     };
 
     if (loading) {
-        return (
-            <div style={{ textAlign: 'center', padding: '100px 0' }}>
-                <Spin size="large" />
-                <div style={{ marginTop: 16, color: '#666' }}>Đang tải cài đặt...</div>
-            </div>
-        );
+        return <div className="py-24 text-center text-slate-500">Đang tải cài đặt...</div>;
     }
 
-    const tabItems = [
-        {
-            key: 'general',
-            label: (
-                <span>
-                    <BuildOutlined /> Thông tin chung
-                </span>
-            ),
-            children: (
-                <Card variant="borderless">
-                    <Form form={form} layout="vertical" onFinish={handleSubmit}>
-                        <Row gutter={16}>
-                            <Col xs={24}>
-                                <Form.Item
-                                    label="Tên công ty"
-                                    name="name"
-                                    rules={[{ required: true, message: 'Vui lòng nhập tên công ty' }]}
-                                >
-                                    <Input prefix={<BuildOutlined />} size="large" placeholder="Nhập tên công ty" />
-                                </Form.Item>
-                            </Col>
-
-                            <Col xs={24}>
-                                <Form.Item label="Mô tả" name="description">
-                                    <TextArea rows={4} placeholder="Mô tả về công ty..." />
-                                </Form.Item>
-                            </Col>
-
-                            <Col xs={24} md={12}>
-                                <Form.Item
-                                    label="Email"
-                                    name="email"
-                                    rules={[{ type: 'email', message: 'Email không hợp lệ' }]}
-                                >
-                                    <Input prefix={<MailOutlined />} size="large" placeholder="email@company.com" />
-                                </Form.Item>
-                            </Col>
-
-                            <Col xs={24} md={12}>
-                                <Form.Item label="Điện thoại" name="phone">
-                                    <Input prefix={<PhoneOutlined />} size="large" placeholder="0987654321" />
-                                </Form.Item>
-                            </Col>
-
-                            <Col xs={24}>
-                                <Form.Item label="Địa chỉ" name="address">
-                                    <Input prefix={<EnvironmentOutlined />} size="large" placeholder="Địa chỉ công ty" />
-                                </Form.Item>
-                            </Col>
-
-                            <Col xs={24}>
-                                <Form.Item label="Website" name="website">
-                                    <Input prefix={<GlobalOutlined />} size="large" placeholder="https://company.com" />
-                                </Form.Item>
-                            </Col>
-                        </Row>
-
-                        <Divider />
-
-                        <Form.Item>
-                            <Button
-                                type="primary"
-                                htmlType="submit"
-                                loading={saving}
-                                size="large"
-                                icon={<SaveOutlined />}
-                            >
-                                Lưu thay đổi
-                            </Button>
-                        </Form.Item>
-                    </Form>
-                </Card>
-            ),
-        },
-        {
-            key: 'notifications',
-            label: (
-                <span>
-                    <BellOutlined /> Thông báo
-                </span>
-            ),
-            children: (
-                <Card variant="borderless">
-                    <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                        <Alert
-                            message="Cài đặt thông báo"
-                            description="Quản lý các kênh thông báo cho hệ thống logistics"
-                            type="info"
-                            showIcon
-                        />
-
-                        <div>
-                            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div>
-                                        <Text strong>Email thông báo</Text>
-                                        <br />
-                                        <Text type="secondary">Gửi thông báo qua email khi có sự kiện quan trọng</Text>
-                                    </div>
-                                    <Switch defaultChecked />
-                                </div>
-
-                                <Divider style={{ margin: 0 }} />
-
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div>
-                                        <Text strong>SMS thông báo</Text>
-                                        <br />
-                                        <Text type="secondary">Gửi tin nhắn SMS cho tài xế và khách hàng</Text>
-                                    </div>
-                                    <Switch defaultChecked />
-                                </div>
-
-                                <Divider style={{ margin: 0 }} />
-
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div>
-                                        <Text strong>Push notification</Text>
-                                        <br />
-                                        <Text type="secondary">Thông báo đẩy qua ứng dụng di động</Text>
-                                    </div>
-                                    <Switch defaultChecked />
-                                </div>
-
-                                <Divider style={{ margin: 0 }} />
-
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div>
-                                        <Text strong>Webhook</Text>
-                                        <br />
-                                        <Text type="secondary">Gửi sự kiện đến endpoint bên ngoài</Text>
-                                    </div>
-                                    <Switch />
-                                </div>
-                            </Space>
-                        </div>
-
-                        <Button type="primary" size="large" icon={<SaveOutlined />}>
-                            Lưu cài đặt
-                        </Button>
-                    </Space>
-                </Card>
-            ),
-        },
-        {
-            key: 'security',
-            label: (
-                <span>
-                    <SafetyOutlined /> Bảo mật
-                </span>
-            ),
-            children: (
-                <Card variant="borderless">
-                    <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                        <Alert
-                            message="Cài đặt bảo mật"
-                            description="Quản lý các chính sách bảo mật cho hệ thống"
-                            type="warning"
-                            showIcon
-                        />
-
-                        <Form layout="vertical">
-                            <Form.Item label="Thời gian phiên đăng nhập (phút)">
-                                <Input type="number" defaultValue={60} size="large" />
-                            </Form.Item>
-
-                            <Form.Item label="Số lần đăng nhập sai tối đa">
-                                <Input type="number" defaultValue={5} size="large" />
-                            </Form.Item>
-
-                            <Form.Item label="Thời gian khóa tài khoản (phút)">
-                                <Input type="number" defaultValue={15} size="large" />
-                            </Form.Item>
-
-                            <Divider />
-
-                            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <Text strong>Yêu cầu xác thực 2 bước</Text>
-                                    <Switch />
-                                </div>
-
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <Text strong>Bắt buộc mật khẩu mạnh</Text>
-                                    <Switch defaultChecked />
-                                </div>
-
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <Text strong>Ghi nhật ký truy cập</Text>
-                                    <Switch defaultChecked />
-                                </div>
-                            </Space>
-
-                            <Divider />
-
-                            <Button type="primary" size="large" icon={<SaveOutlined />}>
-                                Lưu cài đặt
-                            </Button>
-                        </Form>
-                    </Space>
-                </Card>
-            ),
-        },
-        {
-            key: 'system',
-            label: (
-                <span>
-                    <ControlOutlined /> Hệ thống
-                </span>
-            ),
-            children: (
-                <Card variant="borderless">
-                    <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                        <Alert
-                            message="Cài đặt hệ thống"
-                            description="Cấu hình các tham số kỹ thuật của hệ thống"
-                            type="info"
-                            showIcon
-                        />
-
-                        <Form layout="vertical">
-                            <Form.Item label="Ngôn ngữ mặc định">
-                                <Select size="large" defaultValue="vi">
-                                    <Select.Option value="vi">Tiếng Việt</Select.Option>
-                                    <Select.Option value="en">English</Select.Option>
-                                </Select>
-                            </Form.Item>
-
-                            <Form.Item label="Múi giờ">
-                                <Select size="large" defaultValue="Asia/Ho_Chi_Minh">
-                                    <Select.Option value="Asia/Ho_Chi_Minh">Hồ Chí Minh (GMT+7)</Select.Option>
-                                    <Select.Option value="Asia/Bangkok">Bangkok (GMT+7)</Select.Option>
-                                </Select>
-                            </Form.Item>
-
-                            <Form.Item label="Đơn vị khoảng cách">
-                                <Select size="large" defaultValue="km">
-                                    <Select.Option value="km">Kilomet (km)</Select.Option>
-                                    <Select.Option value="mi">Dặm (mi)</Select.Option>
-                                </Select>
-                            </Form.Item>
-
-                            <Form.Item label="Định dạng ngày tháng">
-                                <Select size="large" defaultValue="DD/MM/YYYY">
-                                    <Select.Option value="DD/MM/YYYY">DD/MM/YYYY</Select.Option>
-                                    <Select.Option value="MM/DD/YYYY">MM/DD/YYYY</Select.Option>
-                                    <Select.Option value="YYYY-MM-DD">YYYY-MM-DD</Select.Option>
-                                </Select>
-                            </Form.Item>
-
-                            <Divider />
-
-                            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <Text strong>Chế độ bảo trì</Text>
-                                    <Switch />
-                                </div>
-
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <Text strong>Cho phép đăng ký mới</Text>
-                                    <Switch defaultChecked />
-                                </div>
-
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <Text strong>Ghi log debug</Text>
-                                    <Switch />
-                                </div>
-                            </Space>
-
-                            <Divider />
-
-                            <Button type="primary" size="large" icon={<SaveOutlined />}>
-                                Lưu cài đặt
-                            </Button>
-                        </Form>
-                    </Space>
-                </Card>
-            ),
-        },
-    ];
-
     return (
-        <Space direction="vertical" size="large" style={{ width: '100%' }}>
-            {/* Header */}
+        <div className="space-y-6">
             <div>
-                <Title level={2} style={{ margin: 0 }}>
-                    <SettingOutlined /> Cài đặt hệ thống
-                </Title>
-                <Text type="secondary">Quản lý cấu hình và thông tin tổ chức</Text>
+                <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-800 dark:text-white">
+                    <Settings size={24} /> Cài đặt hệ thống
+                </h1>
+                <p className="text-slate-500 mt-1">Quản lý cấu hình và thông tin tổ chức</p>
             </div>
 
-            {/* Tabs */}
-            <Card variant="borderless">
-                <Tabs defaultActiveKey="general" items={tabItems} size="large" />
+            <Card>
+                <CardBody>
+                    <Tabs value={tab} onChange={setTab}>
+                        <TabsList>
+                            <TabsTrigger value="general"><Building2 size={14} className="inline mr-1" /> Thông tin chung</TabsTrigger>
+                            <TabsTrigger value="notifications"><Bell size={14} className="inline mr-1" /> Thông báo</TabsTrigger>
+                            <TabsTrigger value="security"><Shield size={14} className="inline mr-1" /> Bảo mật</TabsTrigger>
+                            <TabsTrigger value="system"><Cog size={14} className="inline mr-1" /> Hệ thống</TabsTrigger>
+                        </TabsList>
+
+                        <TabsContent value="general">
+                            <form onSubmit={handleSubmit} className="space-y-4 max-w-2xl">
+                                <Input label="Tên tổ chức *" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required />
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Mô tả</label>
+                                    <textarea
+                                        value={formData.description}
+                                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                        rows={3}
+                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <Input label="Email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+                                    <Input label="Điện thoại" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
+                                </div>
+                                <Input label="Địa chỉ" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} />
+                                <Input label="Website" value={formData.website} onChange={(e) => setFormData({ ...formData, website: e.target.value })} />
+                                <div className="flex items-center gap-3 pt-2">
+                                    <Button type="submit" disabled={saving}>
+                                        <Save size={16} className="mr-1 inline" /> {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
+                                    </Button>
+                                    {saved && <span className="text-sm text-green-600">Đã lưu thành công</span>}
+                                </div>
+                            </form>
+                        </TabsContent>
+
+                        <TabsContent value="notifications">
+                            <div className="max-w-2xl">
+                                <ToggleRow label="Email thông báo" description="Gửi thông báo qua email khi có sự kiện quan trọng" defaultChecked />
+                                <ToggleRow label="SMS thông báo" description="Gửi tin nhắn SMS cho shipper và khách hàng" defaultChecked />
+                                <ToggleRow label="Push notification" description="Thông báo đẩy qua ứng dụng di động" defaultChecked />
+                                <ToggleRow label="Webhook" description="Gửi sự kiện đến endpoint bên ngoài" />
+                            </div>
+                        </TabsContent>
+
+                        <TabsContent value="security">
+                            <div className="max-w-2xl space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <Input label="Thời gian phiên đăng nhập (phút)" type="number" defaultValue={60} />
+                                    <Input label="Số lần đăng nhập sai tối đa" type="number" defaultValue={5} />
+                                </div>
+                                <ToggleRow label="Yêu cầu xác thực 2 bước" description="Bắt buộc 2FA cho tài khoản admin/carrier-ops" />
+                                <ToggleRow label="Bắt buộc mật khẩu mạnh" description="Yêu cầu mật khẩu tối thiểu 8 ký tự, có chữ hoa/số" defaultChecked />
+                                <ToggleRow label="Ghi nhật ký truy cập" description="Lưu log đăng nhập/đăng xuất" defaultChecked />
+                            </div>
+                        </TabsContent>
+
+                        <TabsContent value="system">
+                            <div className="max-w-2xl space-y-4">
+                                <ToggleRow label="Chế độ bảo trì" description="Tạm khóa truy cập cho carrier-ops/shipper" />
+                                <ToggleRow label="Cho phép đăng ký carrier mới" description="Carrier mới có thể tự đăng ký qua form" defaultChecked />
+                                <ToggleRow label="Ghi log debug" description="Bật log chi tiết cho môi trường dev" />
+                            </div>
+                        </TabsContent>
+                    </Tabs>
+                </CardBody>
             </Card>
-        </Space>
+        </div>
     );
 }

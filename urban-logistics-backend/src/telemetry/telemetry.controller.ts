@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, ParseIntPipe, Body, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { TelemetryService } from './telemetry.service';
 import { CreateTelemetryDto } from './dto';
@@ -20,10 +20,10 @@ export class TelemetryController {
 
     @Get('vehicle/:vehicleId') @ApiOperation({ summary: 'Get telemetry by vehicle' })
     @ApiQuery({ name: 'page', required: false }) @ApiQuery({ name: 'limit', required: false }) @ApiQuery({ name: 'from', required: false }) @ApiQuery({ name: 'to', required: false })
-    findByVehicle(@Param('vehicleId') vehicleId: string, @Query('page') page?: number, @Query('limit') limit?: number, @Query('from') from?: string, @Query('to') to?: string) {
+    findByVehicle(@Param('vehicleId', ParseIntPipe) vehicleId: number, @Query('page') page?: number, @Query('limit') limit?: number, @Query('from') from?: string, @Query('to') to?: string) {
         return this.service.findByVehicle(vehicleId, page, limit, from ? new Date(from) : undefined, to ? new Date(to) : undefined);
     }
 
     @Get('vehicle/:vehicleId/latest') @ApiOperation({ summary: 'Get latest telemetry for vehicle' })
-    getLatest(@Param('vehicleId') vehicleId: string) { return this.service.getLatest(vehicleId); }
+    getLatest(@Param('vehicleId', ParseIntPipe) vehicleId: number) { return this.service.getLatest(vehicleId); }
 }

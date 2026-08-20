@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard, RolesGuard } from '../common/guards';
 import { Roles } from '../common/decorators';
@@ -9,7 +9,7 @@ import { CreateRoadSegmentDto, UpdateRoadSegmentDto } from './dto';
 @ApiTags('road-segments')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin', 'regulator')
+@Roles('platform_admin', 'regulator')
 export class RoadSegmentController {
     constructor(private readonly service: RoadSegmentService) { }
 
@@ -29,19 +29,19 @@ export class RoadSegmentController {
 
     @Get(':id')
     @ApiOperation({ summary: 'Chi tiết đoạn đường' })
-    findOne(@Param('id') id: string) {
+    findOne(@Param('id', ParseIntPipe) id: number) {
         return this.service.findOne(id);
     }
 
     @Patch(':id')
     @ApiOperation({ summary: 'Cập nhật đoạn đường' })
-    update(@Param('id') id: string, @Body() dto: UpdateRoadSegmentDto) {
+    update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateRoadSegmentDto) {
         return this.service.update(id, dto);
     }
 
     @Delete(':id')
     @ApiOperation({ summary: 'Xóa đoạn đường' })
-    remove(@Param('id') id: string) {
+    remove(@Param('id', ParseIntPipe) id: number) {
         return this.service.remove(id);
     }
 }

@@ -29,7 +29,5 @@ export class PartnerCreateOrderDto {
 
     @ApiPropertyOptional() @IsOptional() @IsNumber() weightKg?: number;
     @ApiPropertyOptional() @IsOptional() @IsInt() itemCount?: number;
-    @ApiPropertyOptional() @IsOptional() @IsString() itemDescription?: string;
-    @ApiPropertyOptional() @IsOptional() @IsNumber() estimatedDistanceKm?: number;
-    @ApiPropertyOptional() @IsOptional() @IsInt() estimatedDurationMin?: number;
+    @ApiPropertyOptional() @IsOptional() @IsNumber() codAmount?: number;
 }

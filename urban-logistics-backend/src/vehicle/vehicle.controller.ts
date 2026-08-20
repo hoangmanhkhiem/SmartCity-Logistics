@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, ParseIntPipe, Body, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { VehicleService } from './vehicle.service';
 import { CreateVehicleDto, UpdateVehicleDto } from './dto';
@@ -19,11 +19,11 @@ export class VehicleController {
     findAll(@Query('page') page?: number, @Query('limit') limit?: number, @Query('carrierId') cId?: string, @Query('type') type?: string) { return this.service.findAll(page, limit, cId, type); }
 
     @Get(':id') @ApiOperation({ summary: 'Get vehicle by ID' })
-    findOne(@Param('id') id: string) { return this.service.findOne(id); }
+    findOne(@Param('id', ParseIntPipe) id: number) { return this.service.findOne(id); }
 
     @Patch(':id') @ApiOperation({ summary: 'Update vehicle' })
-    update(@Param('id') id: string, @Body() dto: UpdateVehicleDto) { return this.service.update(id, dto); }
+    update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateVehicleDto) { return this.service.update(id, dto); }
 
     @Delete(':id') @ApiOperation({ summary: 'Delete vehicle' })
-    remove(@Param('id') id: string) { return this.service.remove(id); }
+    remove(@Param('id', ParseIntPipe) id: number) { return this.service.remove(id); }
 }

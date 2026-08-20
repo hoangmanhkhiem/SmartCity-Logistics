@@ -1,54 +1,59 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Card, CardBody, CardHeader, DataTable, Badge, Select, Button, Input, Modal } from '@/components/ui';
-import { routeApi } from '@/lib/api';
-import { Route } from '@/types';
-import { Route as RouteIcon, Plus, Search, Edit, Trash2, MapPin, Clock, Leaf } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Card, CardBody, CardHeader, DataTable, Badge, Select, Button, Steps } from '@/components/ui';
 import type { Column } from '@/components/ui';
-import { viStatus, ROUTE_STATUS_OPTIONS } from '@/lib/status-labels';
+import { routeApi, zoneApi, vehicleApi, shipperApi } from '@/lib/api';
+import { useCurrentCarrier } from '@/lib/use-current-carrier';
+import { viStatus } from '@/lib/status-labels';
+import { formatCurrency, formatDate } from '@/lib/utils';
+import type { Route, Order, Zone, Vehicle, ShipperProfile } from '@/types';
+import { Route as RouteIcon, Plus, MapPin, Package, AlertTriangle, X } from 'lucide-react';
 
-const modeOptions = [
-    { value: '', label: 'Tất cả phương thức' },
-    { value: 'road', label: 'Đường bộ' },
-    { value: 'mixed', label: 'Kết hợp' },
-];
-
-const statusOptions = [{ value: '', label: 'Tất cả trạng thái' }, ...ROUTE_STATUS_OPTIONS];
-
-const statusVariant: Record<string, 'warning' | 'success' | 'info'> = {
+const statusVariant: Record<string, 'warning' | 'success' | 'info' | 'default'> = {
     planned: 'warning',
-    active: 'success',
-    completed: 'info',
+    in_progress: 'info',
+    completed: 'success',
+    cancelled: 'default',
 };
 
+const wizardSteps = [
+    { key: 'zone', label: 'Chọn khu vực' },
+    { key: 'orders', label: 'Chọn đơn' },
+    { key: 'assign', label: 'Xe & Shipper' },
+    { key: 'confirm', label: 'Xác nhận' },
+];
+
 export default function DeliveryRoutesPage() {
+    const { carrier } = useCurrentCarrier();
     const [routes, setRoutes] = useState<Route[]>([]);
     const [loading, setLoading] = useState(true);
-    const [page, setPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
-    const [modeFilter, setModeFilter] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
-    const [searchQuery, setSearchQuery] = useState('');
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingRoute, setEditingRoute] = useState<Route | null>(null);
-    const [formData, setFormData] = useState({
-        name: '',
-        mode: 'road',
-        description: '',
-    });
+
+    const [wizardOpen, setWizardOpen] = useState(false);
+    const [step, setStep] = useState(0);
+    const [zones, setZones] = useState<Zone[]>([]);
+    const [zoneId, setZoneId] = useState<number | null>(null);
+    const [pendingOrders, setPendingOrders] = useState<Order[]>([]);
+    const [selectedOrderIds, setSelectedOrderIds] = useState<Set<number>>(new Set());
+    const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+    const [shippers, setShippers] = useState<ShipperProfile[]>([]);
+    const [vehicleId, setVehicleId] = useState('');
+    const [shipperId, setShipperId] = useState('');
+    const [violations, setViolations] = useState<Array<{ restrictionId: number; severity: string; description: string | null }> | null>(null);
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const fetchRoutes = async () => {
+        if (!carrier) return;
         setLoading(true);
         try {
-            const params: Record<string, unknown> = { page, limit: 10 };
-            if (modeFilter) params.mode = modeFilter;
+            const params: Record<string, unknown> = { carrierId: carrier.id, limit: 20 };
             if (statusFilter) params.status = statusFilter;
-            const response = await routeApi.getAll(params);
-            setRoutes(response.data.data || response.data);
-            setTotalPages(response.data.meta?.totalPages || 1);
-        } catch (error) {
-            console.error('Failed to fetch routes:', error);
+            const res = await routeApi.getAll(params);
+            setRoutes(res.data.data ?? res.data);
+        } catch (e) {
+            console.error(e);
         } finally {
             setLoading(false);
         }
@@ -56,255 +61,305 @@ export default function DeliveryRoutesPage() {
 
     useEffect(() => {
         fetchRoutes();
-    }, [page, modeFilter, statusFilter]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [carrier, statusFilter]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    useEffect(() => {
+        zoneApi.getAll({ limit: 100 }).then((res) => setZones(res.data.data ?? res.data)).catch(() => setZones([]));
+    }, []);
+
+    const openWizard = () => {
+        setStep(0);
+        setZoneId(null);
+        setPendingOrders([]);
+        setSelectedOrderIds(new Set());
+        setVehicleId('');
+        setShipperId('');
+        setViolations(null);
+        setError(null);
+        setWizardOpen(true);
+    };
+
+    const goToOrders = async (zId: number) => {
+        if (!carrier) return;
+        setZoneId(zId);
         try {
-            if (editingRoute) {
-                await routeApi.update(editingRoute.id, formData);
-            } else {
-                await routeApi.create(formData);
+            const res = await routeApi.getUnassignedOrders(carrier.id, zId);
+            setPendingOrders(res.data);
+        } catch (e) {
+            console.error(e);
+            setPendingOrders([]);
+        }
+        setStep(1);
+    };
+
+    const goToAssign = async () => {
+        if (!carrier || !zoneId) return;
+        try {
+            const [vRes, sRes, suggestRes] = await Promise.all([
+                vehicleApi.getAll({ limit: 100 }),
+                shipperApi.listByCarrier(carrier.id),
+                routeApi.suggestVehicleShipper(carrier.id, zoneId),
+            ]);
+            const carrierVehicles = (vRes.data.data ?? vRes.data).filter((v: Vehicle) => v.carrierId === carrier.id && v.status === 'available');
+            setVehicles(carrierVehicles);
+            setShippers((sRes.data as ShipperProfile[]).filter((s) => s.status === 'on_shift'));
+            const suggestion = suggestRes.data?.suggestion;
+            if (suggestion) {
+                setVehicleId(String(suggestion.vehicleId));
+                setShipperId(String(suggestion.shipperId));
             }
-            setIsModalOpen(false);
-            setEditingRoute(null);
-            resetForm();
+        } catch (e) {
+            console.error(e);
+        }
+        setStep(2);
+    };
+
+    const submitRoute = async (force = false) => {
+        if (!carrier || !zoneId || !vehicleId || !shipperId) return;
+        setSubmitting(true);
+        setError(null);
+        try {
+            await routeApi.createFromOrders({
+                carrierId: carrier.id,
+                vehicleId: Number(vehicleId),
+                shipperId: Number(shipperId),
+                zoneId,
+                orderIds: [...selectedOrderIds],
+                shiftDate: new Date().toISOString().slice(0, 10),
+                force,
+            });
+            setWizardOpen(false);
             fetchRoutes();
-        } catch (error) {
-            console.error('Failed to save route:', error);
-        }
-    };
-
-    const handleEdit = (route: Route) => {
-        setEditingRoute(route);
-        setFormData({
-            name: route.name,
-            mode: route.mode,
-            description: route.description || '',
-        });
-        setIsModalOpen(true);
-    };
-
-    const handleDelete = async (id: string) => {
-        if (confirm('Bạn có chắc chắn muốn xóa tuyến này?')) {
-            try {
-                await routeApi.delete(id);
-                fetchRoutes();
-            } catch (error) {
-                console.error('Failed to delete route:', error);
+        } catch (e: unknown) {
+            const resp = (e as { response?: { data?: { message?: unknown; violations?: unknown } } })?.response?.data;
+            const violationList = (resp as { violations?: typeof violations })?.violations;
+            if (violationList?.length) {
+                setViolations(violationList);
+            } else {
+                const msg = resp?.message;
+                setError(Array.isArray(msg) ? msg.join(', ') : String(msg ?? 'Không thể tạo route'));
             }
+        } finally {
+            setSubmitting(false);
         }
     };
 
-    const resetForm = () => {
-        setFormData({ name: '', mode: 'road', description: '' });
+    const toggleOrder = (id: number) => {
+        setSelectedOrderIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
     };
 
     const columns: Column<Route>[] = [
-        { key: 'name', header: 'Tên tuyến' },
+        { key: 'code', header: 'Mã chuyến' },
+        { key: 'shiftDate', header: 'Ngày', render: (r) => formatDate(r.shiftDate) },
+        { key: 'vehicle', header: 'Xe', render: (r) => r.vehicle?.plate ?? '—' },
+        { key: 'shipper', header: 'Shipper', render: (r) => r.shipper?.name ?? '—' },
+        { key: 'zone', header: 'Khu vực', render: (r) => r.zone?.name ?? '—' },
         {
-            key: 'mode',
-            header: 'Phương thức',
-            render: (r) => modeOptions.find(m => m.value === r.mode)?.label || r.mode,
-        },
-        {
-            key: 'totalDistance',
-            header: 'Khoảng cách',
-            render: (r) => r.totalDistance ? `${(r.totalDistance / 1000).toFixed(1)} km` : '-',
-        },
-        {
-            key: 'totalDuration',
-            header: 'Thời gian',
-            render: (r) => r.totalDuration ? `${Math.round(r.totalDuration / 60)} phút` : '-',
-        },
-        {
-            key: 'estimatedCo2',
-            header: 'CO₂ (kg)',
-            render: (r) => r.estimatedCo2 ? r.estimatedCo2.toFixed(1) : '-',
+            key: 'stops',
+            header: 'Điểm dừng',
+            render: (r) => <Badge variant="info">{r.stops?.length ?? 0}</Badge>,
         },
         {
             key: 'status',
             header: 'Trạng thái',
-            render: (r) => (
-                <Badge variant={statusVariant[r.status] || 'default'}>
-                    {viStatus(r.status)}
-                </Badge>
-            ),
-        },
-        {
-            key: 'actions',
-            header: '',
-            render: (r) => (
-                <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => handleEdit(r)}>
-                        <Edit size={16} />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(r.id)}>
-                        <Trash2 size={16} className="text-red-500" />
-                    </Button>
-                </div>
-            ),
+            render: (r) => <Badge variant={statusVariant[r.status] || 'default'}>{viStatus(r.status)}</Badge>,
         },
     ];
 
-    const filteredRoutes = routes.filter((r) =>
-        r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.description?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    // Stats
-    const stats = {
-        total: routes.length,
-        active: routes.filter(r => r.status === 'active').length,
-        totalDistance: routes.reduce((sum, r) => sum + (r.totalDistance || 0), 0) / 1000,
-        totalCo2: routes.reduce((sum, r) => sum + (r.estimatedCo2 || 0), 0),
-    };
-
     return (
         <div className="space-y-6">
-            {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Quản lý tuyến đường</h1>
-                    <p className="text-gray-500 mt-1">Lập kế hoạch và tối ưu tuyến giao hàng</p>
+                    <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Chuyến giao (Route)</h1>
+                    <p className="text-slate-500 mt-1">Gom đơn theo khu vực thành chuyến giao cho 1 xe + 1 shipper</p>
                 </div>
-                <Button onClick={() => { resetForm(); setEditingRoute(null); setIsModalOpen(true); }}>
+                <Button onClick={openWizard} disabled={!carrier}>
                     <Plus size={18} className="mr-1" />
-                    Thêm tuyến
+                    Tạo chuyến mới
                 </Button>
             </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card>
-                    <CardBody className="flex items-center gap-3">
-                        <div className="p-3 bg-blue-100 dark:bg-blue-900/50 rounded-xl">
-                            <RouteIcon size={24} className="text-blue-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-gray-800 dark:text-white">{stats.total}</p>
-                            <p className="text-sm text-gray-500">Tổng tuyến</p>
-                        </div>
-                    </CardBody>
-                </Card>
-                <Card>
-                    <CardBody className="flex items-center gap-3">
-                        <div className="p-3 bg-green-100 dark:bg-green-900/50 rounded-xl">
-                            <RouteIcon size={24} className="text-green-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-gray-800 dark:text-white">{stats.active}</p>
-                            <p className="text-sm text-gray-500">Đang chạy</p>
-                        </div>
-                    </CardBody>
-                </Card>
-                <Card>
-                    <CardBody className="flex items-center gap-3">
-                        <div className="p-3 bg-purple-100 dark:bg-purple-900/50 rounded-xl">
-                            <MapPin size={24} className="text-purple-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-gray-800 dark:text-white">{stats.totalDistance.toFixed(0)}</p>
-                            <p className="text-sm text-gray-500">km tổng</p>
-                        </div>
-                    </CardBody>
-                </Card>
-                <Card>
-                    <CardBody className="flex items-center gap-3">
-                        <div className="p-3 bg-teal-100 dark:bg-teal-900/50 rounded-xl">
-                            <Leaf size={24} className="text-teal-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-gray-800 dark:text-white">{stats.totalCo2.toFixed(0)}</p>
-                            <p className="text-sm text-gray-500">kg CO₂</p>
-                        </div>
-                    </CardBody>
-                </Card>
-            </div>
-
-            {/* Filters */}
             <Card>
                 <CardBody className="flex flex-wrap gap-4 items-end">
-                    <div className="flex-1 min-w-[200px]">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                            <Input
-                                placeholder="Tìm tên tuyến..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-10"
-                            />
-                        </div>
-                    </div>
-                    <div className="w-40">
+                    <div className="w-48">
                         <Select
-                            options={modeOptions}
-                            value={modeFilter}
-                            onChange={(v) => { setModeFilter(v); setPage(1); }}
-                        />
-                    </div>
-                    <div className="w-40">
-                        <Select
-                            options={statusOptions}
+                            label="Trạng thái"
+                            options={[
+                                { value: '', label: 'Tất cả' },
+                                { value: 'planned', label: 'Đã lên kế hoạch' },
+                                { value: 'in_progress', label: 'Đang giao' },
+                                { value: 'completed', label: 'Hoàn thành' },
+                                { value: 'cancelled', label: 'Đã hủy' },
+                            ]}
                             value={statusFilter}
-                            onChange={(v) => { setStatusFilter(v); setPage(1); }}
+                            onChange={setStatusFilter}
                         />
                     </div>
                 </CardBody>
             </Card>
 
-            {/* Table */}
             <Card>
                 <CardHeader>
-                    <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Danh sách tuyến</h2>
+                    <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Danh sách chuyến giao</h2>
                 </CardHeader>
                 <CardBody>
-                    <DataTable
-                        columns={columns}
-                        data={filteredRoutes}
-                        loading={loading}
-                        emptyMessage="Chưa có tuyến đường nào"
-                        pagination={{ page, totalPages, onPageChange: setPage }}
-                    />
+                    <DataTable columns={columns} data={routes} loading={loading} emptyMessage="Chưa có chuyến giao nào" />
                 </CardBody>
             </Card>
 
-            {/* Modal */}
-            <Modal
-                isOpen={isModalOpen}
-                onClose={() => { setIsModalOpen(false); setEditingRoute(null); }}
-                title={editingRoute ? 'Chỉnh sửa tuyến' : 'Thêm tuyến mới'}
-            >
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <Input
-                        label="Tên tuyến *"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        required
-                        placeholder="VD: Tuyến Cầu Giấy - Thanh Xuân"
-                    />
-                    <Select
-                        label="Phương thức"
-                        options={modeOptions.slice(1)}
-                        value={formData.mode}
-                        onChange={(v) => setFormData({ ...formData, mode: v })}
-                    />
-                    <Input
-                        label="Mô tả"
-                        value={formData.description}
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        placeholder="Mô tả tuyến đường..."
-                    />
-                    <div className="flex justify-end gap-2 pt-4 border-t">
-                        <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
-                            Hủy
-                        </Button>
-                        <Button type="submit">
-                            {editingRoute ? 'Cập nhật' : 'Thêm tuyến'}
-                        </Button>
+            {wizardOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setWizardOpen(false)} />
+                    <div className="relative w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col rounded-2xl bg-white shadow-2xl dark:bg-slate-800">
+                        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-700">
+                            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Tạo chuyến giao mới</h2>
+                            <button onClick={() => setWizardOpen(false)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="px-6 pt-4">
+                            <Steps steps={wizardSteps} currentIndex={step} />
+                        </div>
+                        <div className="flex-1 overflow-y-auto px-6 py-4">
+                            {step === 0 && (
+                                <div className="space-y-3">
+                                    <p className="text-sm text-slate-600 dark:text-slate-400">Chọn khu vực cần gom đơn giao hàng:</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {zones.map((z) => (
+                                            <button
+                                                key={z.id}
+                                                onClick={() => goToOrders(z.id)}
+                                                className="flex items-center gap-2 rounded-lg border border-slate-200 p-3 text-left hover:border-indigo-500 hover:bg-indigo-50 dark:border-slate-600 dark:hover:bg-indigo-900/20"
+                                            >
+                                                <MapPin size={18} className="text-indigo-600 shrink-0" />
+                                                <span className="text-sm font-medium">{z.name}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {step === 1 && (
+                                <div className="space-y-3">
+                                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                                        Đơn hàng chưa gom trong khu vực đã chọn ({pendingOrders.length}):
+                                    </p>
+                                    {pendingOrders.length === 0 ? (
+                                        <p className="text-sm text-slate-500">Không có đơn nào đang chờ trong khu vực này.</p>
+                                    ) : (
+                                        <div className="space-y-2 max-h-80 overflow-y-auto">
+                                            {pendingOrders.map((o) => (
+                                                <label
+                                                    key={o.id}
+                                                    className="flex items-start gap-3 rounded-lg border border-slate-200 p-3 cursor-pointer hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700/50"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedOrderIds.has(o.id)}
+                                                        onChange={() => toggleOrder(o.id)}
+                                                        className="mt-1"
+                                                    />
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <Package size={14} className="text-slate-400" />
+                                                            <span className="font-mono text-sm font-medium">{o.orderNumber}</span>
+                                                            {(o.codAmount ?? 0) > 0 && (
+                                                                <Badge variant="warning" className="text-xs">COD {formatCurrency(o.codAmount!)}</Badge>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-xs text-slate-500 mt-0.5">{o.pickupAddress} → {o.deliveryAddress}</p>
+                                                    </div>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <div className="flex justify-between pt-2">
+                                        <Button variant="outline" onClick={() => setStep(0)}>Quay lại</Button>
+                                        <Button onClick={goToAssign} disabled={!selectedOrderIds.size}>
+                                            Tiếp tục ({selectedOrderIds.size} đơn)
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {step === 2 && (
+                                <div className="space-y-4">
+                                    <Select
+                                        label="Xe"
+                                        placeholder="Chọn xe"
+                                        options={vehicles.map((v) => ({ value: String(v.id), label: `${v.plate} — ${v.type}` }))}
+                                        value={vehicleId}
+                                        onChange={setVehicleId}
+                                    />
+                                    <Select
+                                        label="Shipper (đang trong ca)"
+                                        placeholder="Chọn shipper"
+                                        options={shippers.map((s) => ({ value: String(s.userId), label: s.user?.name ?? `Shipper #${s.userId}` }))}
+                                        value={shipperId}
+                                        onChange={setShipperId}
+                                    />
+                                    <div className="flex justify-between pt-2">
+                                        <Button variant="outline" onClick={() => setStep(1)}>Quay lại</Button>
+                                        <Button onClick={() => { setStep(3); }} disabled={!vehicleId || !shipperId}>
+                                            Tiếp tục
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {step === 3 && (
+                                <div className="space-y-4">
+                                    <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-900/40 space-y-1 text-sm">
+                                        <p><strong>Khu vực:</strong> {zones.find((z) => z.id === zoneId)?.name}</p>
+                                        <p><strong>Số đơn:</strong> {selectedOrderIds.size}</p>
+                                        <p><strong>Xe:</strong> {vehicles.find((v) => String(v.id) === vehicleId)?.plate}</p>
+                                        <p><strong>Shipper:</strong> {shippers.find((s) => String(s.userId) === shipperId)?.user?.name}</p>
+                                    </div>
+
+                                    {violations && violations.length > 0 && (
+                                        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-900/20">
+                                            <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-medium mb-2">
+                                                <AlertTriangle size={18} />
+                                                Cảnh báo vi phạm quy định giao thông
+                                            </div>
+                                            <ul className="text-sm text-amber-700 dark:text-amber-400 space-y-1 list-disc list-inside">
+                                                {violations.map((v) => (
+                                                    <li key={v.restrictionId}>{v.description ?? `Restriction #${v.restrictionId}`} ({v.severity})</li>
+                                                ))}
+                                            </ul>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="mt-3"
+                                                onClick={() => submitRoute(true)}
+                                                disabled={submitting}
+                                            >
+                                                Vẫn tạo chuyến (bỏ qua cảnh báo)
+                                            </Button>
+                                        </div>
+                                    )}
+
+                                    {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+
+                                    <div className="flex justify-between pt-2">
+                                        <Button variant="outline" onClick={() => setStep(2)}>Quay lại</Button>
+                                        <Button onClick={() => submitRoute(false)} disabled={submitting}>
+                                            <RouteIcon size={16} className="mr-1" />
+                                            {submitting ? 'Đang tạo...' : 'Xác nhận tạo chuyến'}
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </form>
-            </Modal>
+                </div>
+            )}
         </div>
     );
 }

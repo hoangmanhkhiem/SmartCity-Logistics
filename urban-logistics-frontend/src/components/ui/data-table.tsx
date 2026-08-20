@@ -25,7 +25,7 @@ interface DataTableProps<T> {
     className?: string;
 }
 
-export function DataTable<T extends { id?: string }>({
+export function DataTable<T extends { id?: string | number }>({
     columns,
     data,
     loading,
@@ -45,15 +45,15 @@ export function DataTable<T extends { id?: string }>({
 
     return (
         <div className={cn('w-full', className)}>
-            <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-                <table className="w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead className="bg-gray-50 dark:bg-gray-800">
+            <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+                <table className="w-full divide-y divide-slate-200 dark:divide-slate-800">
+                    <thead className="bg-slate-50 dark:bg-slate-800/60">
                         <tr>
                             {columns.map((col) => (
                                 <th
                                     key={col.key as string}
                                     className={cn(
-                                        'px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider',
+                                        'px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider',
                                         col.className
                                     )}
                                 >
@@ -62,19 +62,19 @@ export function DataTable<T extends { id?: string }>({
                             ))}
                         </tr>
                     </thead>
-                    <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                    <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-800">
                         {loading ? (
                             <tr>
                                 <td colSpan={columns.length} className="px-4 py-8 text-center">
-                                    <div className="flex items-center justify-center gap-2 text-gray-500">
-                                        <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                                    <div className="flex items-center justify-center gap-2 text-slate-500">
+                                        <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
                                         Đang tải...
                                     </div>
                                 </td>
                             </tr>
                         ) : data.length === 0 ? (
                             <tr>
-                                <td colSpan={columns.length} className="px-4 py-8 text-center text-gray-500">
+                                <td colSpan={columns.length} className="px-4 py-8 text-center text-slate-500">
                                     {emptyMessage}
                                 </td>
                             </tr>
@@ -85,14 +85,14 @@ export function DataTable<T extends { id?: string }>({
                                     onClick={() => onRowClick?.(item)}
                                     className={cn(
                                         'transition-colors',
-                                        onRowClick && 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800'
+                                        onRowClick && 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/70'
                                     )}
                                 >
                                     {columns.map((col) => (
                                         <td
                                             key={col.key as string}
                                             className={cn(
-                                                'px-4 py-3 text-sm text-gray-700 dark:text-gray-300',
+                                                'px-4 py-3 text-sm text-slate-600 dark:text-slate-300',
                                                 col.className
                                             )}
                                         >
@@ -111,7 +111,7 @@ export function DataTable<T extends { id?: string }>({
             {/* Pagination */}
             {pagination && pagination.totalPages > 1 && (
                 <div className="flex items-center justify-between mt-4 px-2">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                    <span className="text-sm text-slate-500 dark:text-slate-400">
                         Trang {pagination.page} / {pagination.totalPages}
                     </span>
                     <div className="flex items-center gap-1">

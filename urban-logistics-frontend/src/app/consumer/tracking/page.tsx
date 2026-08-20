@@ -13,9 +13,9 @@ import { viStatus } from '@/lib/status-labels';
 const Map = dynamic(() => import('@/components/shared/map'), {
     ssr: false,
     loading: () => (
-        <div className="h-80 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
-            <div className="flex items-center gap-2 text-gray-500">
-                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="h-80 bg-slate-100 dark:bg-slate-700 rounded-lg flex items-center justify-center">
+            <div className="flex items-center gap-2 text-slate-500">
+                <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
                 Đang tải bản đồ...
             </div>
         </div>
@@ -192,8 +192,8 @@ export default function ConsumerTrackingPage() {
         <div className="space-y-6">
             {/* Header */}
             <div>
-                <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Theo dõi đơn hàng</h1>
-                <p className="text-gray-500 mt-1">
+                <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Theo dõi đơn hàng</h1>
+                <p className="text-slate-500 mt-1">
                     Tra cứu theo mã vận đơn / SĐT bên dưới; hoặc chọn đơn trong danh sách của bạn để xem mô phỏng trên bản đồ.
                 </p>
             </div>
@@ -206,7 +206,7 @@ export default function ConsumerTrackingPage() {
                     <Card>
                         <CardHeader>
                             <div className="relative w-full">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                                 <Input
                                     placeholder="Tìm mã đơn hàng..."
                                     value={searchQuery}
@@ -217,12 +217,12 @@ export default function ConsumerTrackingPage() {
                         </CardHeader>
                         <CardBody className="space-y-2 max-h-[400px] overflow-y-auto">
                             {loading ? (
-                                <div className="flex items-center justify-center py-8 text-gray-500">
-                                    <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-2" />
+                                <div className="flex items-center justify-center py-8 text-slate-500">
+                                    <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mr-2" />
                                     Đang tải...
                                 </div>
                             ) : filteredOrders.length === 0 ? (
-                                <div className="text-center py-8 text-gray-500">
+                                <div className="text-center py-8 text-slate-500">
                                     <Package size={32} className="mx-auto mb-2 opacity-50" />
                                     <p>Không có đơn hàng</p>
                                 </div>
@@ -232,19 +232,19 @@ export default function ConsumerTrackingPage() {
                                         key={order.id}
                                         onClick={() => handleTrackOrder(order)}
                                         className={`p-3 rounded-lg border cursor-pointer transition-all ${selectedOrder?.id === order.id
-                                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                                            : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'
+                                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
+                                            : 'border-slate-200 dark:border-slate-700 hover:border-indigo-300'
                                             }`}
                                     >
                                         <div className="flex items-center justify-between">
-                                            <span className="font-medium text-gray-800 dark:text-white">
+                                            <span className="font-medium text-slate-800 dark:text-white">
                                                 {order.orderNumber}
                                             </span>
                                             <Badge variant={statusVariant[order.status] || 'default'}>
                                                 {viStatus(order.status)}
                                             </Badge>
                                         </div>
-                                        <p className="text-sm text-gray-500 mt-1 truncate">
+                                        <p className="text-sm text-slate-500 mt-1 truncate">
                                             {order.deliveryAddress || 'Chưa có địa chỉ'}
                                         </p>
                                         {['shipped', 'confirmed'].includes(order.status) && (
@@ -266,7 +266,7 @@ export default function ConsumerTrackingPage() {
                     <Card>
                         <CardHeader className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                                <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Vị trí giao hàng</h2>
+                                <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Vị trí giao hàng</h2>
                                 {routeCoordinates.length > 0 && (
                                     <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
                                         <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
@@ -299,16 +299,16 @@ export default function ConsumerTrackingPage() {
                         <CardBody>
                             <div className="h-96">
                                 {!selectedOrder ? (
-                                    <div className="h-full bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
-                                        <div className="text-center text-gray-500">
+                                    <div className="h-full bg-slate-100 dark:bg-slate-700 rounded-lg flex items-center justify-center">
+                                        <div className="text-center text-slate-500">
                                             <MapPin size={48} className="mx-auto mb-2 opacity-50" />
                                             <p>Chọn đơn hàng để xem vị trí</p>
                                         </div>
                                     </div>
                                 ) : trackingLoading ? (
-                                    <div className="h-full bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
-                                        <div className="flex items-center gap-2 text-gray-500">
-                                            <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                                    <div className="h-full bg-slate-100 dark:bg-slate-700 rounded-lg flex items-center justify-center">
+                                        <div className="flex items-center gap-2 text-slate-500">
+                                            <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
                                             Đang tải vị trí...
                                         </div>
                                     </div>
@@ -319,20 +319,21 @@ export default function ConsumerTrackingPage() {
                                         markers={mapMarkers}
                                         route={routeConfig}
                                         onRouteLoaded={handleRouteLoaded}
+                                        showZonesAndRestrictions
                                     />
                                 )}
                             </div>
                             {/* Progress bar */}
                             {selectedOrder && ['shipped', 'confirmed'].includes(selectedOrder.status) && routeCoordinates.length > 0 && (
                                 <div className="mt-3">
-                                    <div className="flex justify-between text-sm text-gray-500 mb-1">
+                                    <div className="flex justify-between text-sm text-slate-500 mb-1">
                                         <span>Điểm lấy hàng</span>
                                         <span>{Math.floor(progress * 100)}%</span>
                                         <span>Điểm giao</span>
                                     </div>
-                                    <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <div className="w-full bg-slate-200 rounded-full h-2">
                                         <div
-                                            className="bg-blue-600 h-2 rounded-full transition-all duration-100"
+                                            className="bg-indigo-600 h-2 rounded-full transition-all duration-100"
                                             style={{ width: `${progress * 100}%` }}
                                         />
                                     </div>
@@ -345,44 +346,44 @@ export default function ConsumerTrackingPage() {
                     {selectedOrder && (
                         <Card>
                             <CardHeader>
-                                <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Chi tiết theo dõi</h2>
+                                <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Chi tiết theo dõi</h2>
                             </CardHeader>
                             <CardBody>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                                        <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
-                                            <Package size={20} className="text-blue-600" />
+                                    <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                                        <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg">
+                                            <Package size={20} className="text-indigo-600" />
                                         </div>
                                         <div>
-                                            <p className="text-sm text-gray-500">Mã đơn hàng</p>
-                                            <p className="font-semibold text-gray-800 dark:text-white">{selectedOrder.orderNumber}</p>
+                                            <p className="text-sm text-slate-500">Mã đơn hàng</p>
+                                            <p className="font-semibold text-slate-800 dark:text-white">{selectedOrder.orderNumber}</p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                    <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
                                         <div className="p-2 bg-green-100 dark:bg-green-900/50 rounded-lg">
                                             <Truck size={20} className="text-green-600" />
                                         </div>
                                         <div>
-                                            <p className="text-sm text-gray-500">Tốc độ hiện tại</p>
-                                            <p className="font-semibold text-gray-800 dark:text-white">{telemetry?.speed || '--'} km/h</p>
+                                            <p className="text-sm text-slate-500">Tốc độ hiện tại</p>
+                                            <p className="font-semibold text-slate-800 dark:text-white">{telemetry?.speed || '--'} km/h</p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                    <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
                                         <div className="p-2 bg-purple-100 dark:bg-purple-900/50 rounded-lg">
                                             <MapPin size={20} className="text-purple-600" />
                                         </div>
                                         <div>
-                                            <p className="text-sm text-gray-500">Địa chỉ giao</p>
-                                            <p className="font-semibold text-gray-800 dark:text-white truncate max-w-[200px]">{selectedOrder.deliveryAddress || 'Chưa có'}</p>
+                                            <p className="text-sm text-slate-500">Địa chỉ giao</p>
+                                            <p className="font-semibold text-slate-800 dark:text-white truncate max-w-[200px]">{selectedOrder.deliveryAddress || 'Chưa có'}</p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                    <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
                                         <div className="p-2 bg-orange-100 dark:bg-orange-900/50 rounded-lg">
                                             <Clock size={20} className="text-orange-600" />
                                         </div>
                                         <div>
-                                            <p className="text-sm text-gray-500">Cập nhật lần cuối</p>
-                                            <p className="font-semibold text-gray-800 dark:text-white">{telemetry?.timestamp ? new Date(telemetry.timestamp).toLocaleTimeString('vi-VN') : '--:--'}</p>
+                                            <p className="text-sm text-slate-500">Cập nhật lần cuối</p>
+                                            <p className="font-semibold text-slate-800 dark:text-white">{telemetry?.timestamp ? new Date(telemetry.timestamp).toLocaleTimeString('vi-VN') : '--:--'}</p>
                                         </div>
                                     </div>
                                 </div>

@@ -1,9 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsArray, IsBoolean, IsInt, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CreateRestrictionDto {
-    @ApiPropertyOptional() @IsOptional() @IsUUID() roadSegmentId?: string;
-    @ApiPropertyOptional() @IsOptional() @IsUUID() zoneId?: string;
+    @ApiPropertyOptional() @IsOptional() @IsInt() roadSegmentId?: number;
+    @ApiPropertyOptional() @IsOptional() @IsInt() zoneId?: number;
     @ApiPropertyOptional() @IsOptional() @IsString() vehicleType?: string;
     @ApiPropertyOptional({ type: [String], description: 'Rỗng = mọi loại xe' })
     @IsOptional()

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, ParseIntPipe, Body, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { OrganizationService } from './organization.service';
 import { CreateOrganizationDto, UpdateOrganizationDto } from './dto';
@@ -28,19 +28,19 @@ export class OrganizationController {
 
     @Get(':id')
     @ApiOperation({ summary: 'Get organization by ID' })
-    findOne(@Param('id') id: string) {
+    findOne(@Param('id', ParseIntPipe) id: number) {
         return this.service.findOne(id);
     }
 
     @Patch(':id')
     @ApiOperation({ summary: 'Update organization' })
-    update(@Param('id') id: string, @Body() updateDto: UpdateOrganizationDto) {
+    update(@Param('id', ParseIntPipe) id: number, @Body() updateDto: UpdateOrganizationDto) {
         return this.service.update(id, updateDto);
     }
 
     @Delete(':id')
     @ApiOperation({ summary: 'Delete organization' })
-    remove(@Param('id') id: string) {
+    remove(@Param('id', ParseIntPipe) id: number) {
         return this.service.remove(id);
     }
 }

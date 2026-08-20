@@ -16,21 +16,13 @@ import {
     ChevronLeft,
     ChevronRight,
     ChevronDown,
-    Table2,
-    GitBranch,
     Scale,
     KeyRound,
     PackageSearch,
-    LayoutGrid,
     Warehouse,
     Shield,
-    FileText,
-    MessageSquare,
-    Star,
-    AlertCircle,
     Map,
-    Send,
-    Activity,
+    Navigation,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -74,10 +66,10 @@ function NavGroupComponent({ group, collapsed, pathname }: { group: NavGroup; co
                                 href={item.href}
                                 className={cn(
                                     'flex items-center justify-center px-3 py-2.5 rounded-lg',
-                                    'transition-all duration-200',
+                                    'transition-all duration-150',
                                     isActive
-                                        ? 'bg-blue-600 text-white'
-                                        : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                                        ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300'
+                                        : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200'
                                 )}
                                 title={item.label}
                             >
@@ -95,16 +87,16 @@ function NavGroupComponent({ group, collapsed, pathname }: { group: NavGroup; co
             <button
                 onClick={() => setExpanded(!expanded)}
                 className={cn(
-                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg',
-                    'transition-all duration-200',
-                    'text-gray-300 hover:bg-gray-800',
-                    hasActiveChild && 'text-blue-400'
+                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm',
+                    'transition-all duration-150',
+                    'text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
+                    hasActiveChild && 'text-indigo-600 dark:text-indigo-300'
                 )}
             >
                 {group.icon}
-                <span className="flex-1 text-left font-medium truncate">{group.label}</span>
+                <span className="flex-1 text-left font-semibold truncate">{group.label}</span>
                 <ChevronDown
-                    size={16}
+                    size={15}
                     className={cn(
                         'transition-transform duration-200',
                         expanded && 'rotate-180'
@@ -112,7 +104,7 @@ function NavGroupComponent({ group, collapsed, pathname }: { group: NavGroup; co
                 />
             </button>
             {expanded && (
-                <ul className="mt-1 ml-4 space-y-1">
+                <ul className="mt-1 ml-3 space-y-0.5 border-l border-slate-200 pl-3 dark:border-slate-700">
                     {group.items.map((item) => {
                         const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                         return (
@@ -121,10 +113,10 @@ function NavGroupComponent({ group, collapsed, pathname }: { group: NavGroup; co
                                     href={item.href}
                                     className={cn(
                                         'flex items-center gap-3 px-3 py-2 rounded-lg text-sm',
-                                        'transition-all duration-200',
+                                        'transition-all duration-150',
                                         isActive
-                                            ? 'bg-blue-600 text-white'
-                                            : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                                            ? 'bg-indigo-50 font-medium text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300'
+                                            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
                                     )}
                                 >
                                     {item.icon}
@@ -147,27 +139,39 @@ export function Sidebar({ title, navItems }: SidebarProps) {
         <aside
             className={cn(
                 'h-screen sticky top-0 flex flex-col',
-                'bg-gray-900 text-white',
+                'bg-white dark:bg-slate-950',
+                'border-r border-slate-200 dark:border-slate-800',
                 'transition-all duration-300',
                 collapsed ? 'w-16' : 'w-64'
             )}
         >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-700">
+            <div className="flex h-16 items-center justify-between px-4 border-b border-slate-200 dark:border-slate-800">
                 {!collapsed && (
-                    <h1 className="text-lg font-bold text-blue-400 truncate">{title}</h1>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-cyan-500 text-white">
+                            <Navigation size={16} />
+                        </span>
+                        <div className="min-w-0">
+                            <p className="truncate text-sm font-bold leading-tight text-slate-900 dark:text-white">{title}</p>
+                            <p className="text-[11px] font-medium text-slate-400">SmartCity Logistics</p>
+                        </div>
+                    </div>
                 )}
                 <button
                     onClick={() => setCollapsed(!collapsed)}
-                    className="p-1.5 rounded-lg hover:bg-gray-800 transition-colors"
+                    className={cn(
+                        'p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors dark:hover:bg-slate-800 dark:hover:text-slate-200',
+                        collapsed && 'mx-auto'
+                    )}
                 >
-                    {collapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+                    {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
                 </button>
             </div>
 
             {/* Navigation */}
             <nav className="flex-1 py-4 overflow-y-auto">
-                <ul className="space-y-1 px-2">
+                <ul className="space-y-0.5 px-2">
                     {navItems.map((item, index) => {
                         if (isNavGroup(item)) {
                             return (
@@ -186,11 +190,11 @@ export function Sidebar({ title, navItems }: SidebarProps) {
                                 <Link
                                     href={item.href}
                                     className={cn(
-                                        'flex items-center gap-3 px-3 py-2.5 rounded-lg',
-                                        'transition-all duration-200',
+                                        'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium',
+                                        'transition-all duration-150',
                                         isActive
-                                            ? 'bg-blue-600 text-white'
-                                            : 'text-gray-400 hover:bg-gray-800 hover:text-white',
+                                            ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300'
+                                            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
                                         collapsed && 'justify-center'
                                     )}
                                     title={collapsed ? item.label : undefined}
@@ -206,8 +210,8 @@ export function Sidebar({ title, navItems }: SidebarProps) {
 
             {/* Footer */}
             {!collapsed && (
-                <div className="p-4 border-t border-gray-700">
-                    <p className="text-xs text-gray-500">Urban Logistics v1.0</p>
+                <div className="p-4 border-t border-slate-200 dark:border-slate-800">
+                    <p className="text-[11px] font-medium text-slate-400">Urban Logistics · v1.0</p>
                 </div>
             )}
         </aside>
@@ -231,7 +235,7 @@ export const deliveryNavItems: NavConfig[] = [
         label: 'Quản lý Đội',
         icon: <Users size={20} />,
         items: [
-            { label: 'Tài xế', href: '/delivery/drivers', icon: <Users size={18} /> },
+            { label: 'Shipper', href: '/delivery/shippers', icon: <Users size={18} /> },
             { label: 'Đội xe', href: '/delivery/fleet', icon: <Truck size={18} /> },
         ],
     },
@@ -242,10 +246,15 @@ export const deliveryNavItems: NavConfig[] = [
         icon: <Package size={20} />,
         items: [
             { label: 'Đơn hàng', href: '/delivery/orders', icon: <Package size={18} /> },
-            { label: 'Tuyến đường', href: '/delivery/routes', icon: <Route size={18} /> },
-            { label: 'Theo dõi', href: '/delivery/tracking', icon: <PackageSearch size={18} /> },
+            { label: 'Chuyến giao (Route)', href: '/delivery/routes', icon: <Route size={18} /> },
+            { label: 'Giám sát', href: '/delivery/tracking', icon: <PackageSearch size={18} /> },
         ],
     },
+];
+
+export const shipperNavItems: NavConfig[] = [
+    { label: 'Route hôm nay', href: '/shipper/today', icon: <Route size={20} /> },
+    { label: 'Lịch sử', href: '/shipper/history', icon: <BarChart3 size={20} /> },
 ];
 
 export const regulatorNavItems: NavConfig[] = [
@@ -271,13 +280,12 @@ export const regulatorNavItems: NavConfig[] = [
         ],
     },
 
-    // Nhóm 3: Dữ liệu & Báo cáo
+    // Nhóm 3: Báo cáo
     {
-        label: 'Dữ liệu & Báo cáo',
+        label: 'Báo cáo',
         icon: <BarChart3 size={20} />,
         items: [
-            { label: 'Báo cáo', href: '/regulator/reports', icon: <BarChart3 size={18} /> },
-            { label: 'Dữ liệu nghiên cứu', href: '/regulator/research', icon: <Table2 size={18} /> },
+            { label: 'Báo cáo tổng hợp', href: '/regulator/reports', icon: <BarChart3 size={18} /> },
         ],
     },
 ];
@@ -286,56 +294,34 @@ export const logisticsNavItems: NavConfig[] = [
     // Quick access - Dashboard luôn ở trên cùng
     { label: 'Dashboard', href: '/logistics/dashboard', icon: <LayoutDashboard size={20} /> },
 
-    // Nhóm 1: Quản lý hệ thống
+    // Nhóm 1: Carrier & hệ thống
     {
-        label: 'Quản lý hệ thống',
+        label: 'Carrier & hệ thống',
         icon: <Settings size={20} />,
         items: [
+            { label: 'Carriers', href: '/logistics/carriers', icon: <Truck size={18} /> },
             { label: 'Người dùng & Vai trò', href: '/logistics/users', icon: <Users size={18} /> },
-            { label: 'API Keys', href: '/logistics/api-keys', icon: <KeyRound size={18} /> },
-            { label: 'Tích hợp', href: '/logistics/integrations', icon: <GitBranch size={18} /> },
+            { label: 'API Keys (B2B)', href: '/logistics/integrations', icon: <KeyRound size={18} /> },
             { label: 'Cài đặt', href: '/logistics/settings', icon: <Settings size={18} /> },
         ],
     },
 
-    // Nhóm 2: Nội dung & Cộng đồng
+    // Nhóm 2: Hạ tầng
     {
-        label: 'Nội dung & Cộng đồng',
-        icon: <MessageSquare size={20} />,
-        items: [
-            { label: 'Quản lý Trạm', href: '/logistics/stations', icon: <Building2 size={18} /> },
-            { label: 'Bài viết', href: '/logistics/articles', icon: <FileText size={18} /> },
-            { label: 'Đánh giá', href: '/logistics/reviews', icon: <Star size={18} /> },
-            { label: 'Báo lỗi', href: '/logistics/reports', icon: <AlertCircle size={18} /> },
-        ],
-    },
-
-    // Nhóm 3: Vận hành Logistics
-    {
-        label: 'Vận hành Logistics',
-        icon: <Truck size={20} />,
+        label: 'Hạ tầng',
+        icon: <Warehouse size={20} />,
         items: [
             { label: 'Cơ sở Logistics', href: '/logistics/facilities', icon: <Warehouse size={18} /> },
-            { label: 'Gợi ý Cơ sở', href: '/logistics/facility-suggest', icon: <MapPin size={18} /> },
-            { label: 'Đội xe', href: '/logistics/vehicles', icon: <Truck size={18} /> },
-            { label: 'Tuyến đường', href: '/logistics/routes', icon: <Route size={18} /> },
-            { label: 'Đơn hàng', href: '/logistics/orders', icon: <Package size={18} /> },
-            { label: 'Báo giá', href: '/logistics/quotes', icon: <BarChart3 size={18} /> },
-            { label: 'Tối ưu tuyến', href: '/logistics/optimize', icon: <GitBranch size={18} /> },
-            { label: 'Điều phối', href: '/logistics/dispatch', icon: <Send size={18} /> },
-            { label: 'Giám sát Realtime', href: '/logistics/monitor', icon: <Activity size={18} /> },
         ],
     },
 
-    // Nhóm 4: Quy định & Báo cáo
+    // Nhóm 3: Quy định toàn thành phố
     {
-        label: 'Quy định & Báo cáo',
+        label: 'Quy định toàn thành phố',
         icon: <Shield size={20} />,
         items: [
             { label: 'Vùng & Zone', href: '/logistics/zones', icon: <Map size={18} /> },
             { label: 'Quản lý cấm đường', href: '/logistics/restrictions', icon: <Scale size={18} /> },
-            { label: 'Báo cáo & KPI', href: '/logistics/reports-kpi', icon: <BarChart3 size={18} /> },
-            { label: 'Dữ liệu nghiên cứu', href: '/logistics/research', icon: <Table2 size={18} /> },
         ],
     },
 ];

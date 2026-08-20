@@ -33,9 +33,8 @@ export default function RegulatorCarriersPage() {
 
     const columns: Column<Carrier>[] = [
         { key: 'name', header: 'Tên đơn vị', render: (c) => <span className="font-medium">{c.name}</span> },
-        { key: 'scale', header: 'Quy mô' },
-        { key: 'vehicleCount', header: 'Số xe', render: (c) => c.vehicleCount || '-' },
-        { key: 'warehouseCount', header: 'Số kho', render: (c) => c.warehouseCount || '-' },
+        { key: 'serviceType', header: 'Loại hình', render: (c) => c.serviceType === 'last_mile' ? 'Last-mile nội đô' : c.serviceType },
+        { key: 'operatingZoneIds', header: 'Số khu vực phục vụ', render: (c) => c.operatingZoneIds?.length ?? 0 },
         { key: 'isActive', header: 'Trạng thái', render: (c) => <Badge variant={c.isActive ? 'success' : 'error'}>{c.isActive ? 'Hoạt động' : 'Ngưng'}</Badge> },
         { key: 'actions', header: '', render: (c) => <Button variant="ghost" size="sm" onClick={() => setSelectedCarrier(c)}><Eye size={16} /></Button> },
     ];
@@ -45,16 +44,16 @@ export default function RegulatorCarriersPage() {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Đơn vị vận tải</h1>
-                <p className="text-gray-500 mt-1">Danh sách các công ty vận tải đăng ký</p>
+                <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Đơn vị vận tải</h1>
+                <p className="text-slate-500 mt-1">Danh sách các công ty vận tải đăng ký</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-                <Card><CardBody className="flex items-center gap-3"><div className="p-3 bg-blue-100 rounded-xl"><Truck size={24} className="text-blue-600" /></div><div><p className="text-2xl font-bold">{carriers.length}</p><p className="text-sm text-gray-500">Tổng đơn vị</p></div></CardBody></Card>
-                <Card><CardBody className="flex items-center gap-3"><div className="p-3 bg-green-100 rounded-xl"><Truck size={24} className="text-green-600" /></div><div><p className="text-2xl font-bold">{carriers.filter(c => c.isActive).length}</p><p className="text-sm text-gray-500">Đang hoạt động</p></div></CardBody></Card>
+                <Card><CardBody className="flex items-center gap-3"><div className="p-3 bg-indigo-100 rounded-xl"><Truck size={24} className="text-indigo-600" /></div><div><p className="text-2xl font-bold">{carriers.length}</p><p className="text-sm text-slate-500">Tổng đơn vị</p></div></CardBody></Card>
+                <Card><CardBody className="flex items-center gap-3"><div className="p-3 bg-green-100 rounded-xl"><Truck size={24} className="text-green-600" /></div><div><p className="text-2xl font-bold">{carriers.filter(c => c.isActive).length}</p><p className="text-sm text-slate-500">Đang hoạt động</p></div></CardBody></Card>
             </div>
 
-            <Card><CardBody><div className="relative max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} /><Input placeholder="Tìm tên..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" /></div></CardBody></Card>
+            <Card><CardBody><div className="relative max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><Input placeholder="Tìm tên..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" /></div></CardBody></Card>
 
             <Card><CardHeader><h2 className="text-lg font-semibold">Danh sách đơn vị</h2></CardHeader><CardBody><DataTable columns={columns} data={filtered} loading={loading} emptyMessage="Chưa có đơn vị" pagination={{ page, totalPages, onPageChange: setPage }} /></CardBody></Card>
 
@@ -62,14 +61,14 @@ export default function RegulatorCarriersPage() {
                 {selectedCarrier && (
                     <div className="space-y-4">
                         <div className="flex items-center gap-4">
-                            <div className="w-14 h-14 bg-blue-500 rounded-xl flex items-center justify-center text-white"><Building2 size={28} /></div>
+                            <div className="w-14 h-14 bg-indigo-500 rounded-xl flex items-center justify-center text-white"><Building2 size={28} /></div>
                             <div><h3 className="text-lg font-semibold">{selectedCarrier.name}</h3><Badge variant={selectedCarrier.isActive ? 'success' : 'error'}>{selectedCarrier.isActive ? 'Hoạt động' : 'Ngưng'}</Badge></div>
                         </div>
                         <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                            <div><p className="text-sm text-gray-500">Quy mô</p><p className="font-medium">{selectedCarrier.scale || '-'}</p></div>
-                            <div><p className="text-sm text-gray-500">Số xe</p><p className="font-medium">{selectedCarrier.vehicleCount || 0}</p></div>
-                            <div><p className="text-sm text-gray-500">Số kho</p><p className="font-medium">{selectedCarrier.warehouseCount || 0}</p></div>
-                            <div><p className="text-sm text-gray-500">Liên hệ</p><p className="font-medium">{selectedCarrier.contactPhone || '-'}</p></div>
+                            <div><p className="text-sm text-slate-500">Loại hình</p><p className="font-medium">{selectedCarrier.serviceType === 'last_mile' ? 'Last-mile nội đô' : selectedCarrier.serviceType}</p></div>
+                            <div><p className="text-sm text-slate-500">Số khu vực phục vụ</p><p className="font-medium">{selectedCarrier.operatingZoneIds?.length ?? 0}</p></div>
+                            <div><p className="text-sm text-slate-500">Người liên hệ</p><p className="font-medium">{selectedCarrier.contactName || '-'}</p></div>
+                            <div><p className="text-sm text-slate-500">SĐT liên hệ</p><p className="font-medium">{selectedCarrier.contactPhone || '-'}</p></div>
                         </div>
                         <div className="flex justify-end pt-4 border-t"><Button onClick={() => setSelectedCarrier(null)}>Đóng</Button></div>
                     </div>

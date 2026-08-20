@@ -1,53 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import {
-    Card,
-    Table,
-    Button,
-    Space,
-    Tag,
-    Avatar,
-    Input,
-    Modal,
-    Form,
-    Select,
-    Switch,
-    Row,
-    Col,
-    Statistic,
-    Typography,
-    Drawer,
-    Descriptions,
-    Badge,
-} from 'antd';
-import {
-    UserOutlined,
-    PlusOutlined,
-    SearchOutlined,
-    EditOutlined,
-    DeleteOutlined,
-    MailOutlined,
-    PhoneOutlined,
-    TeamOutlined,
-    CheckCircleOutlined,
-    CloseCircleOutlined,
-} from '@ant-design/icons';
-import type { ColumnsType } from 'antd/es/table';
+import { Card, CardBody, CardHeader, DataTable, Badge, Button, Input, Drawer, Tag } from '@/components/ui';
 import { userApi } from '@/lib/api';
 import { User } from '@/types';
-
-const { Title, Text } = Typography;
-const { Search } = Input;
+import { Users as UsersIcon, Search, Eye, Mail, Phone, CheckCircle, XCircle } from 'lucide-react';
+import type { Column } from '@/components/ui';
 
 export default function UsersPage() {
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
-    const [drawerOpen, setDrawerOpen] = useState(false);
-    const [modalOpen, setModalOpen] = useState(false);
-    const [form] = Form.useForm();
 
     useEffect(() => {
         fetchUsers();
@@ -65,99 +29,47 @@ export default function UsersPage() {
         }
     };
 
-    const columns: ColumnsType<User> = [
+    const columns: Column<User>[] = [
         {
-            title: 'Người dùng',
-            dataIndex: 'name',
             key: 'name',
-            render: (text, record) => (
-                <Space>
-                    <Avatar
-                        style={{ backgroundColor: '#1677ff' }}
-                        icon={<UserOutlined />}
-                        src={record.avatarUrl}
-                    >
-                        {text?.charAt(0)?.toUpperCase()}
-                    </Avatar>
-                    <div>
-                        <div style={{ fontWeight: 500 }}>{text}</div>
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                            {record.email}
-                        </Text>
+            header: 'Người dùng',
+            render: (u) => (
+                <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0">
+                        {u.name?.charAt(0)?.toUpperCase() || 'U'}
                     </div>
-                </Space>
-            ),
-            sorter: (a, b) => (a.name || '').localeCompare(b.name || ''),
-        },
-        {
-            title: 'Điện thoại',
-            dataIndex: 'phone',
-            key: 'phone',
-            render: (phone) => phone || '—',
-        },
-        {
-            title: 'Vai trò',
-            key: 'role',
-            render: (_, record) => (
-                <Space size={[0, 8]} wrap>
-                    {record.memberships?.map((m, i) => (
-                        <Tag key={i} color="blue">
-                            {m.role?.name || 'N/A'}
-                        </Tag>
-                    ))}
-                </Space>
-            ),
-        },
-        {
-            title: 'Tổ chức',
-            key: 'org',
-            render: (_, record) => (
-                <div>
-                    {record.memberships?.[0]?.organization?.name || '—'}
+                    <div className="min-w-0">
+                        <p className="font-medium truncate">{u.name}</p>
+                        <p className="text-xs text-slate-500 truncate">{u.email}</p>
+                    </div>
                 </div>
             ),
         },
+        { key: 'phone', header: 'Điện thoại', render: (u) => u.phone || '—' },
         {
-            title: 'Trạng thái',
-            dataIndex: 'isActive',
+            key: 'role',
+            header: 'Vai trò',
+            render: (u) => (
+                <div className="flex flex-wrap gap-1">
+                    {u.memberships?.map((m, i) => (
+                        <Tag key={i} color="blue">{m.role?.name || 'N/A'}</Tag>
+                    ))}
+                </div>
+            ),
+        },
+        { key: 'org', header: 'Tổ chức', render: (u) => u.memberships?.[0]?.organization?.name || '—' },
+        {
             key: 'isActive',
-            render: (isActive) =>
-                isActive ? (
-                    <Badge status="success" text="Hoạt động" />
-                ) : (
-                    <Badge status="error" text="Ngưng" />
-                ),
-            filters: [
-                { text: 'Hoạt động', value: true },
-                { text: 'Ngưng', value: false },
-            ],
-            onFilter: (value, record) => record.isActive === value,
+            header: 'Trạng thái',
+            render: (u) => <Badge variant={u.isActive ? 'success' : 'error'}>{u.isActive ? 'Hoạt động' : 'Ngưng'}</Badge>,
         },
         {
-            title: 'Thao tác',
-            key: 'action',
-            render: (_, record) => (
-                <Space size="small">
-                    <Button
-                        type="link"
-                        size="small"
-                        icon={<EditOutlined />}
-                        onClick={() => {
-                            setSelectedUser(record);
-                            setDrawerOpen(true);
-                        }}
-                    >
-                        Xem
-                    </Button>
-                    <Button
-                        type="link"
-                        size="small"
-                        danger
-                        icon={<DeleteOutlined />}
-                    >
-                        Xóa
-                    </Button>
-                </Space>
+            key: 'actions',
+            header: '',
+            render: (u) => (
+                <Button variant="ghost" size="sm" onClick={() => setSelectedUser(u)}>
+                    <Eye size={16} />
+                </Button>
             ),
         },
     ];
@@ -171,186 +83,113 @@ export default function UsersPage() {
     const activeCount = users.filter((u) => u.isActive).length;
 
     return (
-        <Space direction="vertical" size="large" style={{ width: '100%' }}>
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                    <Title level={2} style={{ margin: 0 }}>
-                        Người dùng & Vai trò
-                    </Title>
-                    <Text type="secondary">Quản lý nhân viên và phân quyền hệ thống</Text>
-                </div>
-                <Button type="primary" icon={<PlusOutlined />} size="large" onClick={() => setModalOpen(true)}>
-                    Thêm người dùng
-                </Button>
+        <div className="space-y-6">
+            <div>
+                <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Người dùng & Vai trò</h1>
+                <p className="text-slate-500 mt-1">Quản lý tài khoản và phân quyền trên nền tảng</p>
             </div>
 
-            {/* Statistics */}
-            <Row gutter={16}>
-                <Col xs={24} sm={8}>
-                    <Card variant="borderless">
-                        <Statistic
-                            title="Tổng nhân viên"
-                            value={users.length}
-                            prefix={<TeamOutlined style={{ color: '#1677ff' }} />}
-                        />
-                    </Card>
-                </Col>
-                <Col xs={24} sm={8}>
-                    <Card variant="borderless">
-                        <Statistic
-                            title="Đang hoạt động"
-                            value={activeCount}
-                            prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
-                            valueStyle={{ color: '#52c41a' }}
-                        />
-                    </Card>
-                </Col>
-                <Col xs={24} sm={8}>
-                    <Card variant="borderless">
-                        <Statistic
-                            title="Ngưng hoạt động"
-                            value={users.length - activeCount}
-                            prefix={<CloseCircleOutlined style={{ color: '#ff4d4f' }} />}
-                            valueStyle={{ color: '#ff4d4f' }}
-                        />
-                    </Card>
-                </Col>
-            </Row>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Card>
+                    <CardBody className="flex items-center gap-3">
+                        <div className="p-3 bg-indigo-100 dark:bg-indigo-900/50 rounded-xl">
+                            <UsersIcon size={24} className="text-indigo-600" />
+                        </div>
+                        <div>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{users.length}</p>
+                            <p className="text-sm text-slate-500">Tổng người dùng</p>
+                        </div>
+                    </CardBody>
+                </Card>
+                <Card>
+                    <CardBody className="flex items-center gap-3">
+                        <div className="p-3 bg-green-100 dark:bg-green-900/50 rounded-xl">
+                            <CheckCircle size={24} className="text-green-600" />
+                        </div>
+                        <div>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{activeCount}</p>
+                            <p className="text-sm text-slate-500">Đang hoạt động</p>
+                        </div>
+                    </CardBody>
+                </Card>
+                <Card>
+                    <CardBody className="flex items-center gap-3">
+                        <div className="p-3 bg-red-100 dark:bg-red-900/50 rounded-xl">
+                            <XCircle size={24} className="text-red-600" />
+                        </div>
+                        <div>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{users.length - activeCount}</p>
+                            <p className="text-sm text-slate-500">Ngưng hoạt động</p>
+                        </div>
+                    </CardBody>
+                </Card>
+            </div>
 
-            {/* Table */}
             <Card>
-                <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                    <Search
-                        placeholder="Tìm kiếm theo tên hoặc email..."
-                        allowClear
-                        enterButton={<SearchOutlined />}
-                        size="large"
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        style={{ maxWidth: 500 }}
-                    />
-                    <Table
-                        columns={columns}
-                        dataSource={filteredUsers}
-                        loading={loading}
-                        rowKey="id"
-                        pagination={{
-                            pageSize: 10,
-                            showSizeChanger: true,
-                            showTotal: (total) => `Tổng ${total} người dùng`,
-                        }}
-                    />
-                </Space>
+                <CardBody>
+                    <div className="relative max-w-md">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <Input
+                            placeholder="Tìm tên hoặc email..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-10"
+                        />
+                    </div>
+                </CardBody>
             </Card>
 
-            {/* User Detail Drawer */}
-            <Drawer
-                title="Thông tin người dùng"
-                placement="right"
-                width={500}
-                onClose={() => setDrawerOpen(false)}
-                open={drawerOpen}
-            >
+            <Card>
+                <CardHeader>
+                    <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Danh sách người dùng</h2>
+                </CardHeader>
+                <CardBody>
+                    <DataTable columns={columns} data={filteredUsers} loading={loading} emptyMessage="Chưa có người dùng" />
+                </CardBody>
+            </Card>
+
+            <Drawer isOpen={!!selectedUser} onClose={() => setSelectedUser(null)} title="Thông tin người dùng">
                 {selectedUser && (
-                    <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                        <div style={{ textAlign: 'center' }}>
-                            <Avatar
-                                size={80}
-                                style={{ backgroundColor: '#1677ff' }}
-                                icon={<UserOutlined />}
-                                src={selectedUser.avatarUrl}
-                            >
-                                {selectedUser.name?.charAt(0)?.toUpperCase()}
-                            </Avatar>
-                            <Title level={4} style={{ marginTop: 16, marginBottom: 4 }}>
-                                {selectedUser.name}
-                            </Title>
-                            <Tag color={selectedUser.isActive ? 'success' : 'error'}>
+                    <div className="space-y-6">
+                        <div className="text-center">
+                            <div className="w-20 h-20 mx-auto bg-indigo-500 rounded-full flex items-center justify-center text-white text-2xl font-bold">
+                                {selectedUser.name?.charAt(0)?.toUpperCase() || 'U'}
+                            </div>
+                            <h3 className="mt-3 text-lg font-semibold text-slate-900 dark:text-white">{selectedUser.name}</h3>
+                            <Badge variant={selectedUser.isActive ? 'success' : 'error'} className="mt-1">
                                 {selectedUser.isActive ? 'Hoạt động' : 'Ngưng'}
-                            </Tag>
+                            </Badge>
                         </div>
 
-                        <Descriptions column={1} bordered>
-                            <Descriptions.Item label={<><MailOutlined /> Email</>}>
-                                {selectedUser.email}
-                            </Descriptions.Item>
-                            <Descriptions.Item label={<><PhoneOutlined /> Điện thoại</>}>
-                                {selectedUser.phone || '—'}
-                            </Descriptions.Item>
-                            <Descriptions.Item label="Vai trò">
-                                <Space size={[0, 8]} wrap>
+                        <div className="space-y-3 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
+                            <div className="flex items-center gap-2 text-sm">
+                                <Mail size={16} className="text-slate-400" />
+                                <span>{selectedUser.email}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm">
+                                <Phone size={16} className="text-slate-400" />
+                                <span>{selectedUser.phone || '—'}</span>
+                            </div>
+                            <div>
+                                <p className="text-sm text-slate-500 mb-1">Vai trò</p>
+                                <div className="flex flex-wrap gap-1">
                                     {selectedUser.memberships?.map((m, i) => (
-                                        <Tag key={i} color="blue">
-                                            {m.role?.name || 'N/A'}
-                                        </Tag>
+                                        <Tag key={i} color="blue">{m.role?.name || 'N/A'}</Tag>
                                     ))}
-                                </Space>
-                            </Descriptions.Item>
-                            <Descriptions.Item label="Tổ chức">
-                                {selectedUser.memberships?.[0]?.organization?.name || '—'}
-                            </Descriptions.Item>
-                        </Descriptions>
+                                </div>
+                            </div>
+                            <div>
+                                <p className="text-sm text-slate-500">Tổ chức</p>
+                                <p className="font-medium">{selectedUser.memberships?.[0]?.organization?.name || '—'}</p>
+                            </div>
+                        </div>
 
-                        <Space>
-                            <Button type="primary" icon={<EditOutlined />}>
-                                Chỉnh sửa
-                            </Button>
-                            <Button danger icon={<DeleteOutlined />}>
-                                Xóa người dùng
-                            </Button>
-                        </Space>
-                    </Space>
+                        <div className="flex justify-end">
+                            <Button onClick={() => setSelectedUser(null)}>Đóng</Button>
+                        </div>
+                    </div>
                 )}
             </Drawer>
-
-            {/* Add User Modal */}
-            <Modal
-                title="Thêm người dùng mới"
-                open={modalOpen}
-                onCancel={() => {
-                    setModalOpen(false);
-                    form.resetFields();
-                }}
-                onOk={() => form.submit()}
-                width={600}
-            >
-                <Form form={form} layout="vertical" onFinish={(values) => console.log(values)}>
-                    <Form.Item
-                        label="Họ tên"
-                        name="name"
-                        rules={[{ required: true, message: 'Vui lòng nhập họ tên' }]}
-                    >
-                        <Input prefix={<UserOutlined />} placeholder="Nhập họ tên" />
-                    </Form.Item>
-
-                    <Form.Item
-                        label="Email"
-                        name="email"
-                        rules={[
-                            { required: true, message: 'Vui lòng nhập email' },
-                            { type: 'email', message: 'Email không hợp lệ' },
-                        ]}
-                    >
-                        <Input prefix={<MailOutlined />} placeholder="email@example.com" />
-                    </Form.Item>
-
-                    <Form.Item label="Điện thoại" name="phone">
-                        <Input prefix={<PhoneOutlined />} placeholder="0987654321" />
-                    </Form.Item>
-
-                    <Form.Item label="Vai trò" name="role" rules={[{ required: true }]}>
-                        <Select placeholder="Chọn vai trò">
-                            <Select.Option value="admin">Admin</Select.Option>
-                            <Select.Option value="manager">Manager</Select.Option>
-                            <Select.Option value="staff">Staff</Select.Option>
-                        </Select>
-                    </Form.Item>
-
-                    <Form.Item label="Trạng thái" name="isActive" valuePropName="checked" initialValue={true}>
-                        <Switch checkedChildren="Hoạt động" unCheckedChildren="Ngưng" />
-                    </Form.Item>
-                </Form>
-            </Modal>
-        </Space>
+        </div>
     );
 }

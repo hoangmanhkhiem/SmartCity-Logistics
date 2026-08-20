@@ -1,9 +1,9 @@
-import { IsString, IsOptional, IsBoolean, IsNumber, IsUUID, IsInt } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsNumber, IsInt } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateFacilityDto {
-    @ApiProperty() @IsUUID() organizationId: string;
-    @ApiPropertyOptional() @IsOptional() @IsUUID() zoneId?: string;
+    @ApiProperty() @IsInt() organizationId: number;
+    @ApiPropertyOptional() @IsOptional() @IsInt() zoneId?: number;
     @ApiProperty() @IsString() name: string;
     @ApiProperty() @IsString() kind: string; // hub, warehouse, charging_station, fuel_station, mfc
     @ApiProperty() @IsNumber() latitude: number;
@@ -16,7 +16,7 @@ export class CreateFacilityDto {
 }
 
 export class UpdateFacilityDto {
-    @ApiPropertyOptional() @IsOptional() @IsUUID() zoneId?: string;
+    @ApiPropertyOptional() @IsOptional() @IsInt() zoneId?: number;
     @ApiPropertyOptional() @IsOptional() @IsString() name?: string;
     @ApiPropertyOptional() @IsOptional() @IsString() kind?: string;
     @ApiPropertyOptional() @IsOptional() @IsNumber() latitude?: number;

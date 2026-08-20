@@ -28,7 +28,7 @@ export function Select({
     return (
         <div className="w-full">
             {label && (
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     {label}
                 </label>
             )}
@@ -37,10 +37,10 @@ export function Select({
                 onChange={(e) => onChange?.(e.target.value)}
                 className={cn(
                     'w-full px-3 py-2 rounded-lg border transition-colors',
-                    'bg-white dark:bg-gray-800',
-                    'border-gray-300 dark:border-gray-600',
-                    'text-gray-900 dark:text-white',
-                    'focus:ring-2 focus:ring-blue-500 focus:border-blue-500',
+                    'bg-white dark:bg-slate-900',
+                    'border-slate-300 dark:border-slate-700',
+                    'text-slate-900 dark:text-white',
+                    'focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500',
                     'disabled:opacity-50 disabled:cursor-not-allowed',
                     error && 'border-red-500 focus:ring-red-500',
                     className

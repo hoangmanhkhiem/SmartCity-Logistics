@@ -1,8 +1,8 @@
-import { IsUUID, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsInt, IsNumber, IsOptional, IsString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateTelemetryDto {
-    @ApiProperty() @IsUUID() vehicleId: string;
+    @ApiProperty() @IsInt() vehicleId: number;
     @ApiProperty() @IsNumber() latitude: number;
     @ApiProperty() @IsNumber() longitude: number;
     @ApiPropertyOptional() @IsOptional() @IsNumber() speed?: number;

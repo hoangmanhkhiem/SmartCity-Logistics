@@ -118,7 +118,7 @@ export class AuthService {
 
     async validateUser(userId: string) {
         const user = await this.prisma.user.findUnique({
-            where: { id: userId },
+            where: { id: Number(userId) },
             include: {
                 memberships: {
                     include: {
@@ -145,8 +145,8 @@ export class AuthService {
         return userWithoutPassword;
     }
 
-    private generateToken(userId: string, email: string) {
-        const payload = { sub: userId, email };
+    private generateToken(userId: number, email: string) {
+        const payload = { sub: String(userId), email };
         const accessToken = this.jwtService.sign(payload);
 
         return {

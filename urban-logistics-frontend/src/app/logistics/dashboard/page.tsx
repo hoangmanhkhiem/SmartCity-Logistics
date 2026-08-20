@@ -1,33 +1,74 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Row, Col, Card, Statistic, Progress, Space, Typography, Alert, Spin, Table, Tag, Divider } from 'antd';
+import Link from 'next/link';
+import { Card, CardBody, CardHeader, Badge, Select, DatePicker } from '@/components/ui';
 import {
-    ShoppingOutlined,
-    CarOutlined,
-    EnvironmentOutlined,
-    RiseOutlined,
-    FallOutlined,
-    WarningOutlined,
-    CheckCircleOutlined,
-    ClockCircleOutlined,
-    ThunderboltOutlined,
-} from '@ant-design/icons';
-import { analyticsApi } from '@/lib/api';
+    Package,
+    Truck,
+    Leaf,
+    AlertTriangle,
+    Zap,
+    Route as RouteIcon,
+    Warehouse,
+    Gauge,
+    TrendingUp,
+} from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { analyticsApi, carrierApi } from '@/lib/api';
+import { viStatus } from '@/lib/status-labels';
+import type { Carrier } from '@/types';
 
-const { Title, Text } = Typography;
+interface TrendPoint {
+    snapshotDate: string;
+    ordersTotal: number;
+    ordersDelivered: number;
+    estimatedCo2Grams: number | null;
+}
+
+function toDateInputValue(d: Date): string {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 type PlatformSummary = {
     orders?: { total?: number; byStatus?: Record<string, number> };
     vehicles?: { byStatus?: Record<string, number> };
+    routes?: { byStatus?: Record<string, number> };
     environment?: { estimatedCo2GramsTotal?: number };
-    operations?: { unassignedLegs?: number; telemetryPointsLast24h?: number };
+    operations?: { unassignedOrders?: number; telemetryPointsLast24h?: number };
 };
+
+const statusBadgeVariant: Record<string, 'default' | 'success' | 'warning' | 'error' | 'info'> = {
+    pending: 'warning',
+    assigned: 'info',
+    in_transit: 'info',
+    delivered: 'success',
+    failed: 'error',
+    cancelled: 'error',
+    available: 'success',
+    in_use: 'info',
+    maintenance: 'warning',
+    planned: 'default',
+    in_progress: 'info',
+    completed: 'success',
+};
+
+function sumValues(obj?: Record<string, number>): number {
+    return obj ? Object.values(obj).reduce((a, b) => a + b, 0) : 0;
+}
 
 export default function LogisticsDashboard() {
     const [summary, setSummary] = useState<PlatformSummary | null>(null);
     const [loading, setLoading] = useState(true);
     const [summaryErr, setSummaryErr] = useState(false);
+
+    const [carriers, setCarriers] = useState<Carrier[]>([]);
+    const [carrierFilter, setCarrierFilter] = useState('');
+    const [fromDate, setFromDate] = useState(() => toDateInputValue(new Date(Date.now() - 29 * 86400000)));
+    const [toDate, setToDate] = useState(() => toDateInputValue(new Date()));
+    const [trend, setTrend] = useState<TrendPoint[]>([]);
+    const [trendLoading, setTrendLoading] = useState(true);
 
     useEffect(() => {
         analyticsApi
@@ -41,259 +82,295 @@ export default function LogisticsDashboard() {
                 setSummaryErr(true);
             })
             .finally(() => setLoading(false));
+        carrierApi.getAll({ limit: 100 }).then((r) => setCarriers(r.data.data ?? r.data)).catch(() => setCarriers([]));
     }, []);
 
-    const vehicleTotal = summary?.vehicles?.byStatus
-        ? Object.values(summary.vehicles.byStatus).reduce((a, b) => a + b, 0)
-        : 0;
+    useEffect(() => {
+        setTrendLoading(true);
+        analyticsApi
+            .getTrend({
+                carrierId: carrierFilter ? Number(carrierFilter) : undefined,
+                from: fromDate ? new Date(fromDate).toISOString() : undefined,
+                to: toDate ? new Date(toDate).toISOString() : undefined,
+            })
+            .then((r) => setTrend(r.data ?? []))
+            .catch(() => setTrend([]))
+            .finally(() => setTrendLoading(false));
+    }, [carrierFilter, fromDate, toDate]);
+
+    const chartData = trend.map((t) => ({
+        date: new Date(t.snapshotDate).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }),
+        'Tổng đơn': t.ordersTotal,
+        'Đã giao': t.ordersDelivered,
+        'CO₂ (kg)': t.estimatedCo2Grams ? Math.round(t.estimatedCo2Grams / 1000) : 0,
+    }));
+
+    const vehicleTotal = sumValues(summary?.vehicles?.byStatus);
+    const routeTotal = sumValues(summary?.routes?.byStatus);
+    const availableVehicles = summary?.vehicles?.byStatus?.available || 0;
+    const vehicleAvailablePct = vehicleTotal > 0 ? Math.round((availableVehicles / vehicleTotal) * 100) : 0;
 
     const co2Tons = summary?.environment?.estimatedCo2GramsTotal
         ? (summary.environment.estimatedCo2GramsTotal / 1_000_000).toFixed(2)
         : '0';
 
-    // Mock data for charts
-    const recentOrders = [
-        { key: '1', id: 'ORD-001', customer: 'Công ty ABC', status: 'delivered', time: '10:30' },
-        { key: '2', id: 'ORD-002', customer: 'Cửa hàng XYZ', status: 'in_transit', time: '11:45' },
-        { key: '3', id: 'ORD-003', customer: 'Nhà máy DEF', status: 'pending', time: '12:15' },
-        { key: '4', id: 'ORD-004', customer: 'Siêu thị GHI', status: 'delivered', time: '13:20' },
-        { key: '5', id: 'ORD-005', customer: 'Kho JKL', status: 'in_transit', time: '14:00' },
-    ];
-
-    const columns = [
-        {
-            title: 'Mã đơn',
-            dataIndex: 'id',
-            key: 'id',
-        },
-        {
-            title: 'Khách hàng',
-            dataIndex: 'customer',
-            key: 'customer',
-        },
-        {
-            title: 'Trạng thái',
-            dataIndex: 'status',
-            key: 'status',
-            render: (status: string) => {
-                const statusConfig: Record<string, { color: string; label: string; icon: React.ReactNode }> = {
-                    delivered: { color: 'success', label: 'Đã giao', icon: <CheckCircleOutlined /> },
-                    in_transit: { color: 'processing', label: 'Đang giao', icon: <ClockCircleOutlined /> },
-                    pending: { color: 'warning', label: 'Chờ xử lý', icon: <WarningOutlined /> },
-                };
-                const config = statusConfig[status] || statusConfig.pending;
-                return <Tag color={config.color} icon={config.icon}>{config.label}</Tag>;
-            },
-        },
-        {
-            title: 'Thời gian',
-            dataIndex: 'time',
-            key: 'time',
-        },
-    ];
-
     if (loading) {
         return (
-            <div style={{ textAlign: 'center', padding: '100px 0' }}>
-                <Spin size="large" />
-                <div style={{ marginTop: 16, color: '#666' }}>Đang tải dữ liệu...</div>
+            <div className="flex flex-col items-center justify-center py-24 gap-3">
+                <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                <p className="text-slate-500">Đang tải dữ liệu...</p>
             </div>
         );
     }
 
     return (
-        <Space direction="vertical" size="large" style={{ width: '100%', paddingBottom: 24 }}>
+        <div className="space-y-6 pb-6">
             {/* Header */}
             <div>
-                <Title level={2} style={{ margin: 0 }}>Dashboard</Title>
-                <Text type="secondary">Tổng quan hệ thống logistics đô thị</Text>
+                <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Dashboard</h1>
+                <p className="text-slate-500 mt-1">Tổng quan hệ thống logistics đô thị</p>
             </div>
 
             {summaryErr && (
-                <Alert
-                    message="Không thể tải dữ liệu"
-                    description="Vui lòng kiểm tra kết nối API hoặc thử lại sau."
-                    type="warning"
-                    showIcon
-                    icon={<WarningOutlined />}
-                />
-            )}
-
-            {/* KPI Cards */}
-            <Row gutter={[16, 16]}>
-                <Col xs={24} sm={12} lg={6}>
-                    <Card variant="borderless">
-                        <Statistic
-                            title="Tổng đơn hàng"
-                            value={summary?.orders?.total || 0}
-                            prefix={<ShoppingOutlined style={{ color: '#1677ff' }} />}
-                            suffix={<Tag color="blue">Hôm nay</Tag>}
-                        />
-                        <div style={{ marginTop: 12 }}>
-                            <Text type="success">
-                                <RiseOutlined /> +12.5% so với hôm qua
-                            </Text>
+                <Card className="border-yellow-300 dark:border-yellow-700">
+                    <CardBody className="flex items-start gap-3">
+                        <AlertTriangle size={20} className="text-yellow-600 mt-0.5" />
+                        <div>
+                            <p className="font-medium text-slate-800 dark:text-white">Không thể tải dữ liệu</p>
+                            <p className="text-sm text-slate-500">Vui lòng kiểm tra kết nối API hoặc thử lại sau.</p>
                         </div>
-                    </Card>
-                </Col>
-
-                <Col xs={24} sm={12} lg={6}>
-                    <Card variant="borderless">
-                        <Statistic
-                            title="Đội xe"
-                            value={vehicleTotal}
-                            prefix={<CarOutlined style={{ color: '#52c41a' }} />}
-                            suffix="xe"
-                        />
-                        <Progress
-                            percent={85}
-                            strokeColor="#52c41a"
-                            format={(percent) => `${percent}% hoạt động`}
-                            style={{ marginTop: 12 }}
-                        />
-                    </Card>
-                </Col>
-
-                <Col xs={24} sm={12} lg={6}>
-                    <Card variant="borderless">
-                        <Statistic
-                            title="Phát thải CO₂"
-                            value={co2Tons}
-                            prefix={<EnvironmentOutlined style={{ color: '#faad14' }} />}
-                            suffix="tấn"
-                        />
-                        <div style={{ marginTop: 12 }}>
-                            <Text type="success">
-                                <FallOutlined /> -5.2% so với tuần trước
-                            </Text>
-                        </div>
-                    </Card>
-                </Col>
-
-                <Col xs={24} sm={12} lg={6}>
-                    <Card variant="borderless">
-                        <Statistic
-                            title="Chờ điều phối"
-                            value={summary?.operations?.unassignedLegs || 0}
-                            prefix={<WarningOutlined style={{ color: '#ff4d4f' }} />}
-                            suffix="legs"
-                        />
-                        <div style={{ marginTop: 12 }}>
-                            <Tag color="red">Cần xử lý ngay</Tag>
-                        </div>
-                    </Card>
-                </Col>
-            </Row>
-
-            {/* Secondary Stats */}
-            <Row gutter={[16, 16]}>
-                <Col xs={24} lg={16}>
-                    <Card
-                        title="Đơn hàng gần đây"
-                        variant="borderless"
-                        extra={<a href="/logistics/orders">Xem tất cả</a>}
-                    >
-                        <Table
-                            columns={columns}
-                            dataSource={recentOrders}
-                            pagination={false}
-                            size="small"
-                        />
-                    </Card>
-                </Col>
-
-                <Col xs={24} lg={8}>
-                    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                        <Card variant="borderless" title="Hiệu suất hôm nay">
-                            <Space direction="vertical" style={{ width: '100%' }} size="small">
-                                <div>
-                                    <Text type="secondary">Tỷ lệ giao thành công</Text>
-                                    <Progress percent={96} strokeColor="#52c41a" />
-                                </div>
-                                <div>
-                                    <Text type="secondary">Đúng giờ</Text>
-                                    <Progress percent={88} strokeColor="#1677ff" />
-                                </div>
-                                <div>
-                                    <Text type="secondary">Tối ưu tuyến</Text>
-                                    <Progress percent={92} strokeColor="#faad14" />
-                                </div>
-                            </Space>
-                        </Card>
-
-                        <Card variant="borderless">
-                            <Statistic
-                                title="Telemetry Points"
-                                value={summary?.operations?.telemetryPointsLast24h || 0}
-                                prefix={<ThunderboltOutlined style={{ color: '#722ed1' }} />}
-                                suffix="/ 24h"
-                                styles={{ value: { fontSize: 24 } }}
-                            />
-                        </Card>
-                    </Space>
-                </Col>
-            </Row>
-
-            {/* Status Breakdown */}
-            {summary?.orders?.byStatus && (
-                <Card title="Phân bố trạng thái đơn hàng" variant="borderless">
-                    <Row gutter={16}>
-                        {Object.entries(summary.orders.byStatus).map(([status, count]) => (
-                            <Col xs={12} sm={8} md={6} lg={4} key={status}>
-                                <Card bordered size="small" style={{ textAlign: 'center' }}>
-                                    <Statistic
-                                        title={status.replace('_', ' ').toUpperCase()}
-                                        value={count}
-                                        valueStyle={{ fontSize: 20 }}
-                                    />
-                                </Card>
-                            </Col>
-                        ))}
-                    </Row>
+                    </CardBody>
                 </Card>
             )}
 
-            {/* Quick Actions */}
-            <Card title="Truy cập nhanh" variant="borderless">
-                <Row gutter={16}>
-                    <Col xs={12} sm={8} md={6}>
-                        <Card.Grid
-                            style={{ width: '100%', textAlign: 'center', cursor: 'pointer' }}
-                            hoverable
-                        >
-                            <ShoppingOutlined style={{ fontSize: 24, color: '#1677ff' }} />
-                            <div style={{ marginTop: 8 }}>Tạo đơn hàng</div>
-                        </Card.Grid>
-                    </Col>
-                    <Col xs={12} sm={8} md={6}>
-                        <Card.Grid
-                            style={{ width: '100%', textAlign: 'center', cursor: 'pointer' }}
-                            hoverable
-                        >
-                            <CarOutlined style={{ fontSize: 24, color: '#52c41a' }} />
-                            <div style={{ marginTop: 8 }}>Quản lý xe</div>
-                        </Card.Grid>
-                    </Col>
-                    <Col xs={12} sm={8} md={6}>
-                        <Card.Grid
-                            style={{ width: '100%', textAlign: 'center', cursor: 'pointer' }}
-                            hoverable
-                        >
-                            <EnvironmentOutlined style={{ fontSize: 24, color: '#faad14' }} />
-                            <div style={{ marginTop: 8 }}>Tối ưu tuyến</div>
-                        </Card.Grid>
-                    </Col>
-                    <Col xs={12} sm={8} md={6}>
-                        <Card.Grid
-                            style={{ width: '100%', textAlign: 'center', cursor: 'pointer' }}
-                            hoverable
-                        >
-                            <ThunderboltOutlined style={{ fontSize: 24, color: '#722ed1' }} />
-                            <div style={{ marginTop: 8 }}>Giám sát</div>
-                        </Card.Grid>
-                    </Col>
-                </Row>
+            {/* KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card>
+                    <CardBody className="flex items-center gap-3">
+                        <div className="p-3 bg-indigo-100 dark:bg-indigo-900/50 rounded-xl">
+                            <Package size={24} className="text-indigo-600" />
+                        </div>
+                        <div>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">
+                                {summary?.orders?.total ?? 0}
+                            </p>
+                            <p className="text-sm text-slate-500">Tổng đơn hàng</p>
+                        </div>
+                    </CardBody>
+                </Card>
+
+                <Card>
+                    <CardBody className="flex items-center gap-3">
+                        <div className="p-3 bg-green-100 dark:bg-green-900/50 rounded-xl">
+                            <Truck size={24} className="text-green-600" />
+                        </div>
+                        <div>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{vehicleTotal}</p>
+                            <p className="text-sm text-slate-500">Đội xe ({vehicleAvailablePct}% sẵn sàng)</p>
+                        </div>
+                    </CardBody>
+                </Card>
+
+                <Card>
+                    <CardBody className="flex items-center gap-3">
+                        <div className="p-3 bg-yellow-100 dark:bg-yellow-900/50 rounded-xl">
+                            <Leaf size={24} className="text-yellow-600" />
+                        </div>
+                        <div>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{co2Tons}</p>
+                            <p className="text-sm text-slate-500">Phát thải CO₂ (tấn)</p>
+                        </div>
+                    </CardBody>
+                </Card>
+
+                <Card>
+                    <CardBody className="flex items-center gap-3">
+                        <div className="p-3 bg-red-100 dark:bg-red-900/50 rounded-xl">
+                            <AlertTriangle size={24} className="text-red-600" />
+                        </div>
+                        <div>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">
+                                {summary?.operations?.unassignedOrders ?? 0}
+                            </p>
+                            <p className="text-sm text-slate-500">Đơn chờ điều phối</p>
+                        </div>
+                    </CardBody>
+                </Card>
+            </div>
+
+            {/* Secondary stats */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <Card>
+                    <CardBody className="flex items-center gap-3">
+                        <div className="p-3 bg-purple-100 dark:bg-purple-900/50 rounded-xl">
+                            <RouteIcon size={24} className="text-purple-600" />
+                        </div>
+                        <div>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{routeTotal}</p>
+                            <p className="text-sm text-slate-500">Tổng tuyến (routes)</p>
+                        </div>
+                    </CardBody>
+                </Card>
+                <Card>
+                    <CardBody className="flex items-center gap-3">
+                        <div className="p-3 bg-cyan-100 dark:bg-cyan-900/50 rounded-xl">
+                            <Zap size={24} className="text-cyan-600" />
+                        </div>
+                        <div>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">
+                                {summary?.operations?.telemetryPointsLast24h ?? 0}
+                            </p>
+                            <p className="text-sm text-slate-500">Telemetry (24h)</p>
+                        </div>
+                    </CardBody>
+                </Card>
+                <Card>
+                    <CardBody className="flex items-center gap-3">
+                        <div className="p-3 bg-indigo-100 dark:bg-indigo-900/50 rounded-xl">
+                            <Gauge size={24} className="text-indigo-600" />
+                        </div>
+                        <div>
+                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{availableVehicles}</p>
+                            <p className="text-sm text-slate-500">Xe sẵn sàng</p>
+                        </div>
+                    </CardBody>
+                </Card>
+            </div>
+
+            {/* Status breakdowns */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {summary?.orders?.byStatus && (
+                    <Card>
+                        <CardHeader>
+                            <h2 className="text-sm font-semibold text-slate-800 dark:text-white">Đơn hàng theo trạng thái</h2>
+                        </CardHeader>
+                        <CardBody className="space-y-2">
+                            {Object.entries(summary.orders.byStatus).map(([status, count]) => (
+                                <div key={status} className="flex items-center justify-between">
+                                    <Badge variant={statusBadgeVariant[status] || 'default'}>{viStatus(status)}</Badge>
+                                    <span className="font-semibold text-slate-800 dark:text-white">{count}</span>
+                                </div>
+                            ))}
+                        </CardBody>
+                    </Card>
+                )}
+
+                {summary?.vehicles?.byStatus && (
+                    <Card>
+                        <CardHeader>
+                            <h2 className="text-sm font-semibold text-slate-800 dark:text-white">Xe theo trạng thái</h2>
+                        </CardHeader>
+                        <CardBody className="space-y-2">
+                            {Object.entries(summary.vehicles.byStatus).map(([status, count]) => (
+                                <div key={status} className="flex items-center justify-between">
+                                    <Badge variant={statusBadgeVariant[status] || 'default'}>{viStatus(status)}</Badge>
+                                    <span className="font-semibold text-slate-800 dark:text-white">{count}</span>
+                                </div>
+                            ))}
+                        </CardBody>
+                    </Card>
+                )}
+
+                {summary?.routes?.byStatus && (
+                    <Card>
+                        <CardHeader>
+                            <h2 className="text-sm font-semibold text-slate-800 dark:text-white">Tuyến theo trạng thái</h2>
+                        </CardHeader>
+                        <CardBody className="space-y-2">
+                            {Object.entries(summary.routes.byStatus).map(([status, count]) => (
+                                <div key={status} className="flex items-center justify-between">
+                                    <Badge variant={statusBadgeVariant[status] || 'default'}>{viStatus(status)}</Badge>
+                                    <span className="font-semibold text-slate-800 dark:text-white">{count}</span>
+                                </div>
+                            ))}
+                        </CardBody>
+                    </Card>
+                )}
+            </div>
+
+            {/* Xu hướng theo thời gian */}
+            <Card>
+                <CardHeader className="flex flex-wrap items-center justify-between gap-3">
+                    <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-white">
+                        <TrendingUp size={16} /> Xu hướng đơn hàng & CO₂
+                    </h2>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="w-44">
+                            <Select
+                                options={[{ value: '', label: 'Toàn nền tảng' }, ...carriers.map((c) => ({ value: String(c.id), label: c.name }))]}
+                                value={carrierFilter}
+                                onChange={setCarrierFilter}
+                            />
+                        </div>
+                        <DatePicker value={fromDate} onChange={setFromDate} />
+                        <span className="text-sm text-slate-400">–</span>
+                        <DatePicker value={toDate} onChange={setToDate} />
+                    </div>
+                </CardHeader>
+                <CardBody>
+                    {trendLoading ? (
+                        <p className="py-8 text-center text-sm text-slate-500">Đang tải xu hướng...</p>
+                    ) : chartData.length === 0 ? (
+                        <p className="py-8 text-center text-sm text-slate-500">
+                            Chưa có dữ liệu snapshot trong khoảng thời gian này. Gọi POST /analytics/snapshot để ghi dữ liệu ngày hôm nay.
+                        </p>
+                    ) : (
+                        <div className="h-72 w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={chartData}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="date" fontSize={12} />
+                                    <YAxis fontSize={12} />
+                                    <Tooltip />
+                                    <Legend />
+                                    <Line type="monotone" dataKey="Tổng đơn" stroke="#3B82F6" strokeWidth={2} />
+                                    <Line type="monotone" dataKey="Đã giao" stroke="#10B981" strokeWidth={2} />
+                                    <Line type="monotone" dataKey="CO₂ (kg)" stroke="#F59E0B" strokeWidth={2} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+                    )}
+                </CardBody>
             </Card>
-        </Space>
+
+            {/* Quick actions */}
+            <Card>
+                <CardHeader>
+                    <h2 className="text-sm font-semibold text-slate-800 dark:text-white">Truy cập nhanh</h2>
+                </CardHeader>
+                <CardBody>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <Link
+                            href="/logistics/facilities"
+                            className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:shadow-md hover:border-indigo-300 transition-all text-center"
+                        >
+                            <Warehouse size={24} className="text-indigo-600" />
+                            <span className="text-sm text-slate-700 dark:text-slate-300">Cơ sở logistics</span>
+                        </Link>
+                        <Link
+                            href="/logistics/users"
+                            className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:shadow-md hover:border-indigo-300 transition-all text-center"
+                        >
+                            <Truck size={24} className="text-green-600" />
+                            <span className="text-sm text-slate-700 dark:text-slate-300">Người dùng</span>
+                        </Link>
+                        <Link
+                            href="/logistics/integrations"
+                            className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:shadow-md hover:border-indigo-300 transition-all text-center"
+                        >
+                            <Zap size={24} className="text-purple-600" />
+                            <span className="text-sm text-slate-700 dark:text-slate-300">API Keys</span>
+                        </Link>
+                        <Link
+                            href="/logistics/settings"
+                            className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:shadow-md hover:border-indigo-300 transition-all text-center"
+                        >
+                            <Gauge size={24} className="text-yellow-600" />
+                            <span className="text-sm text-slate-700 dark:text-slate-300">Cài đặt</span>
+                        </Link>
+                    </div>
+                </CardBody>
+            </Card>
+        </div>
     );
 }

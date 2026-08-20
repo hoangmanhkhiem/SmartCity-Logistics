@@ -13,7 +13,7 @@ export interface PaginatedResponse<T> {
 
 // Organization
 export interface Organization {
-    id: string;
+    id: number;
     name: string;
     type: string;
     business?: string;
@@ -27,14 +27,13 @@ export interface Organization {
     updatedAt: string;
 }
 
-// Carrier
+// Carrier (last-mile nội đô)
 export interface Carrier {
-    id: string;
-    organizationId: string;
+    id: number;
+    organizationId: number;
     name: string;
-    scale?: string;
-    vehicleCount?: number;
-    warehouseCount?: number;
+    operatingZoneIds: number[];
+    serviceType: string;
     contactName?: string;
     contactPhone?: string;
     contactEmail?: string;
@@ -44,8 +43,8 @@ export interface Carrier {
 
 // Vehicle
 export interface Vehicle {
-    id: string;
-    carrierId: string;
+    id: number;
+    carrierId: number;
     type: string;
     plate: string;
     brand?: string;
@@ -64,9 +63,9 @@ export interface Vehicle {
 
 // Facility
 export interface Facility {
-    id: string;
-    organizationId: string;
-    zoneId?: string;
+    id: number;
+    organizationId: number;
+    zoneId?: number;
     name: string;
     kind: string;
     latitude: number;
@@ -82,7 +81,7 @@ export interface Facility {
 
 // Zone
 export interface Zone {
-    id: string;
+    id: number;
     name: string;
     type?: string;
     description?: string;
@@ -92,16 +91,22 @@ export interface Zone {
 
 // Order
 export interface Order {
-    id: string;
-    customerId?: string;
+    id: number;
+    carrierId: number;
+    customerId?: number;
+    zoneId?: number;
     orderNumber: string;
-    status: 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
+    trackingNo: string;
+    status: 'pending' | 'assigned' | 'in_transit' | 'delivered' | 'failed' | 'cancelled';
     pickupAddress?: string;
     pickupLat?: number;
     pickupLon?: number;
     deliveryAddress?: string;
     deliveryLat?: number;
     deliveryLon?: number;
+    weightKg?: number;
+    itemCount?: number;
+    codAmount?: number;
     timeWindowStart?: string;
     timeWindowEnd?: string;
     priority: number;
@@ -113,26 +118,67 @@ export interface Order {
     fulfillmentChannel?: string;
     createdAt: string;
     updatedAt: string;
+    zone?: Zone;
+    customer?: User;
 }
 
-// Route
+// Stop (điểm dừng trong Route — pickup/delivery của 1 order)
+export interface Stop {
+    id: number;
+    routeId: number;
+    orderId: number;
+    sequence: number;
+    type: 'pickup' | 'delivery';
+    address?: string;
+    latitude: number;
+    longitude: number;
+    contactName?: string;
+    contactPhone?: string;
+    timeWindowStart?: string;
+    timeWindowEnd?: string;
+    status: 'pending' | 'arrived' | 'completed' | 'failed' | 'skipped';
+    arrivedAt?: string;
+    completedAt?: string;
+    failedReason?: string;
+    podPhotoUrl?: string;
+    podSignatureUrl?: string;
+    podNote?: string;
+    codAmountDue?: number;
+    codAmountCollected?: number;
+    codCollected: boolean;
+    codCollectedAt?: string;
+    order?: Order;
+}
+
+// Route (chuyến giao của 1 xe + 1 shipper trong 1 ca)
 export interface Route {
-    id: string;
-    name: string;
-    mode: string;
-    description?: string;
-    totalDistance?: number;
-    totalDuration?: number;
-    estimatedCo2?: number;
+    id: number;
+    carrierId: number;
+    vehicleId: number;
+    shipperId: number;
+    zoneId?: number;
+    code: string;
+    shiftDate: string;
+    status: 'planned' | 'in_progress' | 'completed' | 'cancelled';
+    plannedStartAt?: string;
+    plannedEndAt?: string;
+    actualStartAt?: string;
+    actualEndAt?: string;
+    totalDistanceKm?: number;
+    totalDurationMin?: number;
+    estimatedCo2Grams?: number;
     geometry?: string;
-    status: 'planned' | 'active' | 'completed';
-    isActive: boolean;
+    notes?: string;
+    vehicle?: Vehicle;
+    shipper?: User;
+    zone?: Zone;
+    stops?: Stop[];
 }
 
 // Telemetry
 export interface Telemetry {
-    id: string;
-    vehicleId: string;
+    id: number;
+    vehicleId: number;
     timestamp: string;
     latitude: number;
     longitude: number;
@@ -145,24 +191,24 @@ export interface Telemetry {
 
 // Role
 export interface Role {
-    id: string;
+    id: number;
     name: string;
     description?: string;
 }
 
 // Membership
 export interface Membership {
-    id: string;
-    userId: string;
-    organizationId: string;
-    roleId: string;
+    id: number;
+    userId: number;
+    organizationId: number;
+    roleId: number;
     role?: Role;
     organization?: Organization;
 }
 
 // User
 export interface User {
-    id: string;
+    id: number;
     email: string;
     name?: string;
     phone?: string;
@@ -172,6 +218,22 @@ export interface User {
     createdAt: string;
     updatedAt: string;
     memberships?: Membership[];
+}
+
+// ShipperProfile
+export interface ShipperProfile {
+    id: number;
+    userId: number;
+    carrierId: number;
+    licenseNumber?: string;
+    licenseClass?: string;
+    defaultZoneId?: number;
+    currentVehicleId?: number;
+    status: 'off_duty' | 'on_shift' | 'on_break';
+    isActive: boolean;
+    user?: User;
+    currentVehicle?: Vehicle;
+    defaultZone?: Zone;
 }
 
 // Stats
