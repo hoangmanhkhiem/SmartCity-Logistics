@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RouteService } from '../route/route.service';
+import { calculateRouteCo2Grams } from '../common/utils/co2';
 import { ClockInDto, CompleteStopDto, CreateShipperProfileDto, FailStopDto } from './dto/shipper.dto';
 
 @Injectable()
@@ -138,14 +139,28 @@ export class ShippersService {
     async completeRoute(shipperId: number, routeId: number) {
         const route = await this.prisma.route.findUnique({
             where: { id: routeId },
-            include: { stops: true },
+            include: { stops: { include: { order: true } }, vehicle: true },
         });
         if (!route || route.shipperId !== shipperId) throw new NotFoundException('Route not found');
         const unfinished = route.stops.some((s) => !['completed', 'failed', 'skipped'].includes(s.status));
         if (unfinished) throw new BadRequestException('Còn stop chưa xử lý xong');
+
+        const totalWeightKg = route.stops
+            .filter((s) => s.type === 'pickup')
+            .reduce((sum, s) => sum + (s.order.weightKg ?? 0), 0);
+
+        const estimatedCo2Grams = calculateRouteCo2Grams({
+            distanceKm: route.totalDistanceKm ?? 0,
+            vehicleType: route.vehicle.type,
+            isElectric: route.vehicle.isElectric,
+            emissionFactor: route.vehicle.emissionFactor,
+            totalWeightKg,
+            vehicleCapacityKg: route.vehicle.capacity,
+        });
+
         return this.prisma.route.update({
             where: { id: routeId },
-            data: { status: 'completed', actualEndAt: new Date() },
+            data: { status: 'completed', actualEndAt: new Date(), estimatedCo2Grams },
         });
     }
 

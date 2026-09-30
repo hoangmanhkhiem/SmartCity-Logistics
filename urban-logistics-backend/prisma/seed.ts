@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { createHash } from 'crypto';
 import { v4 as uuid } from 'uuid';
+import { calculateRouteCo2Grams } from '../src/common/utils/co2';
 
 const prisma = new PrismaClient();
 
@@ -666,7 +667,7 @@ async function main() {
     async function makeRoute(
         carrier: typeof carrierA,
         shipperProfile: (typeof shipperProfiles)[number],
-        vehicleId: number,
+        vehicle: (typeof vehiclesByCarrier)[number][number],
         zoneId: number,
         orderPool: typeof orders,
         status: 'planned' | 'in_progress' | 'completed',
@@ -674,11 +675,25 @@ async function main() {
         const carrierOrders = orderPool.filter((o) => o.carrierId === carrier.id && o.status !== 'delivered' && o.status !== 'failed').slice(0, 2);
         if (!carrierOrders.length) return null;
 
+        const totalDistanceKm = 6 + carrierOrders.length * 2;
+        const totalWeightKg = carrierOrders.reduce((sum, o) => sum + (o.weightKg ?? 0), 0);
+        const estimatedCo2Grams =
+            status === 'completed'
+                ? calculateRouteCo2Grams({
+                      distanceKm: totalDistanceKm,
+                      vehicleType: vehicle.type,
+                      isElectric: vehicle.isElectric,
+                      emissionFactor: vehicle.emissionFactor,
+                      totalWeightKg,
+                      vehicleCapacityKg: vehicle.capacity,
+                  })
+                : undefined;
+
         const code = `RT-${today.toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
         const route = await prisma.route.create({
             data: {
                 carrierId: carrier.id,
-                vehicleId,
+                vehicleId: vehicle.id,
                 shipperId: shipperProfile.userId,
                 zoneId,
                 code,
@@ -687,8 +702,9 @@ async function main() {
                 plannedStartAt: new Date(today.getTime() + 8 * 3600 * 1000),
                 actualStartAt: status !== 'planned' ? new Date(today.getTime() + 8 * 3600 * 1000) : undefined,
                 actualEndAt: status === 'completed' ? new Date(today.getTime() + 11 * 3600 * 1000) : undefined,
-                totalDistanceKm: 6 + carrierOrders.length * 2,
+                totalDistanceKm,
                 totalDurationMin: 30 + carrierOrders.length * 10,
+                estimatedCo2Grams,
             },
         });
 
@@ -746,9 +762,11 @@ async function main() {
     }
 
     const onShiftProfiles = shipperProfiles.filter((s) => s.status === 'on_shift');
-    await makeRoute(carrierA, onShiftProfiles.find((s) => s.carrierId === carrierA.id)!, vehiclesByCarrier[carrierA.id][0].id, zoneCauGiay.id, orders, 'planned');
-    await makeRoute(carrierB, onShiftProfiles.find((s) => s.carrierId === carrierB.id)!, vehiclesByCarrier[carrierB.id][0].id, zoneDongDa.id, orders, 'in_progress');
-    await makeRoute(carrierC, onShiftProfiles.find((s) => s.carrierId === carrierC.id)!, vehiclesByCarrier[carrierC.id][0].id, zoneHoanKiem.id, orders, 'completed');
+    // vehiclesByCarrier[*][1] luôn là xe chạy xăng (isElectric=false, i%2===1) — dùng cho route 'completed'
+    // để báo cáo CO2 demo có số liệu thấy được, không rơi vào xe điện có emissionFactor=0.
+    await makeRoute(carrierA, onShiftProfiles.find((s) => s.carrierId === carrierA.id)!, vehiclesByCarrier[carrierA.id][0], zoneCauGiay.id, orders, 'planned');
+    await makeRoute(carrierB, onShiftProfiles.find((s) => s.carrierId === carrierB.id)!, vehiclesByCarrier[carrierB.id][0], zoneDongDa.id, orders, 'in_progress');
+    await makeRoute(carrierC, onShiftProfiles.find((s) => s.carrierId === carrierC.id)!, vehiclesByCarrier[carrierC.id][1], zoneHoanKiem.id, orders, 'completed');
 
     // ==================== TELEMETRY ====================
     console.log('Creating telemetry...');
