@@ -52,6 +52,8 @@ export default function RestrictionMapEditor({ readOnly = false }: RestrictionMa
         description: '',
         vehicleTypes: '',
     });
+    const [editRoadName, setEditRoadName] = useState('');
+    const [editDrawnLine, setEditDrawnLine] = useState<GeoJSON.LineString | null>(null);
     const [creating, setCreating] = useState(false);
     const [updating, setUpdating] = useState(false);
     const [deletingRestriction, setDeletingRestriction] = useState<Record<string, unknown> | null>(null);
@@ -162,6 +164,7 @@ export default function RestrictionMapEditor({ readOnly = false }: RestrictionMa
             severity?: string;
             description?: string;
             vehicleTypes?: string[];
+            roadSegment?: { name?: string; geometry?: string };
         };
         setEditingRestriction(r);
         setEditForm({
@@ -172,7 +175,19 @@ export default function RestrictionMapEditor({ readOnly = false }: RestrictionMa
             description: x.description || '',
             vehicleTypes: (x.vehicleTypes || []).join(','),
         });
+        setEditRoadName(x.roadSegment?.name || '');
+        try {
+            setEditDrawnLine(x.roadSegment?.geometry ? (JSON.parse(x.roadSegment.geometry) as GeoJSON.LineString) : null);
+        } catch {
+            setEditDrawnLine(null);
+        }
         setEditModalOpen(true);
+    };
+
+    const handleEditDrawComplete = (feature: GeoJSON.Feature) => {
+        if (feature.geometry.type === 'LineString') {
+            setEditDrawnLine(feature.geometry);
+        }
     };
 
     const handleUpdateRestriction = async (e: React.FormEvent) => {
@@ -180,10 +195,16 @@ export default function RestrictionMapEditor({ readOnly = false }: RestrictionMa
         if (!editingRestriction || updating) return;
         setUpdating(true);
         try {
-            const id = (editingRestriction as { id: string }).id;
+            const x = editingRestriction as { id: string; roadSegment?: { id?: string } };
             const days = editForm.daysOfWeek.split(',').map((s) => s.trim()).filter(Boolean);
             const vtypes = editForm.vehicleTypes.split(',').map((s) => s.trim()).filter(Boolean);
-            await restrictionApi.update(Number(id), {
+            if (x.roadSegment?.id) {
+                await roadSegmentApi.update(Number(x.roadSegment.id), {
+                    name: editRoadName || undefined,
+                    ...(editDrawnLine && { geometry: JSON.stringify(editDrawnLine) }),
+                });
+            }
+            await restrictionApi.update(Number(x.id), {
                 timeFrom: editForm.timeFrom || undefined,
                 timeTo: editForm.timeTo || undefined,
                 daysOfWeek: days,
@@ -485,6 +506,25 @@ export default function RestrictionMapEditor({ readOnly = false }: RestrictionMa
                     size="lg"
                 >
                     <form onSubmit={handleUpdateRestriction} className="space-y-4">
+                        <Input
+                            label="Tên đường / đoạn"
+                            value={editRoadName}
+                            onChange={(e) => setEditRoadName(e.target.value)}
+                        />
+                        <div>
+                            <label className="mb-1 flex items-center gap-2 text-sm text-slate-600">
+                                <PenLine size={16} />
+                                Vẽ lại đoạn đường trên bản đồ (tuỳ chọn) {editDrawnLine ? `— đã có ${editDrawnLine.coordinates.length} điểm` : '— chưa có hình học'}
+                            </label>
+                            <div className="h-[300px] w-full overflow-hidden rounded-lg border border-slate-300 dark:border-slate-600">
+                                <Map
+                                    drawMode="line"
+                                    onDrawComplete={handleEditDrawComplete}
+                                    initialDrawFeature={editDrawnLine ? { type: 'Feature', properties: {}, geometry: editDrawnLine } : null}
+                                    zoom={13}
+                                />
+                            </div>
+                        </div>
                         <div className="grid grid-cols-2 gap-4">
                             <Input
                                 label="Từ (HH:mm)"
