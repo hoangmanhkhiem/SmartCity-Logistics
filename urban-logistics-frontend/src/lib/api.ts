@@ -15,7 +15,8 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
     const fromEnv = process.env.NEXT_PUBLIC_API_URL;
     if (fromEnv) {
-        config.baseURL = fromEnv;
+        // Backend luôn có global prefix /api/v1 — tự thêm nếu người deploy quên set kèm.
+        config.baseURL = /\/api\/v\d+\/?$/.test(fromEnv) ? fromEnv : `${fromEnv.replace(/\/$/, '')}/api/v1`;
     } else if (typeof window !== 'undefined') {
         config.baseURL = '/api/v1';
     } else {

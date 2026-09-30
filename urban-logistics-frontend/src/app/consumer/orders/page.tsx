@@ -7,7 +7,7 @@ import { orderApi } from '@/lib/api';
 import { Order } from '@/types';
 import { Package, Search, Eye, MapPin, Navigation, Truck, Plus } from 'lucide-react';
 import type { Column } from '@/components/ui';
-import { viStatus, ORDER_STATUS_OPTIONS } from '@/lib/status-labels';
+import { viStatus, statusVariant, ORDER_STATUS_OPTIONS } from '@/lib/status-labels';
 import NewOrderModal from '@/components/consumer/new-order-modal';
 
 // Dynamic import for Map to avoid SSR issues
@@ -24,15 +24,6 @@ const MapView = dynamic(() => import('@/components/shared/map'), {
 });
 
 const statusOptions = [{ value: '', label: 'Tất cả trạng thái' }, ...ORDER_STATUS_OPTIONS];
-
-const statusVariant: Record<string, 'default' | 'warning' | 'info' | 'success' | 'error'> = {
-    pending: 'warning',
-    confirmed: 'info',
-    shipped: 'info',
-    in_transit: 'info',
-    delivered: 'success',
-    cancelled: 'error',
-};
 
 export default function ConsumerOrdersPage() {
     const [orders, setOrders] = useState<Order[]>([]);
@@ -127,7 +118,7 @@ export default function ConsumerOrdersPage() {
             key: 'status',
             header: 'Trạng thái',
             render: (order) => (
-                <Badge variant={statusVariant[order.status] || 'default'}>
+                <Badge variant={statusVariant(order.status)}>
                     {viStatus(order.status)}
                 </Badge>
             ),
@@ -309,7 +300,7 @@ export default function ConsumerOrdersPage() {
                                 <span className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></span>
                                 <span className="text-sm font-medium text-green-600">Đang cập nhật trực tiếp</span>
                             </div>
-                            <Badge variant={statusVariant[selectedOrder.status] || 'default'}>
+                            <Badge variant={statusVariant(selectedOrder.status)}>
                                 {viStatus(selectedOrder.status)}
                             </Badge>
                         </div>
@@ -380,7 +371,7 @@ export default function ConsumerOrdersPage() {
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <p className="text-sm text-slate-500">Trạng thái</p>
-                                <Badge variant={statusVariant[selectedOrder.status] || 'default'}>
+                                <Badge variant={statusVariant(selectedOrder.status)}>
                                     {viStatus(selectedOrder.status)}
                                 </Badge>
                             </div>

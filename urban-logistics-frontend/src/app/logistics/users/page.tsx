@@ -1,17 +1,24 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardBody, CardHeader, DataTable, Badge, Button, Input, Drawer, Tag } from '@/components/ui';
+import { Card, CardBody, CardHeader, DataTable, Badge, Button, Input, Drawer, Tag, Modal, ConfirmDialog, useToast, getErrorMessage } from '@/components/ui';
 import { userApi } from '@/lib/api';
 import { User } from '@/types';
-import { Users as UsersIcon, Search, Eye, Mail, Phone, CheckCircle, XCircle } from 'lucide-react';
+import { Users as UsersIcon, Search, Eye, Mail, Phone, CheckCircle, XCircle, Edit, Trash2 } from 'lucide-react';
 import type { Column } from '@/components/ui';
 
 export default function UsersPage() {
+    const { showToast } = useToast();
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
+    const [editModalOpen, setEditModalOpen] = useState(false);
+    const [editingUser, setEditingUser] = useState<User | null>(null);
+    const [editForm, setEditForm] = useState({ name: '', phone: '', isActive: true });
+    const [submitting, setSubmitting] = useState(false);
+    const [deletingUser, setDeletingUser] = useState<User | null>(null);
+    const [deleting, setDeleting] = useState(false);
 
     useEffect(() => {
         fetchUsers();
@@ -23,9 +30,51 @@ export default function UsersPage() {
             const response = await userApi.getAll({ page: 1, limit: 100 });
             setUsers(response.data.data || response.data);
         } catch (error) {
-            console.error('Failed to fetch users:', error);
+            showToast(getErrorMessage(error, 'Không tải được danh sách người dùng'));
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleOpenEdit = (u: User) => {
+        setEditingUser(u);
+        setEditForm({ name: u.name || '', phone: u.phone || '', isActive: u.isActive });
+        setEditModalOpen(true);
+    };
+
+    const handleUpdateUser = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingUser || submitting) return;
+        setSubmitting(true);
+        try {
+            await userApi.update(editingUser.id, {
+                name: editForm.name || undefined,
+                phone: editForm.phone || undefined,
+                isActive: editForm.isActive,
+            });
+            setEditModalOpen(false);
+            setEditingUser(null);
+            showToast('Đã cập nhật người dùng', 'success');
+            fetchUsers();
+        } catch (error) {
+            showToast(getErrorMessage(error, 'Không thể cập nhật người dùng'));
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleDeleteUser = async () => {
+        if (!deletingUser) return;
+        setDeleting(true);
+        try {
+            await userApi.delete(deletingUser.id);
+            setDeletingUser(null);
+            showToast('Đã xóa người dùng', 'success');
+            fetchUsers();
+        } catch (error) {
+            showToast(getErrorMessage(error, 'Không thể xóa người dùng'));
+        } finally {
+            setDeleting(false);
         }
     };
 
@@ -67,9 +116,17 @@ export default function UsersPage() {
             key: 'actions',
             header: '',
             render: (u) => (
-                <Button variant="ghost" size="sm" onClick={() => setSelectedUser(u)}>
-                    <Eye size={16} />
-                </Button>
+                <div className="flex gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedUser(u)}>
+                        <Eye size={16} />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleOpenEdit(u)}>
+                        <Edit size={16} />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setDeletingUser(u)}>
+                        <Trash2 size={16} className="text-red-500" />
+                    </Button>
+                </div>
             ),
         },
     ];
@@ -190,6 +247,46 @@ export default function UsersPage() {
                     </div>
                 )}
             </Drawer>
+
+            <Modal
+                isOpen={editModalOpen}
+                onClose={() => { setEditModalOpen(false); setEditingUser(null); }}
+                title="Sửa người dùng"
+            >
+                <form onSubmit={handleUpdateUser} className="space-y-4">
+                    <Input
+                        label="Họ tên"
+                        value={editForm.name}
+                        onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    />
+                    <Input
+                        label="Điện thoại"
+                        value={editForm.phone}
+                        onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    />
+                    <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                        <input
+                            type="checkbox"
+                            checked={editForm.isActive}
+                            onChange={(e) => setEditForm({ ...editForm, isActive: e.target.checked })}
+                        />
+                        Đang hoạt động
+                    </label>
+                    <div className="flex justify-end gap-2 pt-4 border-t">
+                        <Button type="button" variant="outline" onClick={() => setEditModalOpen(false)} disabled={submitting}>Hủy</Button>
+                        <Button type="submit" isLoading={submitting}>Cập nhật</Button>
+                    </div>
+                </form>
+            </Modal>
+
+            <ConfirmDialog
+                isOpen={!!deletingUser}
+                title="Xóa người dùng"
+                message={`Bạn có chắc muốn xóa người dùng "${deletingUser?.name}"? Hành động này không thể hoàn tác.`}
+                loading={deleting}
+                onConfirm={handleDeleteUser}
+                onCancel={() => setDeletingUser(null)}
+            />
         </div>
     );
 }

@@ -7,29 +7,20 @@ const LABELS: Record<string, string> = {
     in_use: 'Đang chạy',
     maintenance: 'Bảo trì',
 
-    // Đơn hàng
+    // Đơn hàng (khớp ORDER_STATUSES ở backend order.dto.ts)
     pending: 'Chờ xử lý',
-    confirmed: 'Đã xác nhận',
-    shipped: 'Đang giao',
-    delivered: 'Đã giao',
-    cancelled: 'Đã hủy',
+    assigned: 'Đã gom chuyến',
     in_transit: 'Đang giao',
+    delivered: 'Đã giao',
+    failed: 'Giao thất bại',
+    cancelled: 'Đã hủy',
 
-    // Tuyến
+    // Chuyến giao (route) — khớp ROUTE_STATUSES ở backend route.dto.ts
     planned: 'Dự kiến',
-    active: 'Đang chạy',
+    in_progress: 'Đang thực hiện',
     completed: 'Hoàn thành',
 
-    // Vận đơn / lô (shipment)
-    // pending, in_transit, delivered đã có ở trên
-
-    // Chặng (leg)
-    in_progress: 'Đang thực hiện',
-
-    // Phân công (assignment)
-    assigned: 'Đã phân công',
-
-    // Điểm dừng (stop) — nếu API trả về
+    // Điểm dừng (stop)
     arrived: 'Đã đến',
     departed: 'Đã rời',
     skipped: 'Bỏ qua',
@@ -41,6 +32,30 @@ export function viStatus(status: string | null | undefined): string {
     return LABELS[key] ?? status;
 }
 
+/**
+ * Màu badge dùng chung cho mọi trạng thái tiến trình (order/route/stop) —
+ * cùng ý nghĩa (chờ/đang xử lý/hoàn thành/lỗi) thì cùng màu ở mọi trang.
+ */
+const STATUS_VARIANT: Record<string, 'warning' | 'info' | 'success' | 'error' | 'default'> = {
+    pending: 'warning',
+    planned: 'warning',
+    assigned: 'info',
+    in_transit: 'info',
+    in_progress: 'info',
+    arrived: 'info',
+    delivered: 'success',
+    completed: 'success',
+    departed: 'success',
+    failed: 'error',
+    cancelled: 'error',
+    skipped: 'default',
+};
+
+export function statusVariant(status: string | null | undefined): 'warning' | 'info' | 'success' | 'error' | 'default' {
+    if (!status) return 'default';
+    return STATUS_VARIANT[String(status).trim().toLowerCase()] ?? 'default';
+}
+
 export const VEHICLE_STATUS_OPTIONS = [
     { value: 'available', label: LABELS.available },
     { value: 'in_use', label: LABELS.in_use },
@@ -49,14 +64,16 @@ export const VEHICLE_STATUS_OPTIONS = [
 
 export const ORDER_STATUS_OPTIONS = [
     { value: 'pending', label: LABELS.pending },
-    { value: 'confirmed', label: LABELS.confirmed },
-    { value: 'shipped', label: LABELS.shipped },
+    { value: 'assigned', label: LABELS.assigned },
+    { value: 'in_transit', label: LABELS.in_transit },
     { value: 'delivered', label: LABELS.delivered },
+    { value: 'failed', label: LABELS.failed },
     { value: 'cancelled', label: LABELS.cancelled },
 ] as const;
 
 export const ROUTE_STATUS_OPTIONS = [
     { value: 'planned', label: LABELS.planned },
-    { value: 'active', label: LABELS.active },
+    { value: 'in_progress', label: LABELS.in_progress },
     { value: 'completed', label: LABELS.completed },
+    { value: 'cancelled', label: LABELS.cancelled },
 ] as const;

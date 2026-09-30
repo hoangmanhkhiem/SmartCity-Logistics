@@ -14,6 +14,14 @@ import { DrivingSegmentDto } from './dto/driving-segment.dto';
 import { RestrictionService } from '../traffic-restriction/restriction.service';
 import type { GeoJsonFeatureCollection } from '../traffic-restriction/restriction.service';
 
+/** Trạng thái route chỉ đi tới hoặc hủy — khớp với luồng start/complete của shipper self-service. */
+const ROUTE_STATUS_TRANSITIONS: Record<string, string[]> = {
+    planned: ['in_progress', 'cancelled'],
+    in_progress: ['completed', 'cancelled'],
+    completed: [],
+    cancelled: [],
+};
+
 @Injectable()
 export class RouteService {
     constructor(
@@ -92,7 +100,32 @@ export class RouteService {
         if (invalid) {
             throw new BadRequestException(`Order ${invalid.id} không thuộc carrier hoặc không ở trạng thái pending`);
         }
+        // Khoá lại status ngay để tránh 2 request tạo route đồng thời cùng gom trúng 1 order (race condition).
+        const claim = await this.prisma.order.updateMany({
+            where: { id: { in: uniqueOrderIds }, status: 'pending' },
+            data: { status: 'assigned' },
+        });
+        if (claim.count !== uniqueOrderIds.length) {
+            throw new BadRequestException('Một số order vừa bị gom vào route khác, vui lòng tải lại danh sách');
+        }
 
+        try {
+            return await this.buildRouteFromClaimedOrders(dto, vehicle, orders);
+        } catch (err) {
+            // Nhả lại order về pending vì đã claim ở trên nhưng route không tạo được.
+            await this.prisma.order.updateMany({
+                where: { id: { in: uniqueOrderIds }, status: 'assigned' },
+                data: { status: 'pending' },
+            });
+            throw err;
+        }
+    }
+
+    private async buildRouteFromClaimedOrders(
+        dto: CreateRouteFromOrdersDto,
+        vehicle: { type: string },
+        orders: { id: number; weightKg: number | null; pickupLat: number | null; pickupLon: number | null; deliveryLat: number | null; deliveryLon: number | null; pickupAddress: string | null; deliveryAddress: string | null; pickupPhone: string | null; deliveryPhone: string | null; timeWindowStart: Date | null; timeWindowEnd: Date | null; codAmount: number | null }[],
+    ) {
         // Validate restriction (chặn trừ khi force=true)
         if (dto.zoneId && !dto.force) {
             const totalWeight = orders.reduce((s, o) => s + (o.weightKg ?? 0), 0);
@@ -163,11 +196,6 @@ export class RouteService {
                 });
             }
 
-            await tx.order.updateMany({
-                where: { id: { in: uniqueOrderIds } },
-                data: { status: 'assigned' },
-            });
-
             return tx.route.findUnique({
                 where: { id: route.id },
                 include: { stops: { orderBy: { sequence: 'asc' } }, vehicle: true, shipper: true },
@@ -209,7 +237,15 @@ export class RouteService {
     }
 
     async update(id: number, dto: UpdateRouteDto) {
-        await this.findOne(id);
+        const existing = await this.findOne(id);
+        if (dto.status && dto.status !== existing.status) {
+            const allowed = ROUTE_STATUS_TRANSITIONS[existing.status] ?? [];
+            if (!allowed.includes(dto.status)) {
+                throw new BadRequestException(
+                    `Không thể chuyển chuyến giao từ "${existing.status}" sang "${dto.status}"`,
+                );
+            }
+        }
         return this.prisma.route.update({
             where: { id },
             data: {
@@ -220,7 +256,13 @@ export class RouteService {
         });
     }
 
-    async remove(id: number) { await this.findOne(id); return this.prisma.route.delete({ where: { id } }); }
+    async remove(id: number) {
+        const existing = await this.findOne(id);
+        if (existing.status === 'in_progress') {
+            throw new BadRequestException('Không thể xóa chuyến giao đang thực hiện');
+        }
+        return this.prisma.route.delete({ where: { id } });
+    }
 
     /** Thứ tự điểm giao gần đúng TSP/VRP (nearest neighbor từ điểm đầu). */
     optimizeStopSequence(points: StopPointDto[]) {

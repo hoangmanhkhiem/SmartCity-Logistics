@@ -150,13 +150,27 @@ export class ShippersService {
     }
 
     private async findOwnedStop(shipperId: number, stopId: number) {
-        const stop = await this.prisma.stop.findUnique({ where: { id: stopId }, include: { route: true, order: true } });
+        const stop = await this.prisma.stop.findUnique({
+            where: { id: stopId },
+            include: { route: { include: { stops: true } }, order: true },
+        });
         if (!stop || stop.route.shipperId !== shipperId) throw new NotFoundException('Stop not found');
         return stop;
     }
 
+    /** Chặn xử lý điểm dừng khi điểm dừng trước đó (sequence nhỏ hơn) trong cùng route chưa xong. */
+    private assertPriorStopsResolved(stop: { sequence: number; route: { stops: { sequence: number; status: string }[] } }) {
+        const blocking = stop.route.stops.some(
+            (s) => s.sequence < stop.sequence && !['completed', 'failed', 'skipped'].includes(s.status),
+        );
+        if (blocking) {
+            throw new BadRequestException('Còn điểm dừng trước đó chưa xử lý xong — phải xử lý theo thứ tự');
+        }
+    }
+
     async arriveStop(shipperId: number, stopId: number) {
-        await this.findOwnedStop(shipperId, stopId);
+        const stop = await this.findOwnedStop(shipperId, stopId);
+        this.assertPriorStopsResolved(stop);
         return this.prisma.stop.update({
             where: { id: stopId },
             data: { status: 'arrived', arrivedAt: new Date() },
@@ -165,41 +179,49 @@ export class ShippersService {
 
     async completeStop(shipperId: number, stopId: number, dto: CompleteStopDto) {
         const stop = await this.findOwnedStop(shipperId, stopId);
-        const updated = await this.prisma.stop.update({
-            where: { id: stopId },
-            data: {
-                status: 'completed',
-                completedAt: new Date(),
-                podPhotoUrl: dto.podPhotoUrl,
-                podSignatureUrl: dto.podSignatureUrl,
-                podNote: dto.podNote,
-                ...(dto.codAmountCollected != null && {
-                    codAmountCollected: dto.codAmountCollected,
-                    codCollected: dto.codAmountCollected >= (stop.codAmountDue ?? 0),
-                    codCollectedAt: new Date(),
-                }),
-            },
+        this.assertPriorStopsResolved(stop);
+
+        return this.prisma.$transaction(async (tx) => {
+            const updated = await tx.stop.update({
+                where: { id: stopId },
+                data: {
+                    status: 'completed',
+                    completedAt: new Date(),
+                    podPhotoUrl: dto.podPhotoUrl,
+                    podSignatureUrl: dto.podSignatureUrl,
+                    podNote: dto.podNote,
+                    ...(dto.codAmountCollected != null && {
+                        codAmountCollected: dto.codAmountCollected,
+                        codCollected: dto.codAmountCollected >= (stop.codAmountDue ?? 0),
+                        codCollectedAt: new Date(),
+                    }),
+                },
+            });
+
+            if (stop.type === 'delivery') {
+                await tx.order.update({ where: { id: stop.orderId }, data: { status: 'delivered' } });
+            }
+
+            return updated;
         });
-
-        if (stop.type === 'delivery') {
-            await this.prisma.order.update({ where: { id: stop.orderId }, data: { status: 'delivered' } });
-        }
-
-        return updated;
     }
 
     async failStop(shipperId: number, stopId: number, dto: FailStopDto) {
         const stop = await this.findOwnedStop(shipperId, stopId);
-        const updated = await this.prisma.stop.update({
-            where: { id: stopId },
-            data: { status: 'failed', failedReason: dto.failedReason, podNote: dto.note },
+        this.assertPriorStopsResolved(stop);
+
+        return this.prisma.$transaction(async (tx) => {
+            const updated = await tx.stop.update({
+                where: { id: stopId },
+                data: { status: 'failed', failedReason: dto.failedReason, podNote: dto.note },
+            });
+
+            if (stop.type === 'delivery') {
+                await tx.order.update({ where: { id: stop.orderId }, data: { status: 'failed' } });
+            }
+
+            return updated;
         });
-
-        if (stop.type === 'delivery') {
-            await this.prisma.order.update({ where: { id: stop.orderId }, data: { status: 'failed' } });
-        }
-
-        return updated;
     }
 
     /** Chỉ đường (né đoạn cấm) từ vị trí hiện tại của xe tới điểm dừng kế tiếp chưa xử lý. */

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, CardBody, CardHeader, DataTable, Badge, Select, Button, Input, Modal } from '@/components/ui';
+import { Card, CardBody, CardHeader, DataTable, Badge, Select, Button, Input, Modal, ConfirmDialog, useToast, getErrorMessage } from '@/components/ui';
 import { zoneApi } from '@/lib/api';
 import { Zone } from '@/types';
 import { MapPin, Plus, Search, Edit, Trash2, PenLine } from 'lucide-react';
@@ -16,6 +16,7 @@ const typeOptions = [
 ];
 
 export default function LogisticsZonesPage() {
+    const { showToast } = useToast();
     const [zones, setZones] = useState<Zone[]>([]);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
@@ -26,6 +27,9 @@ export default function LogisticsZonesPage() {
     const [editingZone, setEditingZone] = useState<Zone | null>(null);
     const [formData, setFormData] = useState({ name: '', type: 'low_emission', description: '' });
     const [drawnPolygon, setDrawnPolygon] = useState<GeoJSON.Polygon | null>(null);
+    const [submitting, setSubmitting] = useState(false);
+    const [deletingZone, setDeletingZone] = useState<Zone | null>(null);
+    const [deleting, setDeleting] = useState(false);
 
     const fetchZones = async () => {
         setLoading(true);
@@ -36,7 +40,7 @@ export default function LogisticsZonesPage() {
             setZones(response.data.data || response.data);
             setTotalPages(response.data.meta?.totalPages || 1);
         } catch (error) {
-            console.error('Failed to fetch zones:', error);
+            showToast(getErrorMessage(error, 'Không tải được danh sách vùng'));
         } finally {
             setLoading(false);
         }
@@ -52,6 +56,8 @@ export default function LogisticsZonesPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (submitting) return;
+        setSubmitting(true);
         try {
             const payload = {
                 ...formData,
@@ -63,9 +69,12 @@ export default function LogisticsZonesPage() {
             setEditingZone(null);
             setFormData({ name: '', type: 'low_emission', description: '' });
             setDrawnPolygon(null);
+            showToast(editingZone ? 'Đã cập nhật vùng' : 'Đã thêm vùng mới', 'success');
             fetchZones();
         } catch (error) {
-            console.error('Failed to save zone:', error);
+            showToast(getErrorMessage(error, 'Không thể lưu vùng'));
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -80,9 +89,18 @@ export default function LogisticsZonesPage() {
         setIsModalOpen(true);
     };
 
-    const handleDelete = async (id: number) => {
-        if (confirm('Xóa vùng này?')) {
-            try { await zoneApi.delete(id); fetchZones(); } catch (e) { console.error(e); }
+    const handleDelete = async () => {
+        if (!deletingZone) return;
+        setDeleting(true);
+        try {
+            await zoneApi.delete(deletingZone.id);
+            setDeletingZone(null);
+            showToast('Đã xóa vùng', 'success');
+            fetchZones();
+        } catch (error) {
+            showToast(getErrorMessage(error, 'Không thể xóa vùng'));
+        } finally {
+            setDeleting(false);
         }
     };
 
@@ -100,7 +118,7 @@ export default function LogisticsZonesPage() {
             key: 'actions', header: '', render: (z) => (
                 <div className="flex gap-1">
                     <Button variant="ghost" size="sm" onClick={() => handleEdit(z)}><Edit size={16} /></Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(z.id)}><Trash2 size={16} className="text-red-500" /></Button>
+                    <Button variant="ghost" size="sm" onClick={() => setDeletingZone(z)}><Trash2 size={16} className="text-red-500" /></Button>
                 </div>
             )
         },
@@ -154,9 +172,21 @@ export default function LogisticsZonesPage() {
                             />
                         </div>
                     </div>
-                    <div className="flex justify-end gap-2 pt-4 border-t"><Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Hủy</Button><Button type="submit">{editingZone ? 'Cập nhật' : 'Thêm'}</Button></div>
+                    <div className="flex justify-end gap-2 pt-4 border-t">
+                        <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)} disabled={submitting}>Hủy</Button>
+                        <Button type="submit" isLoading={submitting}>{editingZone ? 'Cập nhật' : 'Thêm'}</Button>
+                    </div>
                 </form>
             </Modal>
+
+            <ConfirmDialog
+                isOpen={!!deletingZone}
+                title="Xóa vùng"
+                message={`Bạn có chắc muốn xóa vùng "${deletingZone?.name}"? Các quy định hạn chế gắn với vùng này có thể bị ảnh hưởng.`}
+                loading={deleting}
+                onConfirm={handleDelete}
+                onCancel={() => setDeletingZone(null)}
+            />
         </div>
     );
 }

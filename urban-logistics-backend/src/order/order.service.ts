@@ -1,8 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ZoneService } from '../zone/zone.service';
 import { CreateOrderDto, UpdateOrderDto } from './dto';
 import { v4 as uuid } from 'uuid';
+
+/** Trạng thái đơn hàng chỉ được đi tới, không lùi lại — tránh sửa tay ra trạng thái vô lý. */
+const ORDER_STATUS_TRANSITIONS: Record<string, string[]> = {
+    pending: ['assigned', 'cancelled'],
+    assigned: ['in_transit', 'cancelled'],
+    in_transit: ['delivered', 'failed'],
+    delivered: [],
+    failed: ['assigned'],
+    cancelled: [],
+};
 
 @Injectable()
 export class OrderService {
@@ -47,7 +57,24 @@ export class OrderService {
         return o;
     }
 
-    async update(id: number, dto: UpdateOrderDto) { await this.findOne(id); return this.prisma.order.update({ where: { id }, data: dto, include: { customer: true } }); }
+    async update(id: number, dto: UpdateOrderDto) {
+        const existing = await this.findOne(id);
+        if (dto.status && dto.status !== existing.status) {
+            const allowed = ORDER_STATUS_TRANSITIONS[existing.status] ?? [];
+            if (!allowed.includes(dto.status)) {
+                throw new BadRequestException(
+                    `Không thể chuyển đơn từ "${existing.status}" sang "${dto.status}"`,
+                );
+            }
+        }
+        return this.prisma.order.update({ where: { id }, data: dto, include: { customer: true } });
+    }
 
-    async remove(id: number) { await this.findOne(id); return this.prisma.order.delete({ where: { id } }); }
+    async remove(id: number) {
+        const existing = await this.findOne(id);
+        if (['in_transit', 'delivered'].includes(existing.status)) {
+            throw new BadRequestException('Không thể xóa đơn đang giao hoặc đã giao thành công');
+        }
+        return this.prisma.order.delete({ where: { id } });
+    }
 }

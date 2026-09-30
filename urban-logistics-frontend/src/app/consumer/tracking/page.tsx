@@ -7,7 +7,7 @@ import { orderApi } from '@/lib/api';
 import { ShipmentTrackingLookup } from '@/components/logistics/shipment-tracking-lookup';
 import { Order, Telemetry } from '@/types';
 import { MapPin, Package, Truck, Clock, Search, RefreshCw, Play, Pause } from 'lucide-react';
-import { viStatus } from '@/lib/status-labels';
+import { viStatus, statusVariant } from '@/lib/status-labels';
 
 // Dynamic import for Map to avoid SSR issues
 const Map = dynamic(() => import('@/components/shared/map'), {
@@ -21,15 +21,6 @@ const Map = dynamic(() => import('@/components/shared/map'), {
         </div>
     )
 });
-
-const statusVariant: Record<string, 'warning' | 'info' | 'success' | 'error'> = {
-    pending: 'warning',
-    confirmed: 'info',
-    shipped: 'info',
-    in_transit: 'info',
-    delivered: 'success',
-    cancelled: 'error',
-};
 
 export default function ConsumerTrackingPage() {
     const [searchQuery, setSearchQuery] = useState('');
@@ -240,7 +231,7 @@ export default function ConsumerTrackingPage() {
                                             <span className="font-medium text-slate-800 dark:text-white">
                                                 {order.orderNumber}
                                             </span>
-                                            <Badge variant={statusVariant[order.status] || 'default'}>
+                                            <Badge variant={statusVariant(order.status)}>
                                                 {viStatus(order.status)}
                                             </Badge>
                                         </div>

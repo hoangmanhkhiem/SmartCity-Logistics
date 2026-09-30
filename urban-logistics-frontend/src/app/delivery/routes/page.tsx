@@ -1,20 +1,20 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, CardBody, CardHeader, DataTable, Badge, Select, Button, Steps } from '@/components/ui';
+import { Card, CardBody, CardHeader, DataTable, Badge, Select, Button, Steps, Modal, Input, ConfirmDialog, useToast, getErrorMessage } from '@/components/ui';
 import type { Column } from '@/components/ui';
 import { routeApi, zoneApi, vehicleApi, shipperApi } from '@/lib/api';
 import { useCurrentCarrier } from '@/lib/use-current-carrier';
-import { viStatus } from '@/lib/status-labels';
+import { viStatus, statusVariant, ROUTE_STATUS_OPTIONS as ROUTE_STATUS_SELECT_OPTIONS } from '@/lib/status-labels';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import type { Route, Order, Zone, Vehicle, ShipperProfile } from '@/types';
-import { Route as RouteIcon, Plus, MapPin, Package, AlertTriangle, X } from 'lucide-react';
+import { Route as RouteIcon, Plus, MapPin, Package, AlertTriangle, X, Edit, Trash2 } from 'lucide-react';
 
-const statusVariant: Record<string, 'warning' | 'success' | 'info' | 'default'> = {
-    planned: 'warning',
-    in_progress: 'info',
-    completed: 'success',
-    cancelled: 'default',
+const ROUTE_STATUS_TRANSITIONS: Record<string, string[]> = {
+    planned: ['planned', 'in_progress', 'cancelled'],
+    in_progress: ['in_progress', 'completed', 'cancelled'],
+    completed: ['completed'],
+    cancelled: ['cancelled'],
 };
 
 const wizardSteps = [
@@ -25,6 +25,7 @@ const wizardSteps = [
 ];
 
 export default function DeliveryRoutesPage() {
+    const { showToast } = useToast();
     const { carrier } = useCurrentCarrier();
     const [routes, setRoutes] = useState<Route[]>([]);
     const [loading, setLoading] = useState(true);
@@ -44,6 +45,13 @@ export default function DeliveryRoutesPage() {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const [editModalOpen, setEditModalOpen] = useState(false);
+    const [editingRoute, setEditingRoute] = useState<Route | null>(null);
+    const [editForm, setEditForm] = useState({ status: 'planned', notes: '' });
+    const [routeSubmitting, setRouteSubmitting] = useState(false);
+    const [deletingRoute, setDeletingRoute] = useState<Route | null>(null);
+    const [deletingRouteLoading, setDeletingRouteLoading] = useState(false);
+
     const fetchRoutes = async () => {
         if (!carrier) return;
         setLoading(true);
@@ -53,7 +61,7 @@ export default function DeliveryRoutesPage() {
             const res = await routeApi.getAll(params);
             setRoutes(res.data.data ?? res.data);
         } catch (e) {
-            console.error(e);
+            showToast(getErrorMessage(e, 'Không tải được danh sách chuyến giao'));
         } finally {
             setLoading(false);
         }
@@ -154,6 +162,44 @@ export default function DeliveryRoutesPage() {
         });
     };
 
+    const openEditRoute = (r: Route) => {
+        setEditingRoute(r);
+        setEditForm({ status: r.status, notes: r.notes || '' });
+        setEditModalOpen(true);
+    };
+
+    const handleUpdateRoute = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingRoute || routeSubmitting) return;
+        setRouteSubmitting(true);
+        try {
+            await routeApi.update(editingRoute.id, { status: editForm.status, notes: editForm.notes || undefined });
+            setEditModalOpen(false);
+            setEditingRoute(null);
+            showToast('Đã cập nhật chuyến giao', 'success');
+            fetchRoutes();
+        } catch (err) {
+            showToast(getErrorMessage(err, 'Không thể cập nhật chuyến giao'));
+        } finally {
+            setRouteSubmitting(false);
+        }
+    };
+
+    const handleDeleteRoute = async () => {
+        if (!deletingRoute) return;
+        setDeletingRouteLoading(true);
+        try {
+            await routeApi.delete(deletingRoute.id);
+            setDeletingRoute(null);
+            showToast('Đã xóa chuyến giao', 'success');
+            fetchRoutes();
+        } catch (err) {
+            showToast(getErrorMessage(err, 'Không thể xóa chuyến giao'));
+        } finally {
+            setDeletingRouteLoading(false);
+        }
+    };
+
     const columns: Column<Route>[] = [
         { key: 'code', header: 'Mã chuyến' },
         { key: 'shiftDate', header: 'Ngày', render: (r) => formatDate(r.shiftDate) },
@@ -168,7 +214,21 @@ export default function DeliveryRoutesPage() {
         {
             key: 'status',
             header: 'Trạng thái',
-            render: (r) => <Badge variant={statusVariant[r.status] || 'default'}>{viStatus(r.status)}</Badge>,
+            render: (r) => <Badge variant={statusVariant(r.status)}>{viStatus(r.status)}</Badge>,
+        },
+        {
+            key: 'actions',
+            header: '',
+            render: (r) => (
+                <div className="flex gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => openEditRoute(r)}>
+                        <Edit size={16} />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setDeletingRoute(r)}>
+                        <Trash2 size={16} className="text-red-500" />
+                    </Button>
+                </div>
+            ),
         },
     ];
 
@@ -360,6 +420,45 @@ export default function DeliveryRoutesPage() {
                     </div>
                 </div>
             )}
+
+            <Modal
+                isOpen={editModalOpen}
+                onClose={() => { setEditModalOpen(false); setEditingRoute(null); }}
+                title={`Sửa chuyến giao — ${editingRoute?.code ?? ''}`}
+            >
+                <form onSubmit={handleUpdateRoute} className="space-y-4">
+                    <Select
+                        label="Trạng thái"
+                        options={ROUTE_STATUS_SELECT_OPTIONS.filter((o) =>
+                            (ROUTE_STATUS_TRANSITIONS[editingRoute?.status ?? 'planned'] ?? []).includes(o.value)
+                        )}
+                        value={editForm.status}
+                        onChange={(v) => setEditForm({ ...editForm, status: v })}
+                        disabled={editingRoute?.status === 'completed' || editingRoute?.status === 'cancelled'}
+                    />
+                    {(editingRoute?.status === 'completed' || editingRoute?.status === 'cancelled') && (
+                        <p className="text-xs text-slate-500">Chuyến giao đã kết thúc — chỉ có thể sửa ghi chú.</p>
+                    )}
+                    <Input
+                        label="Ghi chú"
+                        value={editForm.notes}
+                        onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                    />
+                    <div className="flex justify-end gap-2 pt-4 border-t">
+                        <Button type="button" variant="outline" onClick={() => setEditModalOpen(false)} disabled={routeSubmitting}>Hủy</Button>
+                        <Button type="submit" isLoading={routeSubmitting}>Cập nhật</Button>
+                    </div>
+                </form>
+            </Modal>
+
+            <ConfirmDialog
+                isOpen={!!deletingRoute}
+                title="Xóa chuyến giao"
+                message={`Bạn có chắc muốn xóa chuyến giao "${deletingRoute?.code}"? Các điểm dừng liên quan sẽ bị xóa theo.`}
+                loading={deletingRouteLoading}
+                onConfirm={handleDeleteRoute}
+                onCancel={() => setDeletingRoute(null)}
+            />
         </div>
     );
 }

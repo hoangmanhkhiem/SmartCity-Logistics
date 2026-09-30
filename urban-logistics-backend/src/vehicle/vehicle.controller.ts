@@ -2,16 +2,17 @@ import { Controller, Get, Post, Patch, Delete, Param, ParseIntPipe, Body, Query,
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { VehicleService } from './vehicle.service';
 import { CreateVehicleDto, UpdateVehicleDto } from './dto';
-import { JwtAuthGuard } from '../common/guards';
+import { JwtAuthGuard, RolesGuard } from '../common/guards';
+import { Roles } from '../common/decorators';
 
 @Controller('vehicles')
 @ApiTags('vehicles')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class VehicleController {
     constructor(private readonly service: VehicleService) { }
 
-    @Post() @ApiOperation({ summary: 'Create vehicle' })
+    @Post() @Roles('platform_admin', 'carrier_ops') @ApiOperation({ summary: 'Create vehicle' })
     create(@Body() dto: CreateVehicleDto) { return this.service.create(dto); }
 
     @Get() @ApiOperation({ summary: 'Get all vehicles' })
@@ -21,9 +22,9 @@ export class VehicleController {
     @Get(':id') @ApiOperation({ summary: 'Get vehicle by ID' })
     findOne(@Param('id', ParseIntPipe) id: number) { return this.service.findOne(id); }
 
-    @Patch(':id') @ApiOperation({ summary: 'Update vehicle' })
+    @Patch(':id') @Roles('platform_admin', 'carrier_ops') @ApiOperation({ summary: 'Update vehicle' })
     update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateVehicleDto) { return this.service.update(id, dto); }
 
-    @Delete(':id') @ApiOperation({ summary: 'Delete vehicle' })
+    @Delete(':id') @Roles('platform_admin', 'carrier_ops') @ApiOperation({ summary: 'Delete vehicle' })
     remove(@Param('id', ParseIntPipe) id: number) { return this.service.remove(id); }
 }

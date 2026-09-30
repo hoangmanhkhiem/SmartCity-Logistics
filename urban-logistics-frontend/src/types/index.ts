@@ -37,6 +37,9 @@ export interface Carrier {
     contactName?: string;
     contactPhone?: string;
     contactEmail?: string;
+    baseFeeVnd: number;
+    perKmFeeVnd: number;
+    perKgFeeVnd: number;
     isActive: boolean;
     organization?: Organization;
 }

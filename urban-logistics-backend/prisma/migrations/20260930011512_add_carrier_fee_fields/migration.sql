@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE `carriers` ADD COLUMN `base_fee_vnd` INTEGER NOT NULL DEFAULT 15000,
+    ADD COLUMN `per_kg_fee_vnd` INTEGER NOT NULL DEFAULT 1500,
+    ADD COLUMN `per_km_fee_vnd` INTEGER NOT NULL DEFAULT 4000;

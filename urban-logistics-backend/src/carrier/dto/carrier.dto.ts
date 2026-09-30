@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean, IsInt, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsInt, IsArray, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateCarrierDto {
@@ -7,6 +7,9 @@ export class CreateCarrierDto {
     @ApiPropertyOptional() @IsOptional() @IsString() contactName?: string;
     @ApiPropertyOptional() @IsOptional() @IsString() contactPhone?: string;
     @ApiPropertyOptional() @IsOptional() @IsString() contactEmail?: string;
+    @ApiPropertyOptional({ description: 'Phí mở chuyến (VNĐ)' }) @IsOptional() @IsInt() @Min(0) baseFeeVnd?: number;
+    @ApiPropertyOptional({ description: 'Phí mỗi km (VNĐ)' }) @IsOptional() @IsInt() @Min(0) perKmFeeVnd?: number;
+    @ApiPropertyOptional({ description: 'Phí mỗi kg vượt 1kg đầu (VNĐ)' }) @IsOptional() @IsInt() @Min(0) perKgFeeVnd?: number;
 }
 
 export class UpdateCarrierDto {
@@ -14,6 +17,9 @@ export class UpdateCarrierDto {
     @ApiPropertyOptional() @IsOptional() @IsString() contactName?: string;
     @ApiPropertyOptional() @IsOptional() @IsString() contactPhone?: string;
     @ApiPropertyOptional() @IsOptional() @IsString() contactEmail?: string;
+    @ApiPropertyOptional({ description: 'Phí mở chuyến (VNĐ)' }) @IsOptional() @IsInt() @Min(0) baseFeeVnd?: number;
+    @ApiPropertyOptional({ description: 'Phí mỗi km (VNĐ)' }) @IsOptional() @IsInt() @Min(0) perKmFeeVnd?: number;
+    @ApiPropertyOptional({ description: 'Phí mỗi kg vượt 1kg đầu (VNĐ)' }) @IsOptional() @IsInt() @Min(0) perKgFeeVnd?: number;
     @ApiPropertyOptional() @IsOptional() @IsBoolean() isActive?: boolean;
 }
 

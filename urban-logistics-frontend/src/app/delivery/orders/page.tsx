@@ -1,27 +1,19 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardBody, CardHeader, DataTable, Badge, Select, Button, Input, Modal } from '@/components/ui';
+import { Card, CardBody, CardHeader, DataTable, Badge, Select, Button, Input, Modal, useToast, getErrorMessage } from '@/components/ui';
 import { orderApi } from '@/lib/api';
 import { useCurrentCarrier } from '@/lib/use-current-carrier';
 import { Order } from '@/types';
 import { Package, Plus, Search, Eye, MapPin } from 'lucide-react';
 import type { Column } from '@/components/ui';
-import { viStatus, ORDER_STATUS_OPTIONS } from '@/lib/status-labels';
+import { viStatus, statusVariant, ORDER_STATUS_OPTIONS } from '@/lib/status-labels';
 import { formatCurrency } from '@/lib/utils';
 
 const statusOptions = [{ value: '', label: 'Tất cả trạng thái' }, ...ORDER_STATUS_OPTIONS];
 
-const statusVariant: Record<string, 'warning' | 'info' | 'success' | 'error'> = {
-    pending: 'warning',
-    assigned: 'info',
-    in_transit: 'info',
-    delivered: 'success',
-    failed: 'error',
-    cancelled: 'error',
-};
-
 export default function DeliveryOrdersPage() {
+    const { showToast } = useToast();
     const { carrier } = useCurrentCarrier();
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
@@ -41,6 +33,8 @@ export default function DeliveryOrdersPage() {
         codAmount: '',
         notes: '',
     });
+    const [creating, setCreating] = useState(false);
+    const [updatingStatus, setUpdatingStatus] = useState(false);
 
     const fetchOrders = async () => {
         if (!carrier) return;
@@ -52,7 +46,7 @@ export default function DeliveryOrdersPage() {
             setOrders(response.data.data || response.data);
             setTotalPages(response.data.meta?.totalPages || 1);
         } catch (error) {
-            console.error('Failed to fetch orders:', error);
+            showToast(getErrorMessage(error, 'Không tải được danh sách đơn hàng'));
         } finally {
             setLoading(false);
         }
@@ -64,18 +58,28 @@ export default function DeliveryOrdersPage() {
     }, [carrier, page, statusFilter]);
 
     const handleUpdateStatus = async (orderId: number, newStatus: string) => {
+        if (updatingStatus) return;
+        setUpdatingStatus(true);
         try {
             await orderApi.update(orderId, { status: newStatus });
+            showToast('Đã cập nhật trạng thái đơn hàng', 'success');
             fetchOrders();
             setSelectedOrder(null);
         } catch (error) {
-            console.error('Failed to update order:', error);
+            showToast(getErrorMessage(error, 'Không thể cập nhật trạng thái đơn hàng'));
+        } finally {
+            setUpdatingStatus(false);
         }
     };
 
     const handleCreateOrder = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!carrier) return;
+        if (!carrier || creating) return;
+        if (formData.codAmount && Number(formData.codAmount) < 0) {
+            showToast('Số tiền thu hộ (COD) không được nhỏ hơn 0');
+            return;
+        }
+        setCreating(true);
         try {
             await orderApi.create({
                 carrierId: carrier.id,
@@ -99,9 +103,12 @@ export default function DeliveryOrdersPage() {
                 codAmount: '',
                 notes: '',
             });
+            showToast('Đã tạo đơn hàng mới', 'success');
             fetchOrders();
         } catch (error) {
-            console.error('Failed to create order:', error);
+            showToast(getErrorMessage(error, 'Không thể tạo đơn hàng'));
+        } finally {
+            setCreating(false);
         }
     };
 
@@ -115,7 +122,7 @@ export default function DeliveryOrdersPage() {
             key: 'status',
             header: 'Trạng thái',
             render: (o) => (
-                <Badge variant={statusVariant[o.status] || 'default'}>
+                <Badge variant={statusVariant(o.status)}>
                     {viStatus(o.status)}
                 </Badge>
             ),
@@ -289,7 +296,7 @@ export default function DeliveryOrdersPage() {
                 {selectedOrder && (
                     <div className="space-y-4">
                         <div className="flex items-center gap-2">
-                            <Badge variant={statusVariant[selectedOrder.status] || 'default'} className="text-sm">
+                            <Badge variant={statusVariant(selectedOrder.status)} className="text-sm">
                                 {viStatus(selectedOrder.status)}
                             </Badge>
                             <span className="text-sm text-slate-500">
@@ -331,6 +338,7 @@ export default function DeliveryOrdersPage() {
                                 <Button
                                     size="sm"
                                     variant="outline"
+                                    isLoading={updatingStatus}
                                     onClick={() => handleUpdateStatus(selectedOrder.id, 'cancelled')}
                                 >
                                     Hủy đơn
@@ -397,6 +405,7 @@ export default function DeliveryOrdersPage() {
                         <Input
                             label="Thu hộ (COD, VNĐ)"
                             type="number"
+                            min={0}
                             value={formData.codAmount}
                             onChange={(e) => setFormData({ ...formData, codAmount: e.target.value })}
                             placeholder="0"
@@ -409,10 +418,10 @@ export default function DeliveryOrdersPage() {
                         placeholder="Ghi chú thêm..."
                     />
                     <div className="flex justify-end gap-2 pt-4 border-t">
-                        <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
+                        <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)} disabled={creating}>
                             Hủy
                         </Button>
-                        <Button type="submit">
+                        <Button type="submit" isLoading={creating}>
                             Tạo đơn
                         </Button>
                     </div>

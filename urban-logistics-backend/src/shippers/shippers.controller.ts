@@ -1,44 +1,65 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../common/guards';
-import { CurrentUser } from '../common/decorators';
+import { JwtAuthGuard, RolesGuard } from '../common/guards';
+import { CurrentUser, Roles } from '../common/decorators';
 import { ShippersService } from './shippers.service';
 import { ClockInDto, CompleteStopDto, CreateShipperProfileDto, FailStopDto } from './dto/shipper.dto';
 
 @ApiTags('shippers')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('shippers')
 export class ShippersController {
     constructor(private readonly shippersService: ShippersService) { }
 
     @Get()
+    @Roles('platform_admin', 'carrier_ops')
     @ApiOperation({ summary: 'Danh sách shipper (theo carrier)' })
     list(@Query('carrierId') carrierId?: string) {
         return this.shippersService.listShippers(carrierId ? Number(carrierId) : undefined);
     }
 
     @Post()
+    @Roles('platform_admin', 'carrier_ops')
     @ApiOperation({ summary: 'Tạo hồ sơ shipper cho user' })
     createProfile(@Body() dto: CreateShipperProfileDto) {
         return this.shippersService.createProfile(dto);
     }
 
     @Get(':userId/stats')
-    @ApiOperation({ summary: 'Hiệu suất / route gần đây của shipper' })
-    stats(@Param('userId', ParseIntPipe) userId: number) {
+    @ApiOperation({ summary: 'Hiệu suất / route gần đây của shipper (chính mình, hoặc platform_admin/carrier_ops)' })
+    stats(
+        @Param('userId', ParseIntPipe) userId: number,
+        @CurrentUser() currentUser: { id: number; memberships?: { role: { name: string } }[] },
+    ) {
+        const isSelf = currentUser.id === userId;
+        const isOps = currentUser.memberships?.some((m) => ['platform_admin', 'carrier_ops'].includes(m.role.name));
+        if (!isSelf && !isOps) throw new ForbiddenException('Không có quyền xem hiệu suất của shipper này');
         return this.shippersService.shipperStats(userId);
     }
 
     @Post(':userId/clock-in')
-    @ApiOperation({ summary: 'Bắt đầu ca — chọn xe' })
-    clockIn(@Param('userId', ParseIntPipe) userId: number, @Body() dto: ClockInDto) {
+    @ApiOperation({ summary: 'Bắt đầu ca — chọn xe (chính mình, hoặc platform_admin/carrier_ops)' })
+    clockIn(
+        @Param('userId', ParseIntPipe) userId: number,
+        @Body() dto: ClockInDto,
+        @CurrentUser() currentUser: { id: number; memberships?: { role: { name: string } }[] },
+    ) {
+        const isSelf = currentUser.id === userId;
+        const isOps = currentUser.memberships?.some((m) => ['platform_admin', 'carrier_ops'].includes(m.role.name));
+        if (!isSelf && !isOps) throw new ForbiddenException('Không có quyền chấm công cho shipper này');
         return this.shippersService.clockIn(userId, dto);
     }
 
     @Post(':userId/clock-out')
-    @ApiOperation({ summary: 'Kết thúc ca' })
-    clockOut(@Param('userId', ParseIntPipe) userId: number) {
+    @ApiOperation({ summary: 'Kết thúc ca (chính mình, hoặc platform_admin/carrier_ops)' })
+    clockOut(
+        @Param('userId', ParseIntPipe) userId: number,
+        @CurrentUser() currentUser: { id: number; memberships?: { role: { name: string } }[] },
+    ) {
+        const isSelf = currentUser.id === userId;
+        const isOps = currentUser.memberships?.some((m) => ['platform_admin', 'carrier_ops'].includes(m.role.name));
+        if (!isSelf && !isOps) throw new ForbiddenException('Không có quyền chấm công cho shipper này');
         return this.shippersService.clockOut(userId);
     }
 

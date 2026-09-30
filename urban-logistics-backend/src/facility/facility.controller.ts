@@ -2,16 +2,17 @@ import { Controller, Get, Post, Patch, Delete, Param, ParseIntPipe, Body, Query,
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { FacilityService } from './facility.service';
 import { CreateFacilityDto, UpdateFacilityDto } from './dto';
-import { JwtAuthGuard } from '../common/guards';
+import { JwtAuthGuard, RolesGuard } from '../common/guards';
+import { Roles } from '../common/decorators';
 
 @Controller('facilities')
 @ApiTags('facilities')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class FacilityController {
     constructor(private readonly service: FacilityService) { }
 
-    @Post() @ApiOperation({ summary: 'Create facility' })
+    @Post() @Roles('platform_admin', 'carrier_ops') @ApiOperation({ summary: 'Create facility' })
     create(@Body() dto: CreateFacilityDto) { return this.service.create(dto); }
 
     @Get() @ApiOperation({ summary: 'Get all facilities' })
@@ -21,9 +22,9 @@ export class FacilityController {
     @Get(':id') @ApiOperation({ summary: 'Get facility by ID' })
     findOne(@Param('id', ParseIntPipe) id: number) { return this.service.findOne(id); }
 
-    @Patch(':id') @ApiOperation({ summary: 'Update facility' })
+    @Patch(':id') @Roles('platform_admin', 'carrier_ops') @ApiOperation({ summary: 'Update facility' })
     update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateFacilityDto) { return this.service.update(id, dto); }
 
-    @Delete(':id') @ApiOperation({ summary: 'Delete facility' })
+    @Delete(':id') @Roles('platform_admin', 'carrier_ops') @ApiOperation({ summary: 'Delete facility' })
     remove(@Param('id', ParseIntPipe) id: number) { return this.service.remove(id); }
 }

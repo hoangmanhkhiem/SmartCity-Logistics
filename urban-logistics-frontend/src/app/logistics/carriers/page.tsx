@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardBody, CardHeader, DataTable, Badge, Button, Input, Modal } from '@/components/ui';
+import { Card, CardBody, CardHeader, DataTable, Badge, Button, Input, Modal, ConfirmDialog, useToast, getErrorMessage } from '@/components/ui';
 import { carrierApi, organizationApi, zoneApi } from '@/lib/api';
 import { Carrier, Organization, Zone } from '@/types';
-import { Truck, Plus, Search, Edit, Eye, Building2, MapPin } from 'lucide-react';
+import { Truck, Plus, Search, Edit, Eye, Building2, MapPin, Trash2 } from 'lucide-react';
 import type { Column } from '@/components/ui';
 
 export default function LogisticsCarriersPage() {
+    const { showToast } = useToast();
     const [carriers, setCarriers] = useState<Carrier[]>([]);
     const [organizations, setOrganizations] = useState<Organization[]>([]);
     const [zones, setZones] = useState<Zone[]>([]);
@@ -26,7 +27,14 @@ export default function LogisticsCarriersPage() {
         contactName: '',
         contactPhone: '',
         contactEmail: '',
+        baseFeeVnd: '15000',
+        perKmFeeVnd: '4000',
+        perKgFeeVnd: '1500',
     });
+    const [submitting, setSubmitting] = useState(false);
+    const [savingZones, setSavingZones] = useState(false);
+    const [deletingCarrier, setDeletingCarrier] = useState<Carrier | null>(null);
+    const [deleting, setDeleting] = useState(false);
 
     const fetchCarriers = async () => {
         setLoading(true);
@@ -35,7 +43,7 @@ export default function LogisticsCarriersPage() {
             setCarriers(response.data.data || response.data);
             setTotalPages(response.data.meta?.totalPages || 1);
         } catch (error) {
-            console.error('Failed to fetch carriers:', error);
+            showToast(getErrorMessage(error, 'Không tải được danh sách carrier'));
         } finally {
             setLoading(false);
         }
@@ -55,6 +63,8 @@ export default function LogisticsCarriersPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (submitting) return;
+        setSubmitting(true);
         try {
             const data = {
                 organizationId: Number(formData.organizationId),
@@ -62,6 +72,9 @@ export default function LogisticsCarriersPage() {
                 contactName: formData.contactName || undefined,
                 contactPhone: formData.contactPhone || undefined,
                 contactEmail: formData.contactEmail || undefined,
+                baseFeeVnd: Number(formData.baseFeeVnd),
+                perKmFeeVnd: Number(formData.perKmFeeVnd),
+                perKgFeeVnd: Number(formData.perKgFeeVnd),
             };
             if (editingCarrier) {
                 await carrierApi.update(editingCarrier.id, data);
@@ -71,9 +84,12 @@ export default function LogisticsCarriersPage() {
             setIsModalOpen(false);
             setEditingCarrier(null);
             resetForm();
+            showToast(editingCarrier ? 'Đã cập nhật carrier' : 'Đã thêm carrier mới', 'success');
             fetchCarriers();
         } catch (error) {
-            console.error('Failed to save carrier:', error);
+            showToast(getErrorMessage(error, 'Không thể lưu carrier'));
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -85,12 +101,24 @@ export default function LogisticsCarriersPage() {
             contactName: c.contactName || '',
             contactPhone: c.contactPhone || '',
             contactEmail: c.contactEmail || '',
+            baseFeeVnd: String(c.baseFeeVnd ?? 15000),
+            perKmFeeVnd: String(c.perKmFeeVnd ?? 4000),
+            perKgFeeVnd: String(c.perKgFeeVnd ?? 1500),
         });
         setIsModalOpen(true);
     };
 
     const resetForm = () => {
-        setFormData({ organizationId: '', name: '', contactName: '', contactPhone: '', contactEmail: '' });
+        setFormData({
+            organizationId: '',
+            name: '',
+            contactName: '',
+            contactPhone: '',
+            contactEmail: '',
+            baseFeeVnd: '15000',
+            perKmFeeVnd: '4000',
+            perKgFeeVnd: '1500',
+        });
     };
 
     const openZonesModal = (c: Carrier) => {
@@ -109,13 +137,32 @@ export default function LogisticsCarriersPage() {
     };
 
     const saveZones = async () => {
-        if (!selectedCarrier) return;
+        if (!selectedCarrier || savingZones) return;
+        setSavingZones(true);
         try {
             await carrierApi.updateZones(selectedCarrier.id, [...zoneSelection]);
             setZonesModalOpen(false);
+            showToast('Đã cập nhật khu vực hoạt động', 'success');
             fetchCarriers();
         } catch (error) {
-            console.error('Failed to update carrier zones:', error);
+            showToast(getErrorMessage(error, 'Không thể cập nhật khu vực hoạt động'));
+        } finally {
+            setSavingZones(false);
+        }
+    };
+
+    const handleDeleteCarrier = async () => {
+        if (!deletingCarrier) return;
+        setDeleting(true);
+        try {
+            await carrierApi.delete(deletingCarrier.id);
+            setDeletingCarrier(null);
+            showToast('Đã xóa carrier', 'success');
+            fetchCarriers();
+        } catch (error) {
+            showToast(getErrorMessage(error, 'Không thể xóa carrier'));
+        } finally {
+            setDeleting(false);
         }
     };
 
@@ -151,6 +198,9 @@ export default function LogisticsCarriersPage() {
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => setSelectedCarrier(c)}>
                         <Eye size={16} />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setDeletingCarrier(c)}>
+                        <Trash2 size={16} className="text-red-500" />
                     </Button>
                 </div>
             ),
@@ -271,9 +321,35 @@ export default function LogisticsCarriersPage() {
                             onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })}
                         />
                     </div>
+                    <div className="border-t pt-4">
+                        <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Bảng phí ước tính (VNĐ) — dùng để so sánh carrier khi khách đặt đơn</p>
+                        <div className="grid grid-cols-3 gap-3">
+                            <Input
+                                label="Phí mở chuyến"
+                                type="number"
+                                min={0}
+                                value={formData.baseFeeVnd}
+                                onChange={(e) => setFormData({ ...formData, baseFeeVnd: e.target.value })}
+                            />
+                            <Input
+                                label="Phí / km"
+                                type="number"
+                                min={0}
+                                value={formData.perKmFeeVnd}
+                                onChange={(e) => setFormData({ ...formData, perKmFeeVnd: e.target.value })}
+                            />
+                            <Input
+                                label="Phí / kg (vượt 1kg đầu)"
+                                type="number"
+                                min={0}
+                                value={formData.perKgFeeVnd}
+                                onChange={(e) => setFormData({ ...formData, perKgFeeVnd: e.target.value })}
+                            />
+                        </div>
+                    </div>
                     <div className="flex justify-end gap-2 pt-4 border-t">
-                        <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Hủy</Button>
-                        <Button type="submit">{editingCarrier ? 'Cập nhật' : 'Thêm carrier'}</Button>
+                        <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)} disabled={submitting}>Hủy</Button>
+                        <Button type="submit" isLoading={submitting}>{editingCarrier ? 'Cập nhật' : 'Thêm carrier'}</Button>
                     </div>
                 </form>
             </Modal>
@@ -295,8 +371,8 @@ export default function LogisticsCarriersPage() {
                         ))}
                     </div>
                     <div className="flex justify-end gap-2 pt-4 border-t">
-                        <Button variant="outline" onClick={() => setZonesModalOpen(false)}>Hủy</Button>
-                        <Button onClick={saveZones}>Lưu khu vực</Button>
+                        <Button variant="outline" onClick={() => setZonesModalOpen(false)} disabled={savingZones}>Hủy</Button>
+                        <Button onClick={saveZones} isLoading={savingZones}>Lưu khu vực</Button>
                     </div>
                 </div>
             </Modal>
@@ -317,11 +393,22 @@ export default function LogisticsCarriersPage() {
                             <div><p className="text-sm text-slate-500">Loại hình</p><p className="font-medium">Last-mile nội đô</p></div>
                             <div><p className="text-sm text-slate-500">Người liên hệ</p><p className="font-medium">{selectedCarrier.contactName || '-'}</p></div>
                             <div><p className="text-sm text-slate-500">SĐT</p><p className="font-medium">{selectedCarrier.contactPhone || '-'}</p></div>
+                            <div><p className="text-sm text-slate-500">Phí mở chuyến</p><p className="font-medium">{selectedCarrier.baseFeeVnd?.toLocaleString('vi-VN')}đ</p></div>
+                            <div><p className="text-sm text-slate-500">Phí / km — phí / kg</p><p className="font-medium">{selectedCarrier.perKmFeeVnd?.toLocaleString('vi-VN')}đ — {selectedCarrier.perKgFeeVnd?.toLocaleString('vi-VN')}đ</p></div>
                         </div>
                         <div className="flex justify-end pt-4 border-t"><Button onClick={() => setSelectedCarrier(null)}>Đóng</Button></div>
                     </div>
                 )}
             </Modal>
+
+            <ConfirmDialog
+                isOpen={!!deletingCarrier}
+                title="Xóa carrier"
+                message={`Bạn có chắc muốn xóa carrier "${deletingCarrier?.name}"? Toàn bộ xe, đơn hàng và chuyến giao liên quan có thể bị ảnh hưởng.`}
+                loading={deleting}
+                onConfirm={handleDeleteCarrier}
+                onCancel={() => setDeletingCarrier(null)}
+            />
         </div>
     );
 }

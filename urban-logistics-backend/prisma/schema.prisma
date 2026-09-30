@@ -44,6 +44,9 @@ model Carrier {
   contactName      String?  @map("contact_name")
   contactPhone     String?  @map("contact_phone")
   contactEmail     String?  @map("contact_email")
+  baseFeeVnd       Int      @default(15000) @map("base_fee_vnd") // Phí mở chuyến (VNĐ)
+  perKmFeeVnd      Int      @default(4000) @map("per_km_fee_vnd") // Phí mỗi km (VNĐ)
+  perKgFeeVnd      Int      @default(1500) @map("per_kg_fee_vnd") // Phí mỗi kg vượt 1kg đầu (VNĐ)
   isActive         Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

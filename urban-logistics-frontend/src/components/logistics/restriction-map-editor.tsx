@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Card, CardBody, CardHeader, Badge, Button, Select, Input, Modal } from '@/components/ui';
+import { Card, CardBody, CardHeader, Badge, Button, Select, Input, Modal, ConfirmDialog, useToast, getErrorMessage } from '@/components/ui';
 import { restrictionApi, roadSegmentApi, zoneApi } from '@/lib/api';
-import { Settings, Clock, Truck, MapPin, Plus, RefreshCw, PenLine } from 'lucide-react';
+import { Settings, Clock, Truck, MapPin, Plus, RefreshCw, PenLine, Edit, Trash2 } from 'lucide-react';
 import type { Zone } from '@/types';
 import { normalizeRestrictionFeatureCollection } from '@/lib/geojson-lnglat';
 import Map from '@/components/shared/map';
@@ -21,6 +21,7 @@ interface RestrictionMapEditorProps {
 }
 
 export default function RestrictionMapEditor({ readOnly = false }: RestrictionMapEditorProps) {
+    const { showToast } = useToast();
     const [restrictions, setRestrictions] = useState<Record<string, unknown>[]>([]);
     const [zones, setZones] = useState<Zone[]>([]);
     const [loading, setLoading] = useState(true);
@@ -41,14 +42,30 @@ export default function RestrictionMapEditor({ readOnly = false }: RestrictionMa
         vehicleTypes: 'truck',
     });
 
+    const [editModalOpen, setEditModalOpen] = useState(false);
+    const [editingRestriction, setEditingRestriction] = useState<Record<string, unknown> | null>(null);
+    const [editForm, setEditForm] = useState({
+        timeFrom: '',
+        timeTo: '',
+        daysOfWeek: '',
+        severity: 'restricted',
+        description: '',
+        vehicleTypes: '',
+    });
+    const [creating, setCreating] = useState(false);
+    const [updating, setUpdating] = useState(false);
+    const [deletingRestriction, setDeletingRestriction] = useState<Record<string, unknown> | null>(null);
+    const [deleting, setDeleting] = useState(false);
+
     const loadList = useCallback(async () => {
         try {
             const res = await restrictionApi.getAll();
             setRestrictions((res.data as Record<string, unknown>[]) || []);
-        } catch {
+        } catch (error) {
             setRestrictions([]);
+            showToast(getErrorMessage(error, 'Không tải được danh sách quy định hạn chế'));
         }
-    }, []);
+    }, [showToast]);
 
     useEffect(() => {
         let cancelled = false;
@@ -99,33 +116,108 @@ export default function RestrictionMapEditor({ readOnly = false }: RestrictionMa
 
     const handleCreateChain = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (creating) return;
         if (!drawnLine) {
-            alert('Vẽ đoạn đường trên bản đồ trước khi tạo quy định');
+            showToast('Vẽ đoạn đường trên bản đồ trước khi tạo quy định');
             return;
         }
-        const roadRes = await roadSegmentApi.create({
-            name: roadForm.name,
-            zoneId: roadForm.zoneId || undefined,
-            geometry: JSON.stringify(drawnLine),
+        setCreating(true);
+        try {
+            const roadRes = await roadSegmentApi.create({
+                name: roadForm.name,
+                zoneId: roadForm.zoneId || undefined,
+                geometry: JSON.stringify(drawnLine),
+            });
+            const road = roadRes.data as { id: string };
+            const days = restrictionForm.daysOfWeek.split(',').map((s) => s.trim()).filter(Boolean);
+            const vtypes = restrictionForm.vehicleTypes.split(',').map((s) => s.trim()).filter(Boolean);
+            await restrictionApi.create({
+                roadSegmentId: road.id,
+                zoneId: roadForm.zoneId || undefined,
+                timeFrom: restrictionForm.timeFrom,
+                timeTo: restrictionForm.timeTo,
+                daysOfWeek: days,
+                severity: restrictionForm.severity,
+                description: restrictionForm.description || undefined,
+                vehicleTypes: vtypes.length ? vtypes : undefined,
+            });
+            setModalOpen(false);
+            setDrawnLine(null);
+            setRoadForm({ name: '', zoneId: '' });
+            showToast('Đã tạo quy định hạn chế', 'success');
+            await loadList();
+            await fetchGeo();
+        } catch (error) {
+            showToast(getErrorMessage(error, 'Không thể tạo quy định hạn chế'));
+        } finally {
+            setCreating(false);
+        }
+    };
+
+    const handleOpenEdit = (r: Record<string, unknown>) => {
+        const x = r as {
+            timeFrom?: string;
+            timeTo?: string;
+            daysOfWeek?: string[];
+            severity?: string;
+            description?: string;
+            vehicleTypes?: string[];
+        };
+        setEditingRestriction(r);
+        setEditForm({
+            timeFrom: x.timeFrom || '',
+            timeTo: x.timeTo || '',
+            daysOfWeek: (x.daysOfWeek || []).join(','),
+            severity: x.severity || 'restricted',
+            description: x.description || '',
+            vehicleTypes: (x.vehicleTypes || []).join(','),
         });
-        const road = roadRes.data as { id: string };
-        const days = restrictionForm.daysOfWeek.split(',').map((s) => s.trim()).filter(Boolean);
-        const vtypes = restrictionForm.vehicleTypes.split(',').map((s) => s.trim()).filter(Boolean);
-        await restrictionApi.create({
-            roadSegmentId: road.id,
-            zoneId: roadForm.zoneId || undefined,
-            timeFrom: restrictionForm.timeFrom,
-            timeTo: restrictionForm.timeTo,
-            daysOfWeek: days,
-            severity: restrictionForm.severity,
-            description: restrictionForm.description || undefined,
-            vehicleTypes: vtypes.length ? vtypes : undefined,
-        });
-        setModalOpen(false);
-        setDrawnLine(null);
-        setRoadForm({ name: '', zoneId: '' });
-        await loadList();
-        await fetchGeo();
+        setEditModalOpen(true);
+    };
+
+    const handleUpdateRestriction = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingRestriction || updating) return;
+        setUpdating(true);
+        try {
+            const id = (editingRestriction as { id: string }).id;
+            const days = editForm.daysOfWeek.split(',').map((s) => s.trim()).filter(Boolean);
+            const vtypes = editForm.vehicleTypes.split(',').map((s) => s.trim()).filter(Boolean);
+            await restrictionApi.update(Number(id), {
+                timeFrom: editForm.timeFrom || undefined,
+                timeTo: editForm.timeTo || undefined,
+                daysOfWeek: days,
+                severity: editForm.severity,
+                description: editForm.description || undefined,
+                vehicleTypes: vtypes.length ? vtypes : undefined,
+            });
+            setEditModalOpen(false);
+            setEditingRestriction(null);
+            showToast('Đã cập nhật quy định hạn chế', 'success');
+            await loadList();
+            await fetchGeo();
+        } catch (error) {
+            showToast(getErrorMessage(error, 'Không thể cập nhật quy định hạn chế'));
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    const handleDeleteRestriction = async () => {
+        if (!deletingRestriction) return;
+        setDeleting(true);
+        try {
+            const id = (deletingRestriction as { id: string }).id;
+            await restrictionApi.delete(Number(id));
+            setDeletingRestriction(null);
+            showToast('Đã xóa quy định hạn chế', 'success');
+            await loadList();
+            await fetchGeo();
+        } catch (error) {
+            showToast(getErrorMessage(error, 'Không thể xóa quy định hạn chế'));
+        } finally {
+            setDeleting(false);
+        }
     };
 
     const vehicleOptions = [
@@ -269,6 +361,16 @@ export default function RestrictionMapEditor({ readOnly = false }: RestrictionMa
                                                 </div>
                                             </div>
                                         </div>
+                                        {!readOnly && (
+                                            <div className="flex gap-1">
+                                                <Button variant="ghost" size="sm" onClick={() => handleOpenEdit(r)}>
+                                                    <Edit size={16} />
+                                                </Button>
+                                                <Button variant="ghost" size="sm" onClick={() => setDeletingRestriction(r)}>
+                                                    <Trash2 size={16} className="text-red-500" />
+                                                </Button>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="mt-3 flex flex-wrap gap-4 pl-6 text-sm text-slate-600">
                                         {x.timeFrom && (
@@ -363,14 +465,81 @@ export default function RestrictionMapEditor({ readOnly = false }: RestrictionMa
                             onChange={(e) => setRestrictionForm({ ...restrictionForm, description: e.target.value })}
                         />
                         <div className="flex justify-end gap-2 border-t pt-4">
-                            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>
+                            <Button type="button" variant="outline" onClick={() => setModalOpen(false)} disabled={creating}>
                                 Hủy
                             </Button>
-                            <Button type="submit">Tạo</Button>
+                            <Button type="submit" isLoading={creating}>Tạo</Button>
                         </div>
                     </form>
                 </Modal>
             )}
+
+            {!readOnly && (
+                <Modal
+                    isOpen={editModalOpen}
+                    onClose={() => {
+                        setEditModalOpen(false);
+                        setEditingRestriction(null);
+                    }}
+                    title="Sửa quy định hạn chế"
+                    size="lg"
+                >
+                    <form onSubmit={handleUpdateRestriction} className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <Input
+                                label="Từ (HH:mm)"
+                                value={editForm.timeFrom}
+                                onChange={(e) => setEditForm({ ...editForm, timeFrom: e.target.value })}
+                            />
+                            <Input
+                                label="Đến (HH:mm)"
+                                value={editForm.timeTo}
+                                onChange={(e) => setEditForm({ ...editForm, timeTo: e.target.value })}
+                            />
+                        </div>
+                        <Input
+                            label="Ngày trong tuần (Mon,Tue,...)"
+                            value={editForm.daysOfWeek}
+                            onChange={(e) => setEditForm({ ...editForm, daysOfWeek: e.target.value })}
+                        />
+                        <Select
+                            label="Mức độ (màu)"
+                            options={[
+                                { value: 'prohibited', label: 'Cấm (đỏ)' },
+                                { value: 'restricted', label: 'Hạn chế (cam)' },
+                                { value: 'allowed_window', label: 'Khung được (xanh)' },
+                            ]}
+                            value={editForm.severity}
+                            onChange={(v) => setEditForm({ ...editForm, severity: v })}
+                        />
+                        <Input
+                            label="Loại xe (phân tách bằng dấu phẩy, để trống = mọi xe)"
+                            value={editForm.vehicleTypes}
+                            onChange={(e) => setEditForm({ ...editForm, vehicleTypes: e.target.value })}
+                        />
+                        <Input
+                            label="Mô tả"
+                            value={editForm.description}
+                            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                        />
+                        <div className="flex justify-end gap-2 border-t pt-4">
+                            <Button type="button" variant="outline" onClick={() => setEditModalOpen(false)} disabled={updating}>
+                                Hủy
+                            </Button>
+                            <Button type="submit" isLoading={updating}>Cập nhật</Button>
+                        </div>
+                    </form>
+                </Modal>
+            )}
+
+            <ConfirmDialog
+                isOpen={!!deletingRestriction}
+                title="Xóa quy định hạn chế"
+                message="Bạn có chắc muốn xóa quy định hạn chế này? Hành động này không thể hoàn tác."
+                loading={deleting}
+                onConfirm={handleDeleteRestriction}
+                onCancel={() => setDeletingRestriction(null)}
+            />
         </div>
     );
 }

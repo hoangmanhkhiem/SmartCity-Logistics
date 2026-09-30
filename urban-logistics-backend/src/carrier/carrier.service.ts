@@ -48,7 +48,7 @@ export class CarrierService {
 
     /**
      * So sánh phí ước tính giữa các carrier THẬT đang phục vụ khu vực điểm giao.
-     * Ước lượng đơn giản (không phải giá thật của hãng) — dùng để khách hàng chọn carrier khi đặt đơn.
+     * Dùng bảng phí (baseFeeVnd/perKmFeeVnd/perKgFeeVnd) do carrier tự cấu hình — không còn suy ra từ carrier.id.
      */
     async compareForRoute(params: {
         pickupLat: number;
@@ -71,18 +71,18 @@ export class CarrierService {
             : allCarriers;
 
         const quotes = eligible.map((c) => {
-            const base = 12000 + (c.id % 5) * 800;
-            const perKm = 3500 + (c.id % 4) * 300;
-            const perKg = 1800;
-            const estimateVnd = Math.round(base + distanceKm * perKm + w * perKg);
-            const etaMin = Math.round(20 + distanceKm * 3.5 + (c.id % 3) * 5);
+            const base = c.baseFeeVnd;
+            const perKm = c.perKmFeeVnd;
+            const extraKg = Math.max(0, w - 1);
+            const estimateVnd = Math.round(base + distanceKm * perKm + extraKg * c.perKgFeeVnd);
+            const etaMin = Math.round(20 + distanceKm * 3.5);
             return {
                 carrierId: c.id,
                 carrierName: c.name,
                 organization: c.organization?.name,
                 estimatedFeeVnd: estimateVnd,
                 estimatedEtaMinutes: etaMin,
-                modelNote: 'Ước lượng nội bộ dựa trên khoảng cách/khối lượng — không phải giá cam kết cuối cùng.',
+                modelNote: 'Ước lượng theo bảng phí carrier tự cấu hình (phí mở chuyến + phí/km + phí/kg vượt 1kg đầu) — không phải giá cam kết cuối cùng.',
             };
         });
 

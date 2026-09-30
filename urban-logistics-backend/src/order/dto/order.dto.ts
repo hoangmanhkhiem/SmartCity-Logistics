@@ -1,5 +1,7 @@
-import { IsString, IsOptional, IsNumber, IsDateString, IsInt } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsDateString, IsInt, Min, Max, IsIn } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export const ORDER_STATUSES = ['pending', 'assigned', 'in_transit', 'delivered', 'failed', 'cancelled'] as const;
 
 export class CreateOrderDto {
     @ApiProperty() @IsInt() carrierId: number;
@@ -11,12 +13,12 @@ export class CreateOrderDto {
     @ApiPropertyOptional() @IsOptional() @IsString() deliveryAddress?: string;
     @ApiPropertyOptional() @IsOptional() @IsNumber() deliveryLat?: number;
     @ApiPropertyOptional() @IsOptional() @IsNumber() deliveryLon?: number;
-    @ApiPropertyOptional() @IsOptional() @IsNumber() weightKg?: number;
-    @ApiPropertyOptional() @IsOptional() @IsInt() itemCount?: number;
-    @ApiPropertyOptional() @IsOptional() @IsNumber() codAmount?: number;
+    @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0.01) @Max(2000) weightKg?: number;
+    @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) itemCount?: number;
+    @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) codAmount?: number;
     @ApiPropertyOptional() @IsOptional() @IsDateString() timeWindowStart?: string;
     @ApiPropertyOptional() @IsOptional() @IsDateString() timeWindowEnd?: string;
-    @ApiPropertyOptional() @IsOptional() @IsInt() priority?: number;
+    @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) @Max(10) priority?: number;
     @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
     @ApiPropertyOptional() @IsOptional() @IsString() pickupPhone?: string;
     @ApiPropertyOptional() @IsOptional() @IsString() deliveryPhone?: string;
@@ -26,7 +28,7 @@ export class CreateOrderDto {
 }
 
 export class UpdateOrderDto {
-    @ApiPropertyOptional() @IsOptional() @IsString() status?: string;
+    @ApiPropertyOptional({ enum: ORDER_STATUSES }) @IsOptional() @IsIn(ORDER_STATUSES) status?: string;
     @ApiPropertyOptional() @IsOptional() @IsInt() zoneId?: number;
     @ApiPropertyOptional() @IsOptional() @IsString() pickupAddress?: string;
     @ApiPropertyOptional() @IsOptional() @IsNumber() pickupLat?: number;
@@ -34,12 +36,12 @@ export class UpdateOrderDto {
     @ApiPropertyOptional() @IsOptional() @IsString() deliveryAddress?: string;
     @ApiPropertyOptional() @IsOptional() @IsNumber() deliveryLat?: number;
     @ApiPropertyOptional() @IsOptional() @IsNumber() deliveryLon?: number;
-    @ApiPropertyOptional() @IsOptional() @IsNumber() weightKg?: number;
-    @ApiPropertyOptional() @IsOptional() @IsInt() itemCount?: number;
-    @ApiPropertyOptional() @IsOptional() @IsNumber() codAmount?: number;
+    @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0.01) @Max(2000) weightKg?: number;
+    @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) itemCount?: number;
+    @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) codAmount?: number;
     @ApiPropertyOptional() @IsOptional() @IsDateString() timeWindowStart?: string;
     @ApiPropertyOptional() @IsOptional() @IsDateString() timeWindowEnd?: string;
-    @ApiPropertyOptional() @IsOptional() @IsInt() priority?: number;
+    @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) @Max(10) priority?: number;
     @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
     @ApiPropertyOptional() @IsOptional() @IsString() pickupPhone?: string;
     @ApiPropertyOptional() @IsOptional() @IsString() deliveryPhone?: string;

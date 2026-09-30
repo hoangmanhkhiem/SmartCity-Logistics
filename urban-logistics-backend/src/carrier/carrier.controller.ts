@@ -2,16 +2,17 @@ import { Controller, Get, Post, Patch, Delete, Param, ParseIntPipe, Body, Query,
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CarrierService } from './carrier.service';
 import { CreateCarrierDto, UpdateCarrierDto, UpdateCarrierZonesDto } from './dto';
-import { JwtAuthGuard } from '../common/guards';
+import { JwtAuthGuard, RolesGuard } from '../common/guards';
+import { Roles } from '../common/decorators';
 
 @Controller('carriers')
 @ApiTags('carriers')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class CarrierController {
     constructor(private readonly service: CarrierService) { }
 
-    @Post() @ApiOperation({ summary: 'Create carrier' })
+    @Post() @Roles('platform_admin') @ApiOperation({ summary: 'Create carrier' })
     create(@Body() dto: CreateCarrierDto) { return this.service.create(dto); }
 
     @Get() @ApiOperation({ summary: 'Get all carriers' })
@@ -41,12 +42,12 @@ export class CarrierController {
     @Get(':id') @ApiOperation({ summary: 'Get carrier by ID' })
     findOne(@Param('id', ParseIntPipe) id: number) { return this.service.findOne(id); }
 
-    @Patch(':id') @ApiOperation({ summary: 'Update carrier' })
+    @Patch(':id') @Roles('platform_admin', 'carrier_ops') @ApiOperation({ summary: 'Update carrier' })
     update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCarrierDto) { return this.service.update(id, dto); }
 
-    @Delete(':id') @ApiOperation({ summary: 'Delete carrier' })
+    @Delete(':id') @Roles('platform_admin') @ApiOperation({ summary: 'Delete carrier' })
     remove(@Param('id', ParseIntPipe) id: number) { return this.service.remove(id); }
 
-    @Patch(':id/zones') @ApiOperation({ summary: 'Gán khu vực hoạt động cho carrier' })
+    @Patch(':id/zones') @Roles('platform_admin') @ApiOperation({ summary: 'Gán khu vực hoạt động cho carrier' })
     updateZones(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCarrierZonesDto) { return this.service.updateZones(id, dto); }
 }
