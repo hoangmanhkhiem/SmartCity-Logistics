@@ -49,11 +49,11 @@ export class AnalyticsService {
     }
 
     /**
-     * Ghi 1 snapshot cho ngày hiện tại (toàn nền tảng + từng carrier).
+     * Ghi 1 snapshot cho 1 ngày (mặc định hôm nay, toàn nền tảng + từng carrier).
      * Gọi thủ công hoặc qua cron ngoài (Windows Task Scheduler / cron job) 1 lần/ngày.
      */
-    async createSnapshot() {
-        const now = new Date();
+    async createSnapshot(forDate?: Date) {
+        const now = forDate ?? new Date();
         const snapshotDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
         const dayStart = snapshotDate;
         const dayEnd = new Date(dayStart);

@@ -22,7 +22,8 @@
     "db:import-research:dry": "powershell -ExecutionPolicy Bypass -File ./scripts/import-research-sql.ps1 -DryRun",
     "prisma:studio": "prisma studio",
     "db:seed": "ts-node prisma/seed.ts",
-    "backfill:co2": "ts-node prisma/backfill-co2.ts"
+    "backfill:co2": "ts-node prisma/backfill-co2.ts",
+    "backfill:snapshots": "ts-node prisma/backfill-snapshots.ts"
   },
   "keywords": [
     "nestjs",
