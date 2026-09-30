@@ -290,21 +290,27 @@ export default function LogisticsDashboard() {
 
             {/* Xu hướng theo thời gian */}
             <Card>
-                <CardHeader className="flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-white">
+                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <h2 className="flex shrink-0 items-center gap-2 text-sm font-semibold text-slate-800 dark:text-white">
                         <TrendingUp size={16} /> Xu hướng đơn hàng & CO₂
                     </h2>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <div className="w-44">
+                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                        <div className="w-full min-w-[140px] sm:w-40">
                             <Select
                                 options={[{ value: '', label: 'Toàn nền tảng' }, ...carriers.map((c) => ({ value: String(c.id), label: c.name }))]}
                                 value={carrierFilter}
                                 onChange={setCarrierFilter}
                             />
                         </div>
-                        <DatePicker value={fromDate} onChange={setFromDate} />
-                        <span className="text-sm text-slate-400">–</span>
-                        <DatePicker value={toDate} onChange={setToDate} />
+                        <div className="flex items-center gap-2">
+                            <div className="w-[150px] shrink-0">
+                                <DatePicker value={fromDate} onChange={setFromDate} />
+                            </div>
+                            <span className="shrink-0 text-sm text-slate-400">–</span>
+                            <div className="w-[150px] shrink-0">
+                                <DatePicker value={toDate} onChange={setToDate} />
+                            </div>
+                        </div>
                     </div>
                 </CardHeader>
                 <CardBody>

@@ -231,12 +231,16 @@ export default function RegulatorReportsPage() {
             </Card>
 
             <Card>
-                <CardHeader className="flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="text-lg font-semibold">Báo cáo tuân thủ theo carrier (CO₂ + kinh tế)</h2>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <DatePicker value={fromDate} onChange={setFromDate} />
-                        <span className="text-sm text-slate-400">–</span>
-                        <DatePicker value={toDate} onChange={setToDate} />
+                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <h2 className="shrink-0 text-lg font-semibold">Báo cáo tuân thủ theo carrier (CO₂ + kinh tế)</h2>
+                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                        <div className="w-[150px] shrink-0">
+                            <DatePicker value={fromDate} onChange={setFromDate} />
+                        </div>
+                        <span className="shrink-0 text-sm text-slate-400">–</span>
+                        <div className="w-[150px] shrink-0">
+                            <DatePicker value={toDate} onChange={setToDate} />
+                        </div>
                         <Button variant="outline" onClick={handleExportCsv} disabled={!report || report.byCarrier.length === 0}>
                             <Download size={16} className="mr-1 inline" /> Xuất CSV
                         </Button>
