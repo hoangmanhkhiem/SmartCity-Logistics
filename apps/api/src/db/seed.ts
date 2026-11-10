@@ -930,26 +930,30 @@ async function main() {
         await prisma.emissionFactor.create({ data: { vehicleType, fuelType, gCo2ePerKm, sourceRef } });
     }
 
-    const issues = [
-        ['parking', 21.0312, 105.8504, zoneHoanKiem.id, 'Không có điểm dừng hợp lệ trên Hàng Gai'],
-        ['congestion', 21.0288, 105.8526, zoneLezHoanKiem.id, 'Lý Thái Tổ đông khách du lịch, shipper phải vòng'],
-        ['parking', 21.0246, 105.8565, zoneCuaNam.id, 'Hầm Tràng Tiền đầy sau 11h'],
-        ['restriction', 21.0364, 105.8388, zoneBaDinh.id, 'Biển cấm xe tải trên Hùng Vương'],
-        ['congestion', 21.0331, 105.7894, zoneCauGiay.id, 'Tắc Nguyễn Phong Sắc giờ tan tầm'],
-        ['parking', 21.0158, 105.8235, zoneDongDa.id, 'Láng Hạ không có chỗ đỗ xe máy'],
-    ] as const;
-    for (const [issueType, latitude, longitude, zoneId, note] of issues) {
-        await prisma.issueReport.create({
-            data: {
-                reporterHash: createHash('sha256').update(`demo-${issueType}-${zoneId}`).digest('hex'),
-                issueType,
-                latitude,
-                longitude,
-                zoneId,
-                note,
-                status: 'new',
-            },
-        });
+    const densityClusters: Array<[typeof zoneHoanKiem, number, number, number, string]> = [
+        [zoneHoanKiem, 21.031, 105.851, 14, 'Hàng Gai / Hồ Gươm'],
+        [zoneCauGiay, 21.034, 105.792, 12, 'Nguyễn Phong Sắc'],
+        [zoneDongDa, 21.016, 105.824, 8, 'Láng Hạ'],
+        [zoneCuaNam, 21.025, 105.844, 8, 'Tràng Tiền'],
+        [zoneBaDinh, 21.035, 105.834, 6, 'Hùng Vương'],
+        [zoneGiangVo, 21.028, 105.82, 6, 'Giảng Võ'],
+    ];
+    for (const [zone, lat, lon, count, place] of densityClusters) {
+        for (let i = 0; i < count; i++) {
+            const angle = (i / count) * Math.PI * 2;
+            const radius = 0.0011 + (i % 3) * 0.0007;
+            await prisma.issueReport.create({
+                data: {
+                    reporterHash: createHash('sha256').update(`demo-density-${zone.id}-${i}`).digest('hex'),
+                    issueType: i % 3 === 0 ? 'parking' : 'congestion',
+                    latitude: lat + Math.sin(angle) * radius,
+                    longitude: lon + Math.cos(angle) * radius,
+                    zoneId: zone.id,
+                    note: `Phản ánh demo mật độ · ${place}`,
+                    status: 'approved',
+                },
+            });
+        }
     }
 
     await prisma.plan.create({
@@ -1065,7 +1069,7 @@ async function main() {
 - Shippers: 9 (3/carrier)
 - Orders: ${orders.length}
 - Phiếu khảo sát: 8 (6 đã duyệt), 3 nhiệm vụ đang mở
-- Phản ánh điểm nghẽn: 6 · kịch bản chính sách: 2 · hệ số phát thải: 4
+- Phản ánh điểm nghẽn đã duyệt: 54 cụm mật độ · kịch bản chính sách: 2 · hệ số phát thải: 4
 - Đoạn tắc demo: 8 (Hoàn Kiếm, Cửa Nam, Ba Đình, Cầu Giấy, Đống Đa, Giảng Võ)
 
 🔐 Tài khoản demo (mật khẩu đều là 123456):

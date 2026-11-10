@@ -34,7 +34,9 @@ export type GeoJsonFeatureCollection = {
     type: 'FeatureCollection';
     features: Array<{
         type: 'Feature';
-        geometry: { type: 'LineString'; coordinates: number[][] };
+        geometry:
+            | { type: 'LineString'; coordinates: number[][] }
+            | { type: 'Point'; coordinates: number[] };
         properties: Record<string, unknown>;
     }>;
 };
@@ -287,6 +289,7 @@ export default function Map({
                 id: 'congestion-line',
                 type: 'line',
                 source: 'congestion',
+                filter: ['==', ['geometry-type'], 'LineString'],
                 paint: {
                     'line-color': ['coalesce', ['get', 'color'], '#d97706'],
                     'line-width': 6,
@@ -295,13 +298,24 @@ export default function Map({
             });
             map.current!.addLayer({
                 id: 'congestion-heat',
-                type: 'circle',
+                type: 'heatmap',
                 source: 'congestion',
+                filter: ['==', ['geometry-type'], 'Point'],
                 paint: {
-                    'circle-radius': 22,
-                    'circle-color': ['coalesce', ['get', 'color'], '#d97706'],
-                    'circle-opacity': 0.28,
-                    'circle-blur': 0.7,
+                    'heatmap-weight': ['coalesce', ['get', 'weight'], 0.7],
+                    'heatmap-intensity': 1.15,
+                    'heatmap-radius': 38,
+                    'heatmap-opacity': 0.8,
+                    'heatmap-color': [
+                        'interpolate',
+                        ['linear'],
+                        ['heatmap-density'],
+                        0, 'rgba(246,215,168,0)',
+                        0.25, '#f6d7a8',
+                        0.55, '#f59e0b',
+                        0.8, '#c2410c',
+                        1, '#7c2d12',
+                    ],
                 },
             });
 

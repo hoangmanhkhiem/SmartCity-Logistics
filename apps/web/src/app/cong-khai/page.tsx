@@ -19,10 +19,22 @@ export default function PublicSitePage() {
     const [query, setQuery] = useState('');
 
     useEffect(() => {
-        fetch('/api/v1/traffic/segments')
-            .then((r) => (r.ok ? r.json() : null))
-            .then((data) => { if (data) setCongestion(data); })
-            .catch(() => undefined);
+        Promise.all([
+            fetch('/api/v1/traffic/segments').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+            fetch('/api/v1/bottlenecks').then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        ]).then(([segments, bottlenecks]) => {
+            const lines = Array.isArray(segments?.features) ? segments.features : [];
+            const items = Array.isArray(bottlenecks?.items) ? bottlenecks.items : [];
+            const points = items.map((item: { longitude: number; latitude: number; issueType?: string }) => ({
+                type: 'Feature' as const,
+                geometry: { type: 'Point' as const, coordinates: [item.longitude, item.latitude] },
+                properties: {
+                    weight: item.issueType === 'congestion' ? 1 : 0.65,
+                    color: item.issueType === 'congestion' ? '#c2410c' : '#d97706',
+                },
+            }));
+            setCongestion({ type: 'FeatureCollection', features: [...lines, ...points] });
+        }).catch(() => undefined);
     }, []);
 
     return (
@@ -128,8 +140,12 @@ export default function PublicSitePage() {
             <section className="mx-auto max-w-6xl px-6 pb-10">
                 <h2 className="text-xl font-semibold">Đối tác dữ liệu</h2>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {['[Logo đối tác]', '[Logo đối tác]', 'Doanh nghiệp ẩn danh'].map((name) => (
-                        <span key={name} className="rounded-xl border border-[#d7e0da] bg-white px-4 py-3 text-sm text-[#7b8781]">{name}</span>
+                    {[
+                        ['logo-a', '[Logo đối tác]'],
+                        ['logo-b', '[Logo đối tác]'],
+                        ['anon', 'Doanh nghiệp ẩn danh'],
+                    ].map(([key, name]) => (
+                        <span key={key} className="rounded-xl border border-[#d7e0da] bg-white px-4 py-3 text-sm text-[#7b8781]">{name}</span>
                     ))}
                     <Link href="/studio/doi-tac" className="rounded-xl border border-[#0e6e5c] px-4 py-3 text-sm font-semibold text-[#0e6e5c]">Trở thành đối tác →</Link>
                 </div>
