@@ -1,39 +1,50 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../../db/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Between, FindOptionsWhere, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
+import { Telemetry } from '../../../db/entities';
 import { CreateTelemetryDto } from './dto';
 
 @Injectable()
 export class TelemetryService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(@InjectRepository(Telemetry) private readonly telemetryRepo: Repository<Telemetry>) {}
 
     async create(dto: CreateTelemetryDto) {
-        return this.prisma.telemetry.create({ data: dto, include: { vehicle: true } });
+        const saved = await this.telemetryRepo.save(this.telemetryRepo.create(dto));
+        return this.telemetryRepo.findOne({ where: { id: saved.id }, relations: ['vehicle'] });
     }
 
     async findByVehicle(vehicleId: number, page = 1, limit = 100, from?: Date, to?: Date) {
-        const pageNum = Number(page) || 1; const limitNum = Number(limit) || 10; const skip = (pageNum - 1) * limitNum;
-        const where = {
-            vehicleId,
-            ...(from || to ? { timestamp: { ...(from && { gte: from }), ...(to && { lte: to }) } } : {}),
-        };
+        const pageNum = Number(page) || 1;
+        const limitNum = Number(limit) || 10;
+        const skip = (pageNum - 1) * limitNum;
+        const where: FindOptionsWhere<Telemetry> = { vehicleId };
+        if (from && to) where.timestamp = Between(from, to);
+        else if (from) where.timestamp = MoreThanOrEqual(from);
+        else if (to) where.timestamp = LessThanOrEqual(to);
         const [data, total] = await Promise.all([
-            this.prisma.telemetry.findMany({ where, skip, take: limitNum, orderBy: { timestamp: 'desc' } }),
-            this.prisma.telemetry.count({ where }),
+            this.telemetryRepo.find({ where, skip, take: limitNum, order: { timestamp: 'DESC' } }),
+            this.telemetryRepo.count({ where }),
         ]);
         return { data, meta: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) } };
     }
 
     async getLatest(vehicleId: number) {
-        const t = await this.prisma.telemetry.findFirst({ where: { vehicleId }, orderBy: { timestamp: 'desc' }, include: { vehicle: true } });
+        const t = await this.telemetryRepo.findOne({
+            where: { vehicleId },
+            order: { timestamp: 'DESC' },
+            relations: ['vehicle'],
+        });
         if (!t) throw new NotFoundException(`No telemetry for vehicle ${vehicleId}`);
         return t;
     }
 
     async findAll(page = 1, limit = 100) {
-        const pageNum = Number(page) || 1; const limitNum = Number(limit) || 10; const skip = (pageNum - 1) * limitNum;
+        const pageNum = Number(page) || 1;
+        const limitNum = Number(limit) || 10;
+        const skip = (pageNum - 1) * limitNum;
         const [data, total] = await Promise.all([
-            this.prisma.telemetry.findMany({ skip, take: limitNum, orderBy: { timestamp: 'desc' }, include: { vehicle: true } }),
-            this.prisma.telemetry.count(),
+            this.telemetryRepo.find({ skip, take: limitNum, order: { timestamp: 'DESC' }, relations: ['vehicle'] }),
+            this.telemetryRepo.count(),
         ]);
         return { data, meta: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) } };
     }

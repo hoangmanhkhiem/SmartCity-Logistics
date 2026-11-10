@@ -1,20 +1,22 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../../db/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { RoadSegment } from '../../../db/entities';
 import { CreateRoadSegmentDto, UpdateRoadSegmentDto } from './dto';
 import { normalizeGeometryJsonString } from './utils/geojson-coordinates.util';
 
 @Injectable()
 export class RoadSegmentService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(@InjectRepository(RoadSegment) private readonly roadSegmentRepo: Repository<RoadSegment>) {}
 
-    create(dto: CreateRoadSegmentDto) {
+    async create(dto: CreateRoadSegmentDto) {
         let geometry = dto.geometry;
         if (geometry) {
             const normalized = normalizeGeometryJsonString(geometry);
             if (normalized) geometry = normalized;
         }
-        return this.prisma.roadSegment.create({
-            data: {
+        const saved = await this.roadSegmentRepo.save(
+            this.roadSegmentRepo.create({
                 zoneId: dto.zoneId,
                 name: dto.name,
                 geometry,
@@ -24,23 +26,26 @@ export class RoadSegmentService {
                 lanes: dto.lanes,
                 roadType: dto.roadType,
                 isActive: dto.isActive ?? true,
-            },
-            include: { zone: true },
-        });
+            }),
+        );
+        return this.roadSegmentRepo.findOne({ where: { id: saved.id }, relations: ['zone'] });
     }
 
     findAll(zoneId?: string, includeInactive?: boolean) {
-        return this.prisma.roadSegment.findMany({
-            where: { ...(zoneId && { zoneId: Number(zoneId) }), ...(!includeInactive && { isActive: true }) },
-            include: { zone: true, restrictions: true },
-            orderBy: { name: 'asc' },
+        return this.roadSegmentRepo.find({
+            where: {
+                ...(zoneId && { zoneId: Number(zoneId) }),
+                ...(!includeInactive && { isActive: true }),
+            },
+            relations: ['zone', 'restrictions'],
+            order: { name: 'ASC' },
         });
     }
 
     async findOne(id: number) {
-        const s = await this.prisma.roadSegment.findUnique({
+        const s = await this.roadSegmentRepo.findOne({
             where: { id },
-            include: { zone: true, restrictions: true },
+            relations: ['zone', 'restrictions'],
         });
         if (!s) throw new NotFoundException(`RoadSegment ${id} not found`);
         return s;
@@ -53,15 +58,12 @@ export class RoadSegmentService {
             const normalized = normalizeGeometryJsonString(dto.geometry);
             if (normalized) data = { ...data, geometry: normalized };
         }
-        return this.prisma.roadSegment.update({
-            where: { id },
-            data,
-            include: { zone: true },
-        });
+        await this.roadSegmentRepo.update(id, data);
+        return this.roadSegmentRepo.findOne({ where: { id }, relations: ['zone'] });
     }
 
     async remove(id: number) {
         await this.findOne(id);
-        return this.prisma.roadSegment.delete({ where: { id } });
+        return this.roadSegmentRepo.remove(await this.roadSegmentRepo.findOneByOrFail({ id }));
     }
 }

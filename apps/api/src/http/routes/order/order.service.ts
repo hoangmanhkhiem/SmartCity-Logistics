@@ -1,10 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../../db/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Order, Stop } from '../../../db/entities';
 import { ZoneService } from '../zone/zone.service';
 import { CreateOrderDto, UpdateOrderDto } from './dto';
 import { v4 as uuid } from 'uuid';
 
-/** Trạng thái đơn hàng chỉ được đi tới, không lùi lại — tránh sửa tay ra trạng thái vô lý. */
 const ORDER_STATUS_TRANSITIONS: Record<string, string[]> = {
     pending: ['assigned', 'cancelled'],
     assigned: ['in_transit', 'cancelled'],
@@ -17,9 +18,10 @@ const ORDER_STATUS_TRANSITIONS: Record<string, string[]> = {
 @Injectable()
 export class OrderService {
     constructor(
-        private readonly prisma: PrismaService,
+        @InjectRepository(Order) private readonly orderRepo: Repository<Order>,
+        @InjectRepository(Stop) private readonly stopRepo: Repository<Stop>,
         private readonly zoneService: ZoneService,
-    ) { }
+    ) {}
 
     async create(dto: CreateOrderDto) {
         const orderNumber = `ORD-${Date.now()}-${uuid().slice(0, 4).toUpperCase()}`;
@@ -30,29 +32,49 @@ export class OrderService {
             zoneId = (await this.zoneService.findZoneIdForPoint(dto.deliveryLat, dto.deliveryLon)) ?? undefined;
         }
 
-        return this.prisma.order.create({
-            data: { ...dto, zoneId, orderNumber, trackingNo, status: 'pending' },
-            include: { customer: true, zone: true, carrier: true },
+        const saved = await this.orderRepo.save(
+            this.orderRepo.create({ ...dto, zoneId, orderNumber, trackingNo, status: 'pending' }),
+        );
+        return this.orderRepo.findOne({
+            where: { id: saved.id },
+            relations: ['customer', 'zone', 'carrier'],
         });
     }
 
     async findAll(page = 1, limit = 10, status?: string, customerId?: string, carrierId?: string, zoneId?: string) {
-        const pageNum = Number(page) || 1; const limitNum = Number(limit) || 10; const skip = (pageNum - 1) * limitNum;
+        const pageNum = Number(page) || 1;
+        const limitNum = Number(limit) || 10;
+        const skip = (pageNum - 1) * limitNum;
         const where = {
             ...(status && { status }),
             ...(customerId && { customerId: Number(customerId) }),
             ...(carrierId && { carrierId: Number(carrierId) }),
             ...(zoneId && { zoneId: Number(zoneId) }),
         };
-        const [data, total] = await Promise.all([
-            this.prisma.order.findMany({ where, skip, take: limitNum, include: { customer: true, zone: true, _count: { select: { stops: true } } }, orderBy: { createdAt: 'desc' } }),
-            this.prisma.order.count({ where }),
+        const [rows, total] = await Promise.all([
+            this.orderRepo.find({
+                where,
+                skip,
+                take: limitNum,
+                relations: ['customer', 'zone'],
+                order: { createdAt: 'DESC' },
+            }),
+            this.orderRepo.count({ where }),
         ]);
+        const data = await Promise.all(
+            rows.map(async (o) => ({
+                ...o,
+                _count: { stops: await this.stopRepo.count({ where: { orderId: o.id } }) },
+            })),
+        );
         return { data, meta: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) } };
     }
 
     async findOne(id: number) {
-        const o = await this.prisma.order.findUnique({ where: { id }, include: { customer: true, zone: true, stops: { include: { route: true } } } });
+        const o = await this.orderRepo.findOne({
+            where: { id },
+            relations: ['customer', 'zone', 'stops', 'stops.route'],
+        });
         if (!o) throw new NotFoundException(`Order ${id} not found`);
         return o;
     }
@@ -62,12 +84,11 @@ export class OrderService {
         if (dto.status && dto.status !== existing.status) {
             const allowed = ORDER_STATUS_TRANSITIONS[existing.status] ?? [];
             if (!allowed.includes(dto.status)) {
-                throw new BadRequestException(
-                    `Không thể chuyển đơn từ "${existing.status}" sang "${dto.status}"`,
-                );
+                throw new BadRequestException(`Không thể chuyển đơn từ "${existing.status}" sang "${dto.status}"`);
             }
         }
-        return this.prisma.order.update({ where: { id }, data: dto, include: { customer: true } });
+        await this.orderRepo.update(id, dto);
+        return this.orderRepo.findOne({ where: { id }, relations: ['customer'] });
     }
 
     async remove(id: number) {
@@ -75,6 +96,6 @@ export class OrderService {
         if (['in_transit', 'delivered'].includes(existing.status)) {
             throw new BadRequestException('Không thể xóa đơn đang giao hoặc đã giao thành công');
         }
-        return this.prisma.order.delete({ where: { id } });
+        return this.orderRepo.remove(await this.orderRepo.findOneByOrFail({ id }));
     }
 }

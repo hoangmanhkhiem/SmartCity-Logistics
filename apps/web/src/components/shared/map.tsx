@@ -75,6 +75,8 @@ interface MapProps {
     initialDrawFeature?: GeoJSON.Feature | null;
     /** Tự fetch & vẽ lớp zone (vùng) + đường cấm/hạn chế đang hoạt động, kèm panel bật/tắt lớp + xem thông tin. */
     showZonesAndRestrictions?: boolean;
+    /** Đoạn đường tô theo hệ số tắc (current/free-flow) từ speed profile. */
+    congestionGeoJson?: GeoJsonFeatureCollection | null;
     className?: string;
     onMarkerClick?: (id: string | number) => void;
     onRouteLoaded?: (routeCoordinates: [number, number][]) => void;
@@ -98,6 +100,7 @@ export default function Map({
     onDrawComplete,
     initialDrawFeature,
     showZonesAndRestrictions = false,
+    congestionGeoJson = null,
     className = '',
     onMarkerClick,
     onRouteLoaded,
@@ -185,7 +188,10 @@ export default function Map({
     useEffect(() => {
         if (!showZonesAndRestrictions) return;
         let cancelled = false;
-        zoneApi.getAll({ limit: 200 }).then((res) => {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+        if (!token) {
+            setZones([]);
+        } else zoneApi.getAll({ limit: 200 }).then((res) => {
             if (cancelled) return;
             const list = (res.data?.data ?? res.data ?? []) as Array<{ id: number; name: string; type: string | null; description: string | null; boundary?: string | null }>;
             const parsed: ZoneFeature[] = [];
@@ -273,6 +279,32 @@ export default function Map({
                 paint: { 'line-color': '#6366f1', 'line-width': 2 },
             });
 
+            map.current!.addSource('congestion', {
+                type: 'geojson',
+                data: { type: 'FeatureCollection', features: [] },
+            });
+            map.current!.addLayer({
+                id: 'congestion-line',
+                type: 'line',
+                source: 'congestion',
+                paint: {
+                    'line-color': ['coalesce', ['get', 'color'], '#d97706'],
+                    'line-width': 6,
+                    'line-opacity': 0.85,
+                },
+            });
+            map.current!.addLayer({
+                id: 'congestion-heat',
+                type: 'circle',
+                source: 'congestion',
+                paint: {
+                    'circle-radius': 22,
+                    'circle-color': ['coalesce', ['get', 'color'], '#d97706'],
+                    'circle-opacity': 0.28,
+                    'circle-blur': 0.7,
+                },
+            });
+
             setLoaded(true);
         });
 
@@ -308,6 +340,12 @@ export default function Map({
             source.setData(effectiveRestrictions ?? { type: 'FeatureCollection', features: [] });
         }
     }, [effectiveRestrictions, loaded]);
+
+    useEffect(() => {
+        if (!map.current || !loaded) return;
+        const source = map.current.getSource('congestion') as mapboxgl.GeoJSONSource | undefined;
+        source?.setData(congestionGeoJson ?? { type: 'FeatureCollection', features: [] });
+    }, [congestionGeoJson, loaded]);
 
     // Update zones layer (fill + outline) khi dữ liệu zone tự fetch thay đổi
     useEffect(() => {

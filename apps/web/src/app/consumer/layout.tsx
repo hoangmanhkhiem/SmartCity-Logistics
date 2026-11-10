@@ -5,7 +5,7 @@ import { Sidebar, consumerNavItems, Header } from '@/components/shared';
 
 export default function ConsumerLayout({ children }: { children: ReactNode }) {
     return (
-        <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
+        <div className="flex min-h-screen bg-[#e7eee9]">
             <Sidebar title="Consumer" navItems={consumerNavItems} />
             <div className="flex-1 flex flex-col">
                 <Header title="Người dùng" />

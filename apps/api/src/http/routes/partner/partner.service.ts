@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
-import { PlatformApiClient } from '@prisma/client';
-import { PrismaService } from '../../../db/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Order, PlatformApiClient } from '../../../db/entities';
 import { ZoneService } from '../zone/zone.service';
 import { PartnerCreateOrderDto } from './dto/partner-create-order.dto';
 import { v4 as uuid } from 'uuid';
@@ -8,12 +9,12 @@ import { v4 as uuid } from 'uuid';
 @Injectable()
 export class PartnerService {
     constructor(
-        private readonly prisma: PrismaService,
+        @InjectRepository(Order) private readonly orderRepo: Repository<Order>,
         private readonly zoneService: ZoneService,
     ) {}
 
     async createOrder(dto: PartnerCreateOrderDto, client: PlatformApiClient) {
-        const scopes = Array.isArray(client.scopes) ? (client.scopes as string[]) : [];
+        const scopes = Array.isArray(client.scopes) ? client.scopes : [];
         if (!scopes.includes('orders:create')) {
             throw new ForbiddenException('Missing orders:create scope');
         }
@@ -22,7 +23,7 @@ export class PartnerService {
         }
 
         if (dto.externalRef) {
-            const existing = await this.prisma.order.findFirst({
+            const existing = await this.orderRepo.findOne({
                 where: { platformApiClientId: client.id, externalRef: dto.externalRef },
             });
             if (existing) {
@@ -44,8 +45,8 @@ export class PartnerService {
             zoneId = (await this.zoneService.findZoneIdForPoint(dto.deliveryLat, dto.deliveryLon)) ?? undefined;
         }
 
-        const order = await this.prisma.order.create({
-            data: {
+        const order = await this.orderRepo.save(
+            this.orderRepo.create({
                 carrierId: client.carrierId,
                 orderNumber,
                 trackingNo,
@@ -70,8 +71,8 @@ export class PartnerService {
                 weightKg: dto.weightKg,
                 itemCount: dto.itemCount,
                 codAmount: dto.codAmount,
-            },
-        });
+            }),
+        );
 
         return {
             idempotent: false,

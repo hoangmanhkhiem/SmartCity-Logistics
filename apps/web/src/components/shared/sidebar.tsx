@@ -68,8 +68,8 @@ function NavGroupComponent({ group, collapsed, pathname }: { group: NavGroup; co
                                     'flex items-center justify-center px-3 py-2.5 rounded-lg',
                                     'transition-all duration-150',
                                     isActive
-                                        ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300'
-                                        : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200'
+                                        ? 'bg-[#1e5646] text-white'
+                                        : 'text-[#d5e4dc] hover:bg-[#1e5646] hover:text-white'
                                 )}
                                 title={item.label}
                             >
@@ -89,8 +89,8 @@ function NavGroupComponent({ group, collapsed, pathname }: { group: NavGroup; co
                 className={cn(
                     'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm',
                     'transition-all duration-150',
-                    'text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
-                    hasActiveChild && 'text-indigo-600 dark:text-indigo-300'
+                    'text-[#d5e4dc] hover:bg-[#1e5646] hover:text-white',
+                    hasActiveChild && 'text-white'
                 )}
             >
                 {group.icon}
@@ -104,7 +104,7 @@ function NavGroupComponent({ group, collapsed, pathname }: { group: NavGroup; co
                 />
             </button>
             {expanded && (
-                <ul className="mt-1 ml-3 space-y-0.5 border-l border-slate-200 pl-3 dark:border-slate-700">
+                <ul className="mt-1 ml-3 space-y-0.5 border-l border-[#2d5c4c] pl-3">
                     {group.items.map((item) => {
                         const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                         return (
@@ -115,8 +115,8 @@ function NavGroupComponent({ group, collapsed, pathname }: { group: NavGroup; co
                                         'flex items-center gap-3 px-3 py-2 rounded-lg text-sm',
                                         'transition-all duration-150',
                                         isActive
-                                            ? 'bg-indigo-50 font-medium text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300'
-                                            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
+                                            ? 'bg-[#1e5646] font-medium text-white'
+                                            : 'text-[#d5e4dc] hover:bg-[#1e5646] hover:text-white'
                                     )}
                                 >
                                     {item.icon}
@@ -139,29 +139,29 @@ export function Sidebar({ title, navItems }: SidebarProps) {
         <aside
             className={cn(
                 'h-screen sticky top-0 flex flex-col',
-                'bg-white dark:bg-slate-950',
-                'border-r border-slate-200 dark:border-slate-800',
+                'bg-[#14352c] text-white',
+                'border-r border-[#14352c]',
                 'transition-all duration-300',
                 collapsed ? 'w-16' : 'w-64'
             )}
         >
             {/* Header */}
-            <div className="flex h-16 items-center justify-between px-4 border-b border-slate-200 dark:border-slate-800">
+            <div className="flex h-16 items-center justify-between px-4 border-b border-[#2d5c4c]">
                 {!collapsed && (
                     <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-cyan-500 text-white">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#1f6b56] text-white">
                             <Navigation size={16} />
                         </span>
                         <div className="min-w-0">
-                            <p className="truncate text-sm font-bold leading-tight text-slate-900 dark:text-white">{title}</p>
-                            <p className="text-[11px] font-medium text-slate-400">SmartCity Logistics</p>
+                            <p className="truncate text-sm font-bold leading-tight text-white">Logistics Đô thị</p>
+                            <p className="text-[11px] font-medium text-[#9fb3aa]">ĐH GTVT · B2025-GHA-05</p>
                         </div>
                     </div>
                 )}
                 <button
                     onClick={() => setCollapsed(!collapsed)}
                     className={cn(
-                        'p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors dark:hover:bg-slate-800 dark:hover:text-slate-200',
+                        'p-1.5 rounded-lg text-[#9fb3aa] hover:bg-[#1e5646] hover:text-white transition-colors',
                         collapsed && 'mx-auto'
                     )}
                 >
@@ -193,8 +193,8 @@ export function Sidebar({ title, navItems }: SidebarProps) {
                                         'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium',
                                         'transition-all duration-150',
                                         isActive
-                                            ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300'
-                                            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
+                                            ? 'bg-[#1e5646] text-white'
+                                            : 'text-[#d5e4dc] hover:bg-[#1e5646] hover:text-white',
                                         collapsed && 'justify-center'
                                     )}
                                     title={collapsed ? item.label : undefined}
@@ -210,8 +210,8 @@ export function Sidebar({ title, navItems }: SidebarProps) {
 
             {/* Footer */}
             {!collapsed && (
-                <div className="p-4 border-t border-slate-200 dark:border-slate-800">
-                    <p className="text-[11px] font-medium text-slate-400">Urban Logistics · v1.0</p>
+                <div className="p-4 border-t border-[#2d5c4c]">
+                    <a href="/cong-khai" className="text-[11px] font-medium text-[#9fb3aa]">Website công khai ↗</a>
                 </div>
             )}
         </aside>
@@ -220,7 +220,7 @@ export function Sidebar({ title, navItems }: SidebarProps) {
 
 // Pre-defined nav items for each role
 export const consumerNavItems: NavConfig[] = [
-    { label: 'Bản đồ', href: '/consumer', icon: <MapPin size={20} /> },
+    { label: 'Bản đồ công khai', href: '/cong-khai', icon: <MapPin size={20} /> },
     { label: 'Đơn hàng', href: '/consumer/orders', icon: <Package size={20} /> },
     { label: 'Theo dõi vận đơn', href: '/consumer/tracking', icon: <PackageSearch size={20} /> },
     { label: 'Tra cứu', href: '/consumer/search', icon: <Building2 size={20} /> },
@@ -228,7 +228,7 @@ export const consumerNavItems: NavConfig[] = [
 
 export const deliveryNavItems: NavConfig[] = [
     // Quick access
-    { label: 'Dashboard', href: '/delivery/dashboard', icon: <LayoutDashboard size={20} /> },
+    { label: 'Tổng quan', href: '/doanh-nghiep', icon: <LayoutDashboard size={20} /> },
 
     // Nhóm 1: Quản lý Đội
     {
@@ -253,13 +253,13 @@ export const deliveryNavItems: NavConfig[] = [
 ];
 
 export const shipperNavItems: NavConfig[] = [
-    { label: 'Route hôm nay', href: '/shipper/today', icon: <Route size={20} /> },
+    { label: 'Bản đồ', href: '/thanh-vien/ban-do', icon: <Route size={20} /> },
     { label: 'Lịch sử', href: '/shipper/history', icon: <BarChart3 size={20} /> },
 ];
 
 export const regulatorNavItems: NavConfig[] = [
     // Quick access
-    { label: 'Dashboard', href: '/regulator/dashboard', icon: <LayoutDashboard size={20} /> },
+    { label: 'Giám sát', href: '/co-quan', icon: <LayoutDashboard size={20} /> },
 
     // Nhóm 1: Vùng & Quy định
     {
@@ -292,7 +292,7 @@ export const regulatorNavItems: NavConfig[] = [
 
 export const logisticsNavItems: NavConfig[] = [
     // Quick access - Dashboard luôn ở trên cùng
-    { label: 'Dashboard', href: '/logistics/dashboard', icon: <LayoutDashboard size={20} /> },
+    { label: 'Dữ liệu nền', href: '/he-thong/du-lieu', icon: <LayoutDashboard size={20} /> },
 
     // Nhóm 1: Carrier & hệ thống
     {
@@ -302,6 +302,8 @@ export const logisticsNavItems: NavConfig[] = [
             { label: 'Carriers', href: '/logistics/carriers', icon: <Truck size={18} /> },
             { label: 'Người dùng & Vai trò', href: '/logistics/users', icon: <Users size={18} /> },
             { label: 'API Keys (B2B)', href: '/logistics/integrations', icon: <KeyRound size={18} /> },
+            { label: 'Hệ số phát thải CO₂', href: '/logistics/emissions', icon: <Scale size={18} /> },
+            { label: 'Hồ sơ khảo sát & kế hoạch', href: '/logistics/records', icon: <Package size={18} /> },
             { label: 'Cài đặt', href: '/logistics/settings', icon: <Settings size={18} /> },
         ],
     },

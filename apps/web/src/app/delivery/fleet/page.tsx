@@ -43,6 +43,8 @@ export default function DeliveryFleetPage() {
         capacity: '',
         fuelType: 'gasoline',
         isElectric: false,
+        emissionFactor: '',
+        emissionStandard: 'EURO 4',
     });
 
     const fetchVehicles = async () => {
@@ -70,6 +72,7 @@ export default function DeliveryFleetPage() {
             const data = {
                 ...formData,
                 capacity: formData.capacity ? Number(formData.capacity) : undefined,
+                emissionFactor: formData.emissionFactor ? Number(formData.emissionFactor) : undefined,
             };
 
             if (editingVehicle) {
@@ -96,6 +99,8 @@ export default function DeliveryFleetPage() {
             capacity: vehicle.capacity?.toString() || '',
             fuelType: vehicle.fuelType || 'gasoline',
             isElectric: vehicle.isElectric,
+            emissionFactor: vehicle.emissionFactor?.toString() || '',
+            emissionStandard: vehicle.emissionStandard || 'EURO 4',
         });
         setIsModalOpen(true);
     };
@@ -120,6 +125,8 @@ export default function DeliveryFleetPage() {
             capacity: '',
             fuelType: 'gasoline',
             isElectric: false,
+            emissionFactor: '',
+            emissionStandard: 'EURO 4',
         });
     };
 
@@ -354,6 +361,21 @@ export default function DeliveryFleetPage() {
                                 fuelType: v,
                                 isElectric: v === 'electric'
                             })}
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <Input
+                            label="Hệ số phát thải (gCO₂e/km)"
+                            type="number"
+                            value={formData.emissionFactor}
+                            onChange={(e) => setFormData({ ...formData, emissionFactor: e.target.value })}
+                            placeholder="72"
+                        />
+                        <Input
+                            label="Chuẩn khí thải"
+                            value={formData.emissionStandard}
+                            onChange={(e) => setFormData({ ...formData, emissionStandard: e.target.value })}
+                            placeholder="EURO 4"
                         />
                     </div>
                     <div className="flex items-center gap-2">

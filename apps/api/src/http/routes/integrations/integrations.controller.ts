@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../middlewares/guards';
 import { CreateApiClientDto } from './dto/create-api-client.dto';
@@ -21,5 +21,17 @@ export class IntegrationsController {
     @ApiOperation({ summary: 'Tạo API key mới cho đối tác tích hợp' })
     create(@Body() body: CreateApiClientDto) {
         return this.integrationsService.createClient(body.name);
+    }
+
+    @Patch(':id')
+    @ApiOperation({ summary: 'Đổi tên hoặc thu hồi API key' })
+    update(@Param('id', ParseIntPipe) id: number, @Body() body: { name?: string; isActive?: boolean }) {
+        return this.integrationsService.updateClient(id, body);
+    }
+
+    @Delete(':id')
+    @ApiOperation({ summary: 'Xóa API key' })
+    remove(@Param('id', ParseIntPipe) id: number) {
+        return this.integrationsService.deleteClient(id);
     }
 }

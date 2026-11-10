@@ -1,57 +1,64 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../../db/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { In, Repository } from 'typeorm';
+import { AnalyticsSnapshot, Carrier, Order, Route, Stop, Telemetry, Vehicle } from '../../../db/entities';
+import { groupByField } from '../../../db/typeorm-query.util';
 
 @Injectable()
 export class AnalyticsService {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        @InjectRepository(Order) private readonly orderRepo: Repository<Order>,
+        @InjectRepository(Vehicle) private readonly vehicleRepo: Repository<Vehicle>,
+        @InjectRepository(Route) private readonly routeRepo: Repository<Route>,
+        @InjectRepository(Telemetry) private readonly telemetryRepo: Repository<Telemetry>,
+        @InjectRepository(Carrier) private readonly carrierRepo: Repository<Carrier>,
+        @InjectRepository(AnalyticsSnapshot) private readonly snapshotRepo: Repository<AnalyticsSnapshot>,
+        @InjectRepository(Stop) private readonly stopRepo: Repository<Stop>,
+    ) {}
 
     async platformSummary() {
-        const [
-            orderCounts,
-            vehicleCounts,
-            routeCounts,
-            routeStats,
-            unassignedOrders,
-            telemetryLast24h,
-        ] = await Promise.all([
-            this.prisma.order.groupBy({ by: ['status'], _count: { _all: true } }),
-            this.prisma.vehicle.groupBy({ by: ['status'], _count: { _all: true } }),
-            this.prisma.route.groupBy({ by: ['status'], _count: { _all: true } }),
-            this.prisma.route.aggregate({ _sum: { estimatedCo2Grams: true }, _avg: { totalDistanceKm: true } }),
-            this.prisma.order.count({ where: { status: 'pending' } }),
-            this.prisma.telemetry.count({
-                where: { timestamp: { gte: new Date(Date.now() - 86400000) } },
-            }),
-        ]);
+        const since24h = new Date(Date.now() - 86400000);
+        const [orderCounts, vehicleCounts, routeCounts, routeStats, unassignedOrders, telemetryPointsLast24h] =
+            await Promise.all([
+                groupByField(this.orderRepo, 'status'),
+                groupByField(this.vehicleRepo, 'status'),
+                groupByField(this.routeRepo, 'status'),
+                this.routeRepo
+                    .createQueryBuilder('r')
+                    .select('SUM(r.estimated_co2_grams)', 'sumCo2')
+                    .addSelect('AVG(r.total_distance_km)', 'avgKm')
+                    .getRawOne<{ sumCo2: string | null; avgKm: string | null }>(),
+                this.orderRepo.count({ where: { status: 'pending' } }),
+                this.telemetryRepo
+                    .createQueryBuilder('t')
+                    .where('t.timestamp >= :since', { since: since24h })
+                    .getCount(),
+            ]);
 
-        const ordersTotal = orderCounts.reduce((s, o) => s + o._count._all, 0);
+        const ordersTotal = orderCounts.reduce((s, o) => s + o.count, 0);
 
         return {
             orders: {
-                byStatus: Object.fromEntries(orderCounts.map((o) => [o.status, o._count._all])),
+                byStatus: Object.fromEntries(orderCounts.map((o) => [o.key, o.count])),
                 total: ordersTotal,
             },
             vehicles: {
-                byStatus: Object.fromEntries(vehicleCounts.map((v) => [v.status, v._count._all])),
+                byStatus: Object.fromEntries(vehicleCounts.map((v) => [v.key, v.count])),
             },
             routes: {
-                byStatus: Object.fromEntries(routeCounts.map((r) => [r.status, r._count._all])),
+                byStatus: Object.fromEntries(routeCounts.map((r) => [r.key, r.count])),
             },
             environment: {
-                estimatedCo2GramsTotal: routeStats._sum.estimatedCo2Grams ?? 0,
-                avgRouteDistanceKm: routeStats._avg.totalDistanceKm ?? 0,
+                estimatedCo2GramsTotal: routeStats?.sumCo2 != null ? Number(routeStats.sumCo2) : 0,
+                avgRouteDistanceKm: routeStats?.avgKm != null ? Number(routeStats.avgKm) : 0,
             },
             operations: {
                 unassignedOrders,
-                telemetryPointsLast24h: telemetryLast24h,
+                telemetryPointsLast24h,
             },
         };
     }
 
-    /**
-     * Ghi 1 snapshot cho 1 ngày (mặc định hôm nay, toàn nền tảng + từng carrier).
-     * Gọi thủ công hoặc qua cron ngoài (Windows Task Scheduler / cron job) 1 lần/ngày.
-     */
     async createSnapshot(forDate?: Date) {
         const now = forDate ?? new Date();
         const snapshotDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
@@ -59,37 +66,43 @@ export class AnalyticsService {
         const dayEnd = new Date(dayStart);
         dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
-        const carriers = await this.prisma.carrier.findMany({ select: { id: true } });
+        const carriers = await this.carrierRepo.find({ select: ['id'] });
         const scopes: Array<{ carrierId: number | null }> = [{ carrierId: null }, ...carriers.map((c) => ({ carrierId: c.id }))];
 
         const results = [];
         for (const scope of scopes) {
-            const orderWhere = {
-                createdAt: { gte: dayStart, lt: dayEnd },
-                ...(scope.carrierId != null && { carrierId: scope.carrierId }),
-            };
-            const routeWhere = {
-                createdAt: { gte: dayStart, lt: dayEnd },
-                ...(scope.carrierId != null && { carrierId: scope.carrierId }),
-            };
+            const orderQb = this.orderRepo
+                .createQueryBuilder('o')
+                .where('o.createdAt >= :dayStart AND o.createdAt < :dayEnd', { dayStart, dayEnd });
+            const routeQb = this.routeRepo
+                .createQueryBuilder('r')
+                .where('r.createdAt >= :dayStart AND r.createdAt < :dayEnd', { dayStart, dayEnd });
+            if (scope.carrierId != null) {
+                orderQb.andWhere('o.carrier_id = :carrierId', { carrierId: scope.carrierId });
+                routeQb.andWhere('r.carrier_id = :carrierId', { carrierId: scope.carrierId });
+            }
 
             const [ordersTotal, ordersDelivered, ordersFailed, routesCompleted, routeAgg, stopAgg] = await Promise.all([
-                this.prisma.order.count({ where: orderWhere }),
-                this.prisma.order.count({ where: { ...orderWhere, status: 'delivered' } }),
-                this.prisma.order.count({ where: { ...orderWhere, status: 'failed' } }),
-                this.prisma.route.count({ where: { ...routeWhere, status: 'completed' } }),
-                this.prisma.route.aggregate({
-                    where: { ...routeWhere, status: 'completed' },
-                    _sum: { totalDistanceKm: true, estimatedCo2Grams: true },
-                }),
-                this.prisma.stop.aggregate({
-                    where: {
-                        completedAt: { gte: dayStart, lt: dayEnd },
-                        codCollected: true,
-                        ...(scope.carrierId != null && { route: { carrierId: scope.carrierId } }),
-                    },
-                    _sum: { codAmountCollected: true },
-                }),
+                orderQb.getCount(),
+                orderQb.clone().andWhere('o.status = :st', { st: 'delivered' }).getCount(),
+                orderQb.clone().andWhere('o.status = :st', { st: 'failed' }).getCount(),
+                routeQb.clone().andWhere('r.status = :st', { st: 'completed' }).getCount(),
+                routeQb
+                    .clone()
+                    .andWhere('r.status = :st', { st: 'completed' })
+                    .select('SUM(r.total_distance_km)', 'sumKm')
+                    .addSelect('SUM(r.estimated_co2_grams)', 'sumCo2')
+                    .getRawOne<{ sumKm: string | null; sumCo2: string | null }>(),
+                this.stopRepo
+                    .createQueryBuilder('s')
+                    .innerJoin('s.route', 'route')
+                    .where('s.completed_at >= :dayStart AND s.completed_at < :dayEnd', { dayStart, dayEnd })
+                    .andWhere('s.cod_collected = :cod', { cod: true })
+                    .andWhere(scope.carrierId != null ? 'route.carrier_id = :carrierId' : '1=1', {
+                        carrierId: scope.carrierId ?? undefined,
+                    })
+                    .select('SUM(s.cod_amount_collected)', 'sumCod')
+                    .getRawOne<{ sumCod: string | null }>(),
             ]);
 
             const fields = {
@@ -97,66 +110,79 @@ export class AnalyticsService {
                 ordersDelivered,
                 ordersFailed,
                 routesCompleted,
-                totalDistanceKm: routeAgg._sum.totalDistanceKm ?? 0,
-                estimatedCo2Grams: routeAgg._sum.estimatedCo2Grams ?? 0,
-                codCollectedTotal: stopAgg._sum.codAmountCollected ?? 0,
+                totalDistanceKm: routeAgg?.sumKm != null ? Number(routeAgg.sumKm) : 0,
+                estimatedCo2Grams: routeAgg?.sumCo2 != null ? Number(routeAgg.sumCo2) : 0,
+                codCollectedTotal: stopAgg?.sumCod != null ? Number(stopAgg.sumCod) : 0,
             };
 
-            // Prisma không cho phép null trong compound unique where (snapshotDate_carrierId) —
-            // dùng findFirst + create/update thủ công để hỗ trợ carrierId=null (scope toàn nền tảng).
-            const existing = await this.prisma.analyticsSnapshot.findFirst({
-                where: { snapshotDate, carrierId: scope.carrierId },
-            });
+            const existing =
+                scope.carrierId === null
+                    ? await this.snapshotRepo
+                          .createQueryBuilder('snap')
+                          .where('snap.snapshot_date = :snapshotDate', { snapshotDate })
+                          .andWhere('snap.carrier_id IS NULL')
+                          .getOne()
+                    : await this.snapshotRepo.findOne({
+                          where: { snapshotDate, carrierId: scope.carrierId },
+                      });
+
             const snapshot = existing
-                ? await this.prisma.analyticsSnapshot.update({ where: { id: existing.id }, data: fields })
-                : await this.prisma.analyticsSnapshot.create({ data: { snapshotDate, carrierId: scope.carrierId, ...fields } });
+                ? await this.snapshotRepo.save({ ...existing, ...fields })
+                : await this.snapshotRepo.save(
+                      this.snapshotRepo.create({ snapshotDate, carrierId: scope.carrierId, ...fields }),
+                  );
             results.push(snapshot);
         }
 
         return { snapshotDate, count: results.length, snapshots: results };
     }
 
-    /** Chuỗi thời gian snapshot theo ngày, dùng cho biểu đồ xu hướng. */
     async getTrend(params: { carrierId?: number; from?: string; to?: string }) {
         const from = params.from ? new Date(params.from) : new Date(Date.now() - 30 * 86400000);
         const to = params.to ? new Date(params.to) : new Date();
 
-        return this.prisma.analyticsSnapshot.findMany({
-            where: {
-                carrierId: params.carrierId ?? null,
-                snapshotDate: { gte: from, lte: to },
-            },
-            orderBy: { snapshotDate: 'asc' },
-        });
+        const qb = this.snapshotRepo
+            .createQueryBuilder('s')
+            .where('s.snapshot_date >= :from AND s.snapshot_date <= :to', { from, to })
+            .orderBy('s.snapshot_date', 'ASC');
+        if (params.carrierId != null) {
+            qb.andWhere('s.carrier_id = :carrierId', { carrierId: params.carrierId });
+        } else {
+            qb.andWhere('s.carrier_id IS NULL');
+        }
+        return qb.getMany();
     }
 
-    /** Báo cáo tuân thủ + CO2 + kinh tế theo carrier, dùng cho Regulator export. */
     async getComplianceReport(params: { from?: string; to?: string }) {
         const from = params.from ? new Date(params.from) : new Date(Date.now() - 30 * 86400000);
         const to = params.to ? new Date(params.to) : new Date();
 
-        const snapshots = await this.prisma.analyticsSnapshot.findMany({
-            where: { carrierId: { not: null }, snapshotDate: { gte: from, lte: to } },
-        });
+        const snapshots = await this.snapshotRepo
+            .createQueryBuilder('s')
+            .where('s.carrier_id IS NOT NULL')
+            .andWhere('s.snapshot_date >= :from AND s.snapshot_date <= :to', { from, to })
+            .getMany();
 
         const carrierIds = [...new Set(snapshots.map((s) => s.carrierId).filter((id): id is number => id != null))];
-        const carriers = await this.prisma.carrier.findMany({
-            where: { id: { in: carrierIds } },
-            select: { id: true, name: true },
-        });
+        const carriers = carrierIds.length
+            ? await this.carrierRepo.find({ where: { id: In(carrierIds) }, select: ['id', 'name'] })
+            : [];
         const carrierName = Object.fromEntries(carriers.map((c) => [c.id, c.name]));
 
-        const byCarrier = new Map<number, {
-            carrierId: number;
-            carrierName: string;
-            ordersTotal: number;
-            ordersDelivered: number;
-            ordersFailed: number;
-            routesCompleted: number;
-            totalDistanceKm: number;
-            estimatedCo2Grams: number;
-            codCollectedTotal: number;
-        }>();
+        const byCarrier = new Map<
+            number,
+            {
+                carrierId: number;
+                carrierName: string;
+                ordersTotal: number;
+                ordersDelivered: number;
+                ordersFailed: number;
+                routesCompleted: number;
+                totalDistanceKm: number;
+                estimatedCo2Grams: number;
+                codCollectedTotal: number;
+            }
+        >();
 
         for (const s of snapshots) {
             if (s.carrierId == null) continue;
@@ -201,7 +227,10 @@ export class AnalyticsService {
             to,
             totals: {
                 ...totals,
-                successRate: totals.ordersTotal > 0 ? Math.round((totals.ordersDelivered / totals.ordersTotal) * 1000) / 10 : null,
+                successRate:
+                    totals.ordersTotal > 0
+                        ? Math.round((totals.ordersDelivered / totals.ordersTotal) * 1000) / 10
+                        : null,
             },
             byCarrier: rows,
         };

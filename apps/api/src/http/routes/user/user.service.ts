@@ -1,94 +1,58 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../../db/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { User } from '../../../db/entities';
 import { UpdateUserDto } from './dto';
 
 @Injectable()
 export class UserService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(@InjectRepository(User) private readonly userRepo: Repository<User>) {}
 
     async findAll(page = 1, limit = 10) {
-        const pageNum = Number(page) || 1; const limitNum = Number(limit) || 10; const skip = (pageNum - 1) * limitNum;
+        const pageNum = Number(page) || 1;
+        const limitNum = Number(limit) || 10;
+        const skip = (pageNum - 1) * limitNum;
         const [users, total] = await Promise.all([
-            this.prisma.user.findMany({
+            this.userRepo.find({
                 skip,
                 take: limitNum,
-                select: {
-                    id: true,
-                    email: true,
-                    name: true,
-                    phone: true,
-                    isActive: true,
-                    createdAt: true,
-                    updatedAt: true,
-                },
-                orderBy: { createdAt: 'desc' },
+                select: ['id', 'email', 'name', 'phone', 'isActive', 'createdAt', 'updatedAt'],
+                order: { createdAt: 'DESC' },
             }),
-            this.prisma.user.count(),
+            this.userRepo.count(),
         ]);
 
         return {
             data: users,
-            meta: {
-                total,
-                page,
-                limit,
-                totalPages: Math.ceil(total / limitNum),
-            },
+            meta: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
         };
     }
 
     async findOne(id: number) {
-        const user = await this.prisma.user.findUnique({
+        const user = await this.userRepo.findOne({
             where: { id },
-            select: {
-                id: true,
-                email: true,
-                name: true,
-                phone: true,
-                avatarUrl: true,
-                isActive: true,
-                lastLoginAt: true,
-                createdAt: true,
-                updatedAt: true,
-                memberships: {
-                    include: {
-                        organization: true,
-                        role: true,
-                    },
-                },
-            },
+            relations: ['memberships', 'memberships.organization', 'memberships.role'],
         });
 
         if (!user) {
             throw new NotFoundException(`User with ID ${id} not found`);
         }
 
-        return user;
+        const { password: _pw, ...rest } = user;
+        return rest;
     }
 
     async update(id: number, updateUserDto: UpdateUserDto) {
         await this.findOne(id);
-
-        return this.prisma.user.update({
+        await this.userRepo.update(id, updateUserDto);
+        return this.userRepo.findOne({
             where: { id },
-            data: updateUserDto,
-            select: {
-                id: true,
-                email: true,
-                name: true,
-                phone: true,
-                avatarUrl: true,
-                isActive: true,
-                updatedAt: true,
-            },
+            select: ['id', 'email', 'name', 'phone', 'avatarUrl', 'isActive', 'updatedAt'],
         });
     }
 
     async remove(id: number) {
         await this.findOne(id);
-
-        return this.prisma.user.delete({
-            where: { id },
-        });
+        return this.userRepo.remove(await this.userRepo.findOneByOrFail({ id }));
     }
 }

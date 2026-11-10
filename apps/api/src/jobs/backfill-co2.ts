@@ -1,30 +1,27 @@
-import { PrismaClient } from '@prisma/client';
+import { AppDataSource } from '../db/data-source';
+import { Route } from '../db/entities';
 import { calculateRouteCo2Grams } from '../http/middlewares/utils/co2';
 
-const prisma = new PrismaClient();
-
 /**
- * Tính lại estimatedCo2Grams cho các route đã completed — dùng khi:
- * - Route cũ được tạo trước khi có logic tính CO2 (estimatedCo2Grams đang null)
- * - Muốn tính lại toàn bộ sau khi chỉnh hệ số phát thải trong co2.ts
- * Không đụng tới route planned/in_progress/cancelled (chưa có totalDistanceKm/vehicle cố định).
- *
+ * Tính lại estimatedCo2Grams cho các route đã completed.
  * Chạy: npm run backfill:co2
  */
 async function main() {
-    const routes = await prisma.route.findMany({
+    await AppDataSource.initialize();
+    const routeRepo = AppDataSource.getRepository(Route);
+
+    const routes = await routeRepo.find({
         where: { status: 'completed' },
-        include: {
-            vehicle: true,
-            stops: { where: { type: 'pickup' }, include: { order: { select: { weightKg: true } } } },
-        },
+        relations: ['vehicle', 'stops', 'stops.order'],
     });
 
     console.log(`🔎 Tìm thấy ${routes.length} route completed cần tính CO2...`);
 
     let updated = 0;
     for (const route of routes) {
-        const totalWeightKg = route.stops.reduce((sum, s) => sum + (s.order.weightKg ?? 0), 0);
+        const totalWeightKg = route.stops
+            .filter((s) => s.type === 'pickup')
+            .reduce((sum, s) => sum + (s.order?.weightKg ?? 0), 0);
 
         const estimatedCo2Grams = calculateRouteCo2Grams({
             distanceKm: route.totalDistanceKm ?? 0,
@@ -35,12 +32,10 @@ async function main() {
             vehicleCapacityKg: route.vehicle.capacity,
         });
 
-        await prisma.route.update({
-            where: { id: route.id },
-            data: { estimatedCo2Grams },
-        });
-
-        console.log(`  ✅ Route ${route.code}: ${route.totalDistanceKm ?? 0}km, xe ${route.vehicle.type} → ${estimatedCo2Grams}g CO2`);
+        await routeRepo.update(route.id, { estimatedCo2Grams });
+        console.log(
+            `  ✅ Route ${route.code}: ${route.totalDistanceKm ?? 0}km, xe ${route.vehicle.type} → ${estimatedCo2Grams}g CO2`,
+        );
         updated++;
     }
 
@@ -49,7 +44,9 @@ async function main() {
 
 main()
     .catch((e) => {
-        console.error('❌ Backfill CO2 thất bại:', e);
+        console.error(e);
         process.exit(1);
     })
-    .finally(() => prisma.$disconnect());
+    .finally(async () => {
+        if (AppDataSource.isInitialized) await AppDataSource.destroy();
+    });

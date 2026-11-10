@@ -1,12 +1,11 @@
 import { Module } from '@nestjs/common';
 import { ApiKeyGuard } from '../../middlewares/guards/api-key.guard';
-import { PrismaModule } from '../../../db/prisma.module';
 import { ZoneModule } from '../zone/zone.module';
 import { PartnerController } from './partner.controller';
 import { PartnerService } from './partner.service';
 
 @Module({
-    imports: [PrismaModule, ZoneModule],
+    imports: [ZoneModule],
     controllers: [PartnerController],
     providers: [PartnerService, ApiKeyGuard],
 })

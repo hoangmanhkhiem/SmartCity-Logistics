@@ -10,8 +10,8 @@
     "dev:web": "npm run dev -w @smartcity/web",
     "build:api": "npm run build -w @smartcity/api",
     "build:web": "npm run build -w @smartcity/web",
-    "prisma:generate": "npm run prisma:generate -w @smartcity/api",
-    "migration:deploy": "npm run prisma:migrate:deploy -w @smartcity/api",
+    "migration:run": "npm run migration:run -w @smartcity/api",
+    "migration:deploy": "npm run migration:run -w @smartcity/api",
     "db:seed": "npm run db:seed -w @smartcity/api"
   }
 }

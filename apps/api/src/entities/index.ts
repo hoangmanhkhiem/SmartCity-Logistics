@@ -1,6 +1,5 @@
 /**
- * Prisma schema is the source of truth for domain entities.
- * Regenerate client: `npm run prisma:generate` (from apps/api).
+ * Domain entities (TypeORM). Regenerate is N/A — schema via migrations in src/db/migrations-typeorm/.
  */
 export type {
     User,
@@ -18,4 +17,4 @@ export type {
     AnalyticsSnapshot,
     ShipperProfile,
     Telemetry,
-} from '@prisma/client';
+} from '../db/entities';

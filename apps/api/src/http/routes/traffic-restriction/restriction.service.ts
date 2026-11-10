@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, Restriction } from '@prisma/client';
-import { PrismaService } from '../../../db/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Restriction } from '../../../db/entities';
 import { CreateRestrictionDto, UpdateRestrictionDto } from './dto';
 import {
     matchesDayOfWeek,
@@ -52,44 +53,46 @@ function matchesVehicleType(r: Restriction, vehicleType?: string): boolean {
 
 @Injectable()
 export class RestrictionService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(@InjectRepository(Restriction) private readonly restrictionRepo: Repository<Restriction>) {}
 
-    create(dto: CreateRestrictionDto) {
+    async create(dto: CreateRestrictionDto) {
         if (!dto.roadSegmentId && !dto.zoneId) {
             throw new BadRequestException('Cần roadSegmentId hoặc zoneId');
         }
-        const data: Prisma.RestrictionCreateInput = {
-            ...(dto.roadSegmentId && { roadSegment: { connect: { id: dto.roadSegmentId } } }),
-            ...(dto.zoneId && { zone: { connect: { id: dto.zoneId } } }),
-            vehicleType: dto.vehicleType,
-            vehicleTypes: dto.vehicleTypes ?? [],
-            severity: dto.severity ?? 'restricted',
-            maxWeight: dto.maxWeight,
-            maxHeight: dto.maxHeight,
-            timeFrom: dto.timeFrom,
-            timeTo: dto.timeTo,
-            daysOfWeek: dto.daysOfWeek ?? [],
-            allowed: dto.allowed ?? false,
-            description: dto.description,
-            isActive: dto.isActive ?? true,
-        };
-        return this.prisma.restriction.create({
-            data,
-            include: { roadSegment: true, zone: true },
+        const saved = await this.restrictionRepo.save(
+            this.restrictionRepo.create({
+                roadSegmentId: dto.roadSegmentId,
+                zoneId: dto.zoneId,
+                vehicleType: dto.vehicleType,
+                vehicleTypes: dto.vehicleTypes ?? [],
+                severity: dto.severity ?? 'restricted',
+                maxWeight: dto.maxWeight,
+                maxHeight: dto.maxHeight,
+                timeFrom: dto.timeFrom,
+                timeTo: dto.timeTo,
+                daysOfWeek: dto.daysOfWeek ?? [],
+                allowed: dto.allowed ?? false,
+                description: dto.description,
+                isActive: dto.isActive ?? true,
+            }),
+        );
+        return this.restrictionRepo.findOne({
+            where: { id: saved.id },
+            relations: ['roadSegment', 'zone'],
         });
     }
 
     findAll() {
-        return this.prisma.restriction.findMany({
-            include: { roadSegment: true, zone: true },
-            orderBy: { createdAt: 'desc' },
+        return this.restrictionRepo.find({
+            relations: ['roadSegment', 'zone'],
+            order: { createdAt: 'DESC' },
         });
     }
 
     async findOne(id: number) {
-        const r = await this.prisma.restriction.findUnique({
+        const r = await this.restrictionRepo.findOne({
             where: { id },
-            include: { roadSegment: true, zone: true },
+            relations: ['roadSegment', 'zone'],
         });
         if (!r) throw new NotFoundException(`Restriction ${id} not found`);
         return r;
@@ -97,25 +100,19 @@ export class RestrictionService {
 
     async update(id: number, dto: UpdateRestrictionDto) {
         await this.findOne(id);
-        return this.prisma.restriction.update({
-            where: { id },
-            data: dto,
-            include: { roadSegment: true, zone: true },
-        });
+        await this.restrictionRepo.update(id, dto);
+        return this.restrictionRepo.findOne({ where: { id }, relations: ['roadSegment', 'zone'] });
     }
 
     async remove(id: number) {
         await this.findOne(id);
-        return this.prisma.restriction.delete({ where: { id } });
+        return this.restrictionRepo.remove(await this.restrictionRepo.findOneByOrFail({ id }));
     }
 
-    /**
-     * Các quy định đang hiệu lực tại thời điểm `at`, lọc theo loại xe (optional).
-     */
     async findActiveAsGeoJson(at: Date, vehicleType?: string): Promise<GeoJsonFeatureCollection> {
-        const rows = await this.prisma.restriction.findMany({
+        const rows = await this.restrictionRepo.find({
             where: { isActive: true },
-            include: { roadSegment: true, zone: true },
+            relations: ['roadSegment', 'zone'],
         });
 
         const features: GeoJsonFeatureCollection['features'] = [];
@@ -146,7 +143,11 @@ export class RestrictionService {
                     timeFrom: r.timeFrom,
                     timeTo: r.timeTo,
                     daysOfWeek: asStringArray(r.daysOfWeek),
-                    vehicleTypes: asStringArray(r.vehicleTypes).length ? asStringArray(r.vehicleTypes) : r.vehicleType ? [r.vehicleType] : [],
+                    vehicleTypes: asStringArray(r.vehicleTypes).length
+                        ? asStringArray(r.vehicleTypes)
+                        : r.vehicleType
+                          ? [r.vehicleType]
+                          : [],
                 },
             });
         }
@@ -154,17 +155,13 @@ export class RestrictionService {
         return { type: 'FeatureCollection', features };
     }
 
-    /**
-     * Kiểm tra xe (loại/tải trọng) có được phép lưu thông trong 1 zone tại thời điểm `at`.
-     * Trả về danh sách vi phạm (rỗng = hợp lệ). Dùng khi tạo Route để cảnh báo/chặn.
-     */
     async checkVehicleAllowedInZone(
         vehicleType: string,
         zoneId: number,
         at: Date,
         weightKg?: number,
     ): Promise<Array<{ restrictionId: number; severity: string; description: string | null }>> {
-        const rows = await this.prisma.restriction.findMany({
+        const rows = await this.restrictionRepo.find({
             where: { isActive: true, zoneId },
         });
 

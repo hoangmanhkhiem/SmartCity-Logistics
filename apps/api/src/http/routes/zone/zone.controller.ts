@@ -12,7 +12,7 @@ import { Roles } from '../../middlewares/decorators';
 export class ZoneController {
     constructor(private readonly service: ZoneService) { }
 
-    @Post() @Roles('platform_admin') @ApiOperation({ summary: 'Create zone' })
+    @Post() @Roles('platform_admin', 'regulator') @ApiOperation({ summary: 'Create zone' })
     create(@Body() dto: CreateZoneDto) { return this.service.create(dto); }
 
     @Get() @ApiOperation({ summary: 'Get all zones' })
@@ -22,9 +22,9 @@ export class ZoneController {
     @Get(':id') @ApiOperation({ summary: 'Get zone by ID' })
     findOne(@Param('id', ParseIntPipe) id: number) { return this.service.findOne(id); }
 
-    @Patch(':id') @Roles('platform_admin') @ApiOperation({ summary: 'Update zone' })
+    @Patch(':id') @Roles('platform_admin', 'regulator') @ApiOperation({ summary: 'Update zone' })
     update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateZoneDto) { return this.service.update(id, dto); }
 
-    @Delete(':id') @Roles('platform_admin') @ApiOperation({ summary: 'Delete zone' })
+    @Delete(':id') @Roles('platform_admin', 'regulator') @ApiOperation({ summary: 'Delete zone' })
     remove(@Param('id', ParseIntPipe) id: number) { return this.service.remove(id); }
 }

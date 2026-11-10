@@ -1,40 +1,60 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../../db/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Facility } from '../../../db/entities';
 import { CreateFacilityDto, UpdateFacilityDto } from './dto';
 
 @Injectable()
 export class FacilityService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(@InjectRepository(Facility) private readonly facilityRepo: Repository<Facility>) {}
 
     async create(dto: CreateFacilityDto) {
-        return this.prisma.facility.create({ data: dto, include: { organization: true, zone: true } });
+        const saved = await this.facilityRepo.save(this.facilityRepo.create(dto));
+        return this.facilityRepo.findOne({
+            where: { id: saved.id },
+            relations: ['organization', 'zone'],
+        });
     }
 
-    async findAll(page = 1, limit = 10, organizationId?: string, kind?: string, zoneId?: string) {
+    async findAll(page = 1, limit = 10, organizationId?: string, zoneId?: string, kind?: string) {
         const pageNum = Number(page) || 1;
         const limitNum = Number(limit) || 10;
         const skip = (pageNum - 1) * limitNum;
-        const where = { ...(organizationId && { organizationId: Number(organizationId) }), ...(kind && { kind }), ...(zoneId && { zoneId: Number(zoneId) }) };
+        const where = {
+            ...(organizationId && { organizationId: Number(organizationId) }),
+            ...(zoneId && { zoneId: Number(zoneId) }),
+            ...(kind && { kind }),
+        };
         const [data, total] = await Promise.all([
-            this.prisma.facility.findMany({ where, skip, take: limitNum, include: { organization: true, zone: true, _count: { select: { chargers: true, fuelPumps: true, docks: true } } }, orderBy: { createdAt: 'desc' } }),
-            this.prisma.facility.count({ where }),
+            this.facilityRepo.find({
+                where,
+                skip,
+                take: limitNum,
+                relations: ['organization', 'zone'],
+                order: { createdAt: 'DESC' },
+            }),
+            this.facilityRepo.count({ where }),
         ]);
         return { data, meta: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) } };
     }
 
     async findOne(id: number) {
-        const f = await this.prisma.facility.findUnique({ where: { id }, include: { organization: true, zone: true, chargers: true, fuelPumps: true, docks: true } });
+        const f = await this.facilityRepo.findOne({
+            where: { id },
+            relations: ['organization', 'zone', 'chargers', 'fuelPumps', 'docks'],
+        });
         if (!f) throw new NotFoundException(`Facility ${id} not found`);
         return f;
     }
 
     async update(id: number, dto: UpdateFacilityDto) {
         await this.findOne(id);
-        return this.prisma.facility.update({ where: { id }, data: dto, include: { organization: true, zone: true } });
+        await this.facilityRepo.update(id, dto);
+        return this.facilityRepo.findOne({ where: { id }, relations: ['organization', 'zone'] });
     }
 
     async remove(id: number) {
         await this.findOne(id);
-        return this.prisma.facility.delete({ where: { id } });
+        return this.facilityRepo.remove(await this.facilityRepo.findOneByOrFail({ id }));
     }
 }

@@ -31,10 +31,10 @@ export function Header({ title }: HeaderProps) {
     };
 
     return (
-        <header className="sticky top-0 z-40 h-16 bg-white/80 backdrop-blur-sm dark:bg-slate-950/80 border-b border-slate-200 dark:border-slate-800">
+        <header className="sticky top-0 z-40 h-16 bg-[#e7eee9] border-b border-[#d7e2db]">
             <div className="flex items-center justify-between h-full px-6">
                 {/* Title */}
-                <h1 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">{title}</h1>
+                <h1 className="text-lg font-semibold tracking-tight text-[#14211c]">{title}</h1>
 
                 {/* Right side */}
                 <div className="flex items-center gap-2">
@@ -50,7 +50,7 @@ export function Header({ title }: HeaderProps) {
                             onClick={() => setDropdownOpen(!dropdownOpen)}
                             className="flex items-center gap-2 p-1.5 pr-2 rounded-lg hover:bg-slate-100 transition-colors dark:hover:bg-slate-800"
                         >
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-600 to-cyan-500 flex items-center justify-center text-white text-sm font-semibold">
+                            <div className="w-8 h-8 rounded-full bg-[#14352c] flex items-center justify-center text-white text-sm font-semibold">
                                 {user?.name?.charAt(0).toUpperCase() || 'U'}
                             </div>
                             <span className="text-sm font-medium text-slate-700 dark:text-slate-200 hidden sm:block">

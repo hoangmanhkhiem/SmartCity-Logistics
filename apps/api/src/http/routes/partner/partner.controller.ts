@@ -1,6 +1,6 @@
 import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiHeader, ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
-import { PlatformApiClient } from '@prisma/client';
+import { PlatformApiClient } from '../../../db/entities';
 import { ApiKeyGuard } from '../../middlewares/guards/api-key.guard';
 import { PartnerCreateOrderDto } from './dto/partner-create-order.dto';
 import { PartnerService } from './partner.service';

@@ -33,8 +33,7 @@ services:
     working_dir: /app
     command: >
       bash -lc "npm install &&
-      npm run prisma:generate &&
-      npm run prisma:migrate:deploy &&
+      npm run migration:run &&
       npm run start:dev"
     env_file: .env
     environment:

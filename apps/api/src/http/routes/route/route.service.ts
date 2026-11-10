@@ -1,7 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
 import { lineString, point, pointToLineDistance, nearestPointOnLine, destination, bearing } from '@turf/turf';
-import { PrismaService } from '../../../db/prisma.service';
+import { DataSource, In, Not, IsNull, Repository } from 'typeorm';
+import { Facility, Order, Route, ShipperProfile, Stop, Vehicle, Zone } from '../../../db/entities';
 import { haversineKm } from '../../middlewares/utils/geo';
 import {
     getVietnamMinutesFromMidnight,
@@ -12,6 +14,7 @@ import { StopPointDto } from './dto/optimize-stops.dto';
 import { SuggestFacilitiesDto } from './dto/suggest-facilities.dto';
 import { DrivingSegmentDto } from './dto/driving-segment.dto';
 import { RestrictionService } from '../traffic-restriction/restriction.service';
+import { TrafficService } from '../traffic/traffic.service';
 import type { GeoJsonFeatureCollection } from '../traffic-restriction/restriction.service';
 
 /** Trạng thái route chỉ đi tới hoặc hủy — khớp với luồng start/complete của shipper self-service. */
@@ -25,38 +28,50 @@ const ROUTE_STATUS_TRANSITIONS: Record<string, string[]> = {
 @Injectable()
 export class RouteService {
     constructor(
-        private readonly prisma: PrismaService,
+        @InjectRepository(Order) private readonly orderRepo: Repository<Order>,
+        @InjectRepository(Route) private readonly routeRepo: Repository<Route>,
+        @InjectRepository(Stop) private readonly stopRepo: Repository<Stop>,
+        @InjectRepository(Vehicle) private readonly vehicleRepo: Repository<Vehicle>,
+        @InjectRepository(ShipperProfile) private readonly shipperProfileRepo: Repository<ShipperProfile>,
+        @InjectRepository(Zone) private readonly zoneRepo: Repository<Zone>,
+        @InjectRepository(Facility) private readonly facilityRepo: Repository<Facility>,
+        private readonly dataSource: DataSource,
         private readonly config: ConfigService,
         private readonly restrictionService: RestrictionService,
-    ) { }
+        private readonly traffic: TrafficService,
+    ) {}
 
     /** Đơn hàng chưa gom vào route nào (status=pending) của 1 carrier, lọc theo zone tuỳ chọn. */
-    unassignedOrders(carrierId: number, zoneId?: number) {
-        return this.prisma.order.findMany({
+    async unassignedOrders(carrierId: number, zoneId?: number) {
+        const orders = await this.orderRepo.find({
             where: { carrierId, status: 'pending', ...(zoneId && { zoneId }) },
-            include: { zone: true, customer: { select: { id: true, name: true, phone: true } } },
-            orderBy: { createdAt: 'asc' },
+            relations: ['zone', 'customer'],
+            order: { createdAt: 'ASC' },
         });
+        return orders.map((o) => ({
+            ...o,
+            customer: o.customer
+                ? { id: o.customer.id, name: o.customer.name, phone: o.customer.phone }
+                : undefined,
+        }));
     }
 
     /** Gợi ý xe + shipper đang rảnh (on_shift) gần zone nhất theo telemetry mới nhất. */
     async suggestVehicleAndShipperForZone(carrierId: number, zoneId?: number) {
-        const shippers = await this.prisma.shipperProfile.findMany({
-            where: { carrierId, status: 'on_shift', currentVehicleId: { not: null } },
-            include: {
-                user: { select: { id: true, name: true, phone: true } },
-                currentVehicle: {
-                    include: { telemetries: { orderBy: { timestamp: 'desc' }, take: 1 } },
-                },
-            },
+        const shippers = await this.shipperProfileRepo.find({
+            where: { carrierId, status: 'on_shift', currentVehicleId: Not(IsNull()) },
+            relations: ['user', 'currentVehicle', 'currentVehicle.telemetries'],
         });
 
-        const zone = zoneId ? await this.prisma.zone.findUnique({ where: { id: zoneId } }) : null;
+        const zone = zoneId ? await this.zoneRepo.findOneBy({ id: zoneId }) : null;
 
         const candidates = shippers
             .filter((s) => s.currentVehicle)
             .map((s) => {
-                const t = s.currentVehicle!.telemetries[0];
+                const telemetries = [...(s.currentVehicle!.telemetries ?? [])].sort(
+                    (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+                );
+                const t = telemetries[0];
                 return { shipper: s, vehicle: s.currentVehicle!, telemetry: t };
             });
 
@@ -82,17 +97,17 @@ export class RouteService {
 
     /** Gom N order cùng carrier/zone thành 1 Route cho 1 vehicle + 1 shipper trong 1 ca. */
     async createRouteFromOrders(dto: CreateRouteFromOrdersDto) {
-        const vehicle = await this.prisma.vehicle.findUnique({ where: { id: dto.vehicleId } });
+        const vehicle = await this.vehicleRepo.findOneBy({ id: dto.vehicleId });
         if (!vehicle || vehicle.carrierId !== dto.carrierId) {
             throw new BadRequestException('Vehicle không thuộc carrier');
         }
-        const shipperProfile = await this.prisma.shipperProfile.findUnique({ where: { userId: dto.shipperId } });
+        const shipperProfile = await this.shipperProfileRepo.findOneBy({ userId: dto.shipperId });
         if (!shipperProfile || shipperProfile.carrierId !== dto.carrierId) {
             throw new BadRequestException('Shipper không thuộc carrier');
         }
 
         const uniqueOrderIds = [...new Set(dto.orderIds)];
-        const orders = await this.prisma.order.findMany({ where: { id: { in: uniqueOrderIds } } });
+        const orders = await this.orderRepo.find({ where: { id: In(uniqueOrderIds) } });
         if (orders.length !== uniqueOrderIds.length) {
             throw new NotFoundException('Một số order không tồn tại');
         }
@@ -101,11 +116,14 @@ export class RouteService {
             throw new BadRequestException(`Order ${invalid.id} không thuộc carrier hoặc không ở trạng thái pending`);
         }
         // Khoá lại status ngay để tránh 2 request tạo route đồng thời cùng gom trúng 1 order (race condition).
-        const claim = await this.prisma.order.updateMany({
-            where: { id: { in: uniqueOrderIds }, status: 'pending' },
-            data: { status: 'assigned' },
-        });
-        if (claim.count !== uniqueOrderIds.length) {
+        const claim = await this.orderRepo
+            .createQueryBuilder()
+            .update(Order)
+            .set({ status: 'assigned' })
+            .where('id IN (:...ids)', { ids: uniqueOrderIds })
+            .andWhere('status = :status', { status: 'pending' })
+            .execute();
+        if ((claim.affected ?? 0) !== uniqueOrderIds.length) {
             throw new BadRequestException('Một số order vừa bị gom vào route khác, vui lòng tải lại danh sách');
         }
 
@@ -113,10 +131,13 @@ export class RouteService {
             return await this.buildRouteFromClaimedOrders(dto, vehicle, orders);
         } catch (err) {
             // Nhả lại order về pending vì đã claim ở trên nhưng route không tạo được.
-            await this.prisma.order.updateMany({
-                where: { id: { in: uniqueOrderIds }, status: 'assigned' },
-                data: { status: 'pending' },
-            });
+            await this.orderRepo
+                .createQueryBuilder()
+                .update(Order)
+                .set({ status: 'pending' })
+                .where('id IN (:...ids)', { ids: uniqueOrderIds })
+                .andWhere('status = :status', { status: 'assigned' })
+                .execute();
             throw err;
         }
     }
@@ -159,9 +180,10 @@ export class RouteService {
 
         const code = `RT-${dto.shiftDate.replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
-        return this.prisma.$transaction(async (tx) => {
-            const route = await tx.route.create({
-                data: {
+        return this.dataSource.transaction(async (manager) => {
+            const route = await manager.save(
+                Route,
+                manager.create(Route, {
                     carrierId: dto.carrierId,
                     vehicleId: dto.vehicleId,
                     shipperId: dto.shipperId,
@@ -171,16 +193,17 @@ export class RouteService {
                     status: 'planned',
                     plannedStartAt: dto.plannedStartAt ? new Date(dto.plannedStartAt) : undefined,
                     totalDistanceKm: optimized?.approximateTotalKm,
-                },
-            });
+                }),
+            );
 
             let sequence = 1;
             for (const p of orderedPoints) {
                 const [type, orderIdStr] = (p.id ?? '').split(':');
                 const order = orders.find((o) => o.id === Number(orderIdStr));
                 if (!order) continue;
-                await tx.stop.create({
-                    data: {
+                await manager.save(
+                    Stop,
+                    manager.create(Stop, {
                         routeId: route.id,
                         orderId: order.id,
                         sequence: sequence++,
@@ -191,15 +214,17 @@ export class RouteService {
                         contactPhone: type === 'pickup' ? order.pickupPhone : order.deliveryPhone,
                         timeWindowStart: order.timeWindowStart,
                         timeWindowEnd: order.timeWindowEnd,
-                        ...(type === 'delivery' && { codAmountDue: order.codAmount ?? 0 }),
-                    },
-                });
+                        ...(type === 'delivery' ? { codAmountDue: order.codAmount ?? 0 } : {}),
+                    }),
+                );
             }
 
-            return tx.route.findUnique({
+            const full = await manager.findOne(Route, {
                 where: { id: route.id },
-                include: { stops: { orderBy: { sequence: 'asc' } }, vehicle: true, shipper: true },
+                relations: ['stops', 'vehicle', 'shipper'],
             });
+            if (full?.stops) full.stops.sort((a, b) => a.sequence - b.sequence);
+            return full;
         });
     }
 
@@ -210,30 +235,39 @@ export class RouteService {
             ...(status && { status }),
             ...(shipperId && { shipperId: Number(shipperId) }),
         };
-        const [data, total] = await Promise.all([
-            this.prisma.route.findMany({
+        const [rows, total] = await Promise.all([
+            this.routeRepo.find({
                 where,
                 skip,
                 take: limitNum,
-                include: { vehicle: true, shipper: { select: { id: true, name: true, phone: true } }, _count: { select: { stops: true } } },
-                orderBy: { createdAt: 'desc' },
+                relations: ['vehicle', 'shipper'],
+                order: { createdAt: 'DESC' },
             }),
-            this.prisma.route.count({ where }),
+            this.routeRepo.count({ where }),
         ]);
+        const data = await Promise.all(
+            rows.map(async (r) => ({
+                ...r,
+                shipper: r.shipper
+                    ? { id: r.shipper.id, name: r.shipper.name, phone: r.shipper.phone }
+                    : undefined,
+                _count: { stops: await this.stopRepo.count({ where: { routeId: r.id } }) },
+            })),
+        );
         return { data, meta: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) } };
     }
 
     async findOne(id: number) {
-        const r = await this.prisma.route.findUnique({
+        const r = await this.routeRepo.findOne({
             where: { id },
-            include: {
-                vehicle: true,
-                shipper: { select: { id: true, name: true, phone: true } },
-                stops: { orderBy: { sequence: 'asc' }, include: { order: true } },
-            },
+            relations: ['vehicle', 'shipper', 'stops', 'stops.order'],
         });
         if (!r) throw new NotFoundException(`Route ${id} not found`);
-        return r;
+        r.stops.sort((a, b) => a.sequence - b.sequence);
+        return {
+            ...r,
+            shipper: r.shipper ? { id: r.shipper.id, name: r.shipper.name, phone: r.shipper.phone } : undefined,
+        };
     }
 
     async update(id: number, dto: UpdateRouteDto) {
@@ -246,14 +280,12 @@ export class RouteService {
                 );
             }
         }
-        return this.prisma.route.update({
-            where: { id },
-            data: {
-                ...dto,
-                plannedStartAt: dto.plannedStartAt ? new Date(dto.plannedStartAt) : undefined,
-                plannedEndAt: dto.plannedEndAt ? new Date(dto.plannedEndAt) : undefined,
-            },
+        await this.routeRepo.update(id, {
+            ...dto,
+            plannedStartAt: dto.plannedStartAt ? new Date(dto.plannedStartAt) : undefined,
+            plannedEndAt: dto.plannedEndAt ? new Date(dto.plannedEndAt) : undefined,
         });
+        return this.routeRepo.findOneBy({ id });
     }
 
     async remove(id: number) {
@@ -261,7 +293,7 @@ export class RouteService {
         if (existing.status === 'in_progress') {
             throw new BadRequestException('Không thể xóa chuyến giao đang thực hiện');
         }
-        return this.prisma.route.delete({ where: { id } });
+        return this.routeRepo.remove(await this.routeRepo.findOneByOrFail({ id }));
     }
 
     /** Thứ tự điểm giao gần đúng TSP/VRP (nearest neighbor từ điểm đầu). */
@@ -443,12 +475,12 @@ export class RouteService {
         }
 
         const line = lineString(route.geometry.coordinates);
-        const facilities = await this.prisma.facility.findMany({
+        const facilities = await this.facilityRepo.find({
             where: {
                 isActive: true,
-                kind: { in: kinds },
+                kind: In(kinds),
             },
-            include: { organization: true, zone: true },
+            relations: ['organization', 'zone'],
         });
 
         const scored: Array<{
@@ -524,7 +556,8 @@ export class RouteService {
         const data = (await res.json()) as {
             routes?: Array<{ distance: number; duration: number; geometry: { coordinates: [number, number][] } }>;
         };
-        return data.routes ?? [];
+        const factor = await this.traffic.currentFactor().catch(() => 1);
+        return (data.routes ?? []).map((route) => ({ ...route, duration: route.duration * factor }));
     }
 
     /** Điểm càng gần đoạn cấm (trong ngưỡng) → phạt càng lớn. */

@@ -36,8 +36,15 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response?.status === 401) {
-            if (typeof window !== 'undefined') {
+        if (error.response?.status === 401 && typeof window !== 'undefined') {
+            const path = window.location.pathname;
+            const stay =
+                path === '/' ||
+                path === '/login' ||
+                path === '/register' ||
+                path.startsWith('/cong-khai') ||
+                path.startsWith('/mobile');
+            if (!stay) {
                 localStorage.removeItem('accessToken');
                 window.location.href = '/login';
             }
@@ -196,6 +203,9 @@ export const integrationsApi = {
     listApiClients: () => api.get('/integrations/api-clients'),
     createApiClient: (name: string, carrierId?: number) =>
         api.post('/integrations/api-clients', { name, carrierId }),
+    updateApiClient: (id: number, data: { name?: string; isActive?: boolean }) =>
+        api.patch(`/integrations/api-clients/${id}`, data),
+    deleteApiClient: (id: number) => api.delete(`/integrations/api-clients/${id}`),
 };
 
 // Shippers (role = shipper) — quản lý bởi carrier-ops + self-service cho chính shipper

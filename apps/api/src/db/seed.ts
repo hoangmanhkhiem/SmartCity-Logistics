@@ -1,12 +1,29 @@
-import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { createHash } from 'crypto';
 import { v4 as uuid } from 'uuid';
 import { calculateRouteCo2Grams } from '../http/middlewares/utils/co2';
-
-const prisma = new PrismaClient();
+import { AppDataSource } from './data-source';
+import { createSeedClient } from './seed-client';
+import { Order, Vehicle } from './entities';
 
 async function main() {
+    await AppDataSource.initialize();
+    const stampColumns: Array<{ tableName: string; columnName: string; columnType: string; nullable: string }> = await AppDataSource.query(`
+        SELECT TABLE_NAME AS tableName, COLUMN_NAME AS columnName, COLUMN_TYPE AS columnType, IS_NULLABLE AS nullable
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND COLUMN_NAME IN ('updatedAt', 'createdAt', 'updated_at', 'created_at')
+          AND COLUMN_DEFAULT IS NULL
+          AND DATA_TYPE IN ('datetime', 'timestamp')
+    `);
+    for (const col of stampColumns) {
+        const nullSql = col.nullable === 'YES' ? 'NULL' : 'NOT NULL';
+        await AppDataSource.query(
+            `ALTER TABLE \`${col.tableName}\` MODIFY \`${col.columnName}\` ${col.columnType} ${nullSql} DEFAULT CURRENT_TIMESTAMP(3)`,
+        );
+    }
+    const prisma = createSeedClient(AppDataSource.manager);
+
     console.log('🌱 Starting seed (last-mile đô thị đa hãng)...');
 
     // Clear existing data (MySQL: no multi-table TRUNCATE, disable FK checks instead)
@@ -14,12 +31,21 @@ async function main() {
         'telemetry', 'stops', 'routes', 'orders', 'shipper_profiles',
         'platform_api_clients', 'restrictions', 'road_segments', 'docks',
         'fuel_pumps', 'chargers', 'facilities', 'vehicles', 'carriers',
+        'survey_responses', 'survey_assignments', 'survey_forms',
         'memberships', 'role_permissions', 'permissions', 'roles', 'zones',
         'users', 'organizations',
+        'emission_factors', 'issue_reports', 'plans', 'scenarios', 'jobs', 'demand_agg',
+        'speed_profiles', 'traffic_samples', 'traffic_probes', 'traffic_quota',
     ];
     await prisma.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS = 0');
     for (const table of tablesToTruncate) {
-        await prisma.$executeRawUnsafe(`TRUNCATE TABLE \`${table}\``);
+        try {
+            await prisma.$executeRawUnsafe(`TRUNCATE TABLE \`${table}\``);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (!message.includes("doesn't exist")) throw error;
+            console.log(`Skip missing table ${table}`);
+        }
     }
     await prisma.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS = 1');
 
@@ -31,6 +57,11 @@ async function main() {
         prisma.role.create({ data: { name: 'carrier_ops', displayName: 'Điều phối viên', description: 'Vận hành carrier: tạo đơn, gom route, giám sát đội xe', isSystem: true } }),
         prisma.role.create({ data: { name: 'shipper', displayName: 'Shipper', description: 'Tài xế giao hàng last-mile', isSystem: true } }),
         prisma.role.create({ data: { name: 'consumer', displayName: 'Khách hàng', description: 'Người đặt đơn / nhận hàng', isSystem: true } }),
+        prisma.role.create({ data: { name: 'sys_admin', displayName: 'Quản trị hệ thống', description: 'FR9 — quản trị HT (thiết kế v2.0)', isSystem: true } }),
+        prisma.role.create({ data: { name: 'org_admin', displayName: 'Quản trị doanh nghiệp', description: 'Hồ sơ DN, kho, đội xe, API key', isSystem: true } }),
+        prisma.role.create({ data: { name: 'org_staff', displayName: 'Nhân viên doanh nghiệp', description: 'Đơn, tuyến, báo cáo của DN', isSystem: true } }),
+        prisma.role.create({ data: { name: 'member', displayName: 'Thành viên', description: 'Bản đồ, phản ánh, sandbox, nhiệm vụ khảo sát', isSystem: true } }),
+        prisma.role.create({ data: { name: 'researcher', displayName: 'Nghiên cứu', description: 'Giao khảo sát, duyệt phiếu, xuất dữ liệu', isSystem: true } }),
     ]);
     const roleByName = Object.fromEntries(roles.map((r) => [r.name, r]));
 
@@ -57,13 +88,13 @@ async function main() {
         data: { name: 'Sở Giao thông Vận tải Hà Nội', type: 'government', business: 'Quản lý nhà nước', address: 'Số 1 Phố Huế, Hoàn Kiếm, Hà Nội', phone: '024 3825 3456', email: 'sgtvt@hanoi.gov.vn' },
     });
     const orgA = await prisma.organization.create({
-        data: { name: 'FastShip Cầu Giấy', type: 'delivery', business: 'Giao hàng nội đô', address: 'Số 18 Phạm Hùng, Cầu Giấy, Hà Nội', phone: '024 3555 0101', email: 'contact@fastship-cg.vn' },
+        data: { name: 'FastShip Cầu Giấy', type: 'delivery', business: 'Giao hàng nội đô', address: 'Số 18 Phạm Hùng, Cầu Giấy, Hà Nội', phone: '024 3555 0101', email: 'contact@fastship-cg.vn', isPartner: true, fleetSize: 24, anonymizePublic: true },
     });
     const orgB = await prisma.organization.create({
-        data: { name: 'GreenBike Đống Đa', type: 'delivery', business: 'Giao hàng xe điện nội đô', address: 'Số 99 Láng Hạ, Đống Đa, Hà Nội', phone: '024 3555 0202', email: 'contact@greenbike.vn' },
+        data: { name: 'GreenBike Đống Đa', type: 'delivery', business: 'Giao hàng xe điện nội đô', address: 'Số 99 Láng Hạ, Đống Đa, Hà Nội', phone: '024 3555 0202', email: 'contact@greenbike.vn', isPartner: true, fleetSize: 18, anonymizePublic: false },
     });
     const orgC = await prisma.organization.create({
-        data: { name: 'TrustGo Hoàn Kiếm', type: 'delivery', business: 'Giao hàng nội đô', address: 'Số 10 Tràng Tiền, Hoàn Kiếm, Hà Nội', phone: '024 3555 0303', email: 'contact@trustgo.vn' },
+        data: { name: 'TrustGo Hoàn Kiếm', type: 'delivery', business: 'Giao hàng nội đô', address: 'Số 10 Tràng Tiền, Hoàn Kiếm, Hà Nội', phone: '024 3555 0303', email: 'contact@trustgo.vn', isPartner: true, fleetSize: 12, anonymizePublic: true },
     });
 
     // ==================== ZONES (quận nội thành Hà Nội) ====================
@@ -126,6 +157,28 @@ async function main() {
         },
     });
     const zones = [zoneCauGiay, zoneDongDa, zoneHoanKiem, zoneBaDinh, zoneThanhXuan];
+    const ring = (lon: number, lat: number, dLon = 0.01, dLat = 0.008) =>
+        JSON.stringify({
+            type: 'Polygon',
+            coordinates: [[
+                [lon - dLon, lat - dLat],
+                [lon + dLon, lat - dLat],
+                [lon + dLon, lat + dLat],
+                [lon - dLon, lat + dLat],
+                [lon - dLon, lat - dLat],
+            ]],
+        });
+    await Promise.all([
+        prisma.zone.update({ where: { id: zoneCauGiay.id }, data: { boundary: ring(105.795, 21.033, 0.014, 0.01) } }),
+        prisma.zone.update({ where: { id: zoneDongDa.id }, data: { boundary: ring(105.827, 21.016, 0.012, 0.009) } }),
+        prisma.zone.update({ where: { id: zoneHoanKiem.id }, data: { boundary: ring(105.851, 21.033, 0.009, 0.008) } }),
+        prisma.zone.update({ where: { id: zoneBaDinh.id }, data: { boundary: ring(105.822, 21.036, 0.012, 0.009) } }),
+        prisma.zone.update({ where: { id: zoneThanhXuan.id }, data: { boundary: ring(105.802, 20.995, 0.012, 0.008) } }),
+        prisma.zone.update({ where: { id: zoneLezHoanKiem.id }, data: { boundary: ring(105.852, 21.0285, 0.004, 0.0035) } }),
+        prisma.zone.update({ where: { id: zoneCuaNam.id }, data: { boundary: ring(105.843, 21.026, 0.007, 0.005) } }),
+        prisma.zone.update({ where: { id: zoneGiangVo.id }, data: { boundary: ring(105.816, 21.028, 0.008, 0.006) } }),
+        prisma.zone.update({ where: { id: zonePeakHour.id }, data: { boundary: ring(105.835, 21.028, 0.028, 0.02) } }),
+    ]);
 
     // ==================== CARRIERS (last-mile nội đô, mỗi carrier phụ trách zone riêng) ====================
     console.log('Creating carriers...');
@@ -189,6 +242,9 @@ async function main() {
     const opsB = await prisma.user.create({ data: { email: 'ops@greenbike.vn', password: hashedPassword, name: 'Nguyễn Văn Bình', phone: '0901000102' } });
     const opsC = await prisma.user.create({ data: { email: 'ops@trustgo.vn', password: hashedPassword, name: 'Lê Thị Hoa', phone: '0901000103' } });
 
+    const researcherUser = await prisma.user.create({ data: { email: 'researcher@utc.edu.vn', password: hashedPassword, name: 'PGS. Lê Minh Khôi', phone: '0900000003' } });
+    const memberUser = await prisma.user.create({ data: { email: 'member@utc.edu.vn', password: hashedPassword, name: 'Sinh viên khảo sát', phone: '0900000004' } });
+
     const shipperUsers = await Promise.all(
         Array.from({ length: 9 }, (_, i) =>
             prisma.user.create({
@@ -220,9 +276,11 @@ async function main() {
     await Promise.all([
         prisma.membership.create({ data: { userId: adminUser.id, organizationId: orgPlatform.id, roleId: roleByName.platform_admin.id, isDefault: true } }),
         prisma.membership.create({ data: { userId: regulatorUser.id, organizationId: orgPlatform.id, roleId: roleByName.regulator.id, isDefault: true } }),
-        prisma.membership.create({ data: { userId: opsA.id, organizationId: orgA.id, roleId: roleByName.carrier_ops.id, isDefault: true } }),
-        prisma.membership.create({ data: { userId: opsB.id, organizationId: orgB.id, roleId: roleByName.carrier_ops.id, isDefault: true } }),
-        prisma.membership.create({ data: { userId: opsC.id, organizationId: orgC.id, roleId: roleByName.carrier_ops.id, isDefault: true } }),
+        prisma.membership.create({ data: { userId: researcherUser.id, organizationId: orgPlatform.id, roleId: roleByName.researcher.id, isDefault: true } }),
+        prisma.membership.create({ data: { userId: memberUser.id, organizationId: orgA.id, roleId: roleByName.member.id, isDefault: true } }),
+        prisma.membership.create({ data: { userId: opsA.id, organizationId: orgA.id, roleId: roleByName.org_admin.id, isDefault: true } }),
+        prisma.membership.create({ data: { userId: opsB.id, organizationId: orgB.id, roleId: roleByName.org_admin.id, isDefault: true } }),
+        prisma.membership.create({ data: { userId: opsC.id, organizationId: orgC.id, roleId: roleByName.org_staff.id, isDefault: true } }),
         ...shipperUsers.map((u, i) =>
             prisma.membership.create({
                 data: {
@@ -241,7 +299,7 @@ async function main() {
     // ==================== VEHICLES (xe máy / xe tải nhỏ, per carrier) ====================
     console.log('Creating vehicles...');
     const vehicleTypesLastMile = ['motorbike', 'e-bike', 'small_van'];
-    const vehiclesByCarrier: Record<number, Awaited<ReturnType<typeof prisma.vehicle.create>>[]> = {};
+    const vehiclesByCarrier: Record<number, Vehicle[]> = {};
     for (const carrier of carriers) {
         const vs = await Promise.all(
             Array.from({ length: 6 }, (_, i) =>
@@ -264,7 +322,7 @@ async function main() {
                 }),
             ),
         );
-        vehiclesByCarrier[carrier.id] = vs;
+        vehiclesByCarrier[carrier.id] = vs as Vehicle[];
     }
 
     // ==================== SHIPPER PROFILES ====================
@@ -624,7 +682,7 @@ async function main() {
     // ==================== ORDERS (theo zone, per carrier) ====================
     console.log('Creating orders...');
     const orderStatuses = ['pending', 'pending', 'assigned', 'delivered', 'failed'];
-    const orders: Awaited<ReturnType<typeof prisma.order.create>>[] = [];
+    const orders: Order[] = [];
     let orderSeq = 1;
     for (const carrier of carriers) {
         const carrierZoneIds = carrier.operatingZoneIds as number[];
@@ -654,7 +712,46 @@ async function main() {
                     notes: i % 3 === 0 ? 'Giao giờ hành chính' : null,
                 },
             });
-            orders.push(order);
+            orders.push(order as Order);
+            orderSeq++;
+        }
+    }
+
+    const wardOrders: Array<[typeof zoneCauGiay, typeof carrierA, string]> = [
+        [zoneCauGiay, carrierA, 'Xuân Thủy'],
+        [zoneDongDa, carrierB, 'Láng Hạ'],
+        [zoneHoanKiem, carrierC, 'Hàng Gai'],
+        [zoneBaDinh, carrierB, 'Đội Cấn'],
+        [zoneCuaNam, carrierC, 'Tràng Tiền'],
+        [zoneGiangVo, carrierA, 'Giảng Võ'],
+    ];
+    for (const [zone, carrier, street] of wardOrders) {
+        for (let i = 0; i < 5; i++) {
+            const order = await prisma.order.create({
+                data: {
+                    carrierId: carrier.id,
+                    customerId: customerUsers[i % customerUsers.length].id,
+                    zoneId: zone.id,
+                    orderNumber: `ORD-2026-${String(orderSeq).padStart(5, '0')}`,
+                    trackingNo: `TRK${Date.now()}${uuid().slice(0, 6).toUpperCase()}`,
+                    status: i % 4 === 0 ? 'delivered' : 'pending',
+                    pickupAddress: `Kho gần ${street}, Hà Nội`,
+                    pickupLat: 21.02 + (zone.id % 7) * 0.002,
+                    pickupLon: 105.82 + (zone.id % 5) * 0.002,
+                    pickupPhone: `090400${String(orderSeq).padStart(4, '0')}`,
+                    deliveryAddress: `Số ${20 + i} ${street}, Hà Nội`,
+                    deliveryLat: 21.02 + (zone.id % 7) * 0.002 + 0.003,
+                    deliveryLon: 105.82 + (zone.id % 5) * 0.002 + 0.003,
+                    deliveryPhone: `090500${String(orderSeq).padStart(4, '0')}`,
+                    weightKg: 1 + i * 0.4,
+                    itemCount: 1,
+                    codAmount: i % 2 === 0 ? 85000 : 0,
+                    priority: 2,
+                    notes: 'Đơn demo theo phường',
+                    verified: true,
+                },
+            });
+            orders.push(order as Order);
             orderSeq++;
         }
     }
@@ -768,7 +865,175 @@ async function main() {
     await makeRoute(carrierB, onShiftProfiles.find((s) => s.carrierId === carrierB.id)!, vehiclesByCarrier[carrierB.id][0], zoneDongDa.id, orders, 'in_progress');
     await makeRoute(carrierC, onShiftProfiles.find((s) => s.carrierId === carrierC.id)!, vehiclesByCarrier[carrierC.id][1], zoneHoanKiem.id, orders, 'completed');
 
-    // ==================== TELEMETRY ====================
+    console.log('Creating survey, emissions, issues, plans and traffic demo...');
+    const form = await prisma.surveyForm.create({
+        data: {
+            code: 'PARKING_LASTMILE_V1',
+            version: 1,
+            questionMap: {
+                parking_difficulty: 'Mức khó đỗ (1–5)',
+                vehicle_type: 'Loại xe',
+                peak_period: 'Khung cao điểm',
+                electric: 'Xe điện',
+                note: 'Ghi chú điểm nghẽn',
+            },
+        },
+    });
+    const due = new Date(Date.now() + 14 * 24 * 3600 * 1000);
+    await prisma.surveyAssignment.create({
+        data: { userId: shipperUsers[0].id, zoneId: zoneCauGiay.id, formId: form.id, quota: 20, dueDate: due, status: 'open', assignedBy: researcherUser.id },
+    });
+    await prisma.surveyAssignment.create({
+        data: { userId: memberUser.id, zoneId: zoneHoanKiem.id, formId: form.id, quota: 15, dueDate: due, status: 'open', assignedBy: researcherUser.id },
+    });
+    await prisma.surveyAssignment.create({
+        data: { userId: shipperUsers[3].id, zoneId: zoneDongDa.id, formId: form.id, quota: 12, dueDate: due, status: 'open', assignedBy: researcherUser.id },
+    });
+
+    const surveyRows = [
+        [zoneHoanKiem, orgC, 21.031, 105.851, 'approved', 5, 'motorbike', 'Sáng', false, 'Phố Hàng Gai không có chỗ dừng'],
+        [zoneHoanKiem, orgC, 21.029, 105.853, 'approved', 4, 'e-bike', 'Trưa', true, 'Khách đứng chờ trước Tràng Tiền'],
+        [zoneCuaNam, orgC, 21.025, 105.844, 'approved', 4, 'motorbike', 'Chiều', false, 'Hầm Tràng Tiền Plaza đầy'],
+        [zoneCauGiay, orgA, 21.034, 105.792, 'approved', 3, 'small_van', 'Tối', false, 'Nguyễn Phong Sắc kẹt giờ tan tầm'],
+        [zoneCauGiay, orgA, 21.032, 105.788, 'approved', 2, 'e-bike', 'Trưa', true, 'Bãi 131 còn chỗ xe máy'],
+        [zoneDongDa, orgB, 21.016, 105.824, 'approved', 4, 'e-bike', 'Chiều', true, 'Láng Hạ khó đỗ trước chung cư'],
+        [zoneBaDinh, orgB, 21.035, 105.834, 'submitted', 5, 'motorbike', 'Sáng', false, 'Hùng Vương cấm dừng'],
+        [zoneGiangVo, orgA, 21.028, 105.82, 'rejected', 3, 'small_van', 'Tối', false, 'Phiếu thiếu ảnh điểm đỗ'],
+    ] as const;
+    for (const [zone, org, lat, lon, status, difficulty, vehicle, peak, electric, note] of surveyRows) {
+        await prisma.surveyResponse.create({
+            data: {
+                formId: form.id,
+                siteCode: `HN-${zone.id}`,
+                organizationId: org.id,
+                zoneId: zone.id,
+                latitude: lat,
+                longitude: lon,
+                answersRaw: { parking_difficulty: difficulty, vehicle_type: vehicle, peak_period: peak, electric, note },
+                status,
+                rejectReason: status === 'rejected' ? 'Thiếu ảnh minh chứng điểm đỗ' : null,
+                source: 'survey',
+                verified: status === 'approved',
+                submittedBy: status === 'submitted' ? memberUser.id : shipperUsers[0].id,
+                approvedBy: status === 'approved' ? researcherUser.id : null,
+            },
+        });
+    }
+
+    const factors = [
+        ['motorbike', 'Gasoline', 72, 'IPCC + khảo sát nội đô'],
+        ['e-bike', 'Electric', 18, 'Lưới điện Việt Nam, hệ số quy đổi'],
+        ['small_van', 'Gasoline', 210, 'Xe tải nhỏ <2 tấn'],
+        ['small_van', 'Electric', 48, 'Van điện nội đô'],
+    ] as const;
+    for (const [vehicleType, fuelType, gCo2ePerKm, sourceRef] of factors) {
+        await prisma.emissionFactor.create({ data: { vehicleType, fuelType, gCo2ePerKm, sourceRef } });
+    }
+
+    const issues = [
+        ['parking', 21.0312, 105.8504, zoneHoanKiem.id, 'Không có điểm dừng hợp lệ trên Hàng Gai'],
+        ['congestion', 21.0288, 105.8526, zoneLezHoanKiem.id, 'Lý Thái Tổ đông khách du lịch, shipper phải vòng'],
+        ['parking', 21.0246, 105.8565, zoneCuaNam.id, 'Hầm Tràng Tiền đầy sau 11h'],
+        ['restriction', 21.0364, 105.8388, zoneBaDinh.id, 'Biển cấm xe tải trên Hùng Vương'],
+        ['congestion', 21.0331, 105.7894, zoneCauGiay.id, 'Tắc Nguyễn Phong Sắc giờ tan tầm'],
+        ['parking', 21.0158, 105.8235, zoneDongDa.id, 'Láng Hạ không có chỗ đỗ xe máy'],
+    ] as const;
+    for (const [issueType, latitude, longitude, zoneId, note] of issues) {
+        await prisma.issueReport.create({
+            data: {
+                reporterHash: createHash('sha256').update(`demo-${issueType}-${zoneId}`).digest('hex'),
+                issueType,
+                latitude,
+                longitude,
+                zoneId,
+                note,
+                status: 'new',
+            },
+        });
+    }
+
+    await prisma.plan.create({
+        data: {
+            organizationId: orgA.id,
+            status: 'done',
+            solverParams: { vehicles: 4, stops: 18, depart: '08:00' },
+            objectiveValue: 42.6,
+            runtimeMs: 860,
+            result: { km: 42.6, co2eGrams: 3067, durationMin: 128, unassigned: 0 },
+        },
+    });
+    await prisma.scenario.create({
+        data: {
+            name: 'Mở rộng LEZ Hồ Gươm',
+            kind: 'policy',
+            changes: { zone: 'LEZ Hoàn Kiếm', ban: 'xe tải >1 tấn cả ngày' },
+            kpis: { kmBefore: 48.2, kmAfter: 53.1, co2eBefore: 4100, co2eAfter: 2860 },
+        },
+    });
+    await prisma.scenario.create({
+        data: {
+            name: 'Cấm xe ≥2 tấn đến 21:00',
+            kind: 'policy',
+            changes: { window: '06:00-21:00', vehicle: 'truck' },
+            kpis: { delayedOrders: 14, nightShiftShare: 0.37 },
+        },
+    });
+    await prisma.jobRecord.create({
+        data: { type: 'traffic.aggregate', status: 'done', result: { profiles: 36, source: 'survey_fallback' } },
+    });
+    await prisma.jobRecord.create({
+        data: { type: 'survey.export', status: 'done', result: { rows: 8, format: 'csv' } },
+    });
+
+    const hourBucket = new Date();
+    hourBucket.setMinutes(0, 0, 0);
+    for (const zone of [zoneHoanKiem, zoneCauGiay, zoneDongDa, zoneBaDinh, zoneCuaNam, zoneGiangVo]) {
+        await prisma.demandAgg.create({
+            data: { organizationId: null, zoneId: zone.id, hourBucket, orderType: 'last_mile', orderCount: 8 + (zone.id % 5) },
+        });
+    }
+
+    const probeSpots = [
+        ['Hoàn Kiếm', 21.0305, 105.852, 0.42, 18],
+        ['Hoàn Kiếm', 21.0278, 105.8542, 0.7, 28],
+        ['Cửa Nam', 21.0245, 105.8415, 0.5, 22],
+        ['Ba Đình', 21.0355, 105.834, 0.62, 26],
+        ['Cầu Giấy', 21.0368, 105.7905, 0.38, 16],
+        ['Cầu Giấy', 21.0324, 105.794, 0.85, 34],
+        ['Đống Đa', 21.0155, 105.827, 0.55, 24],
+        ['Giảng Võ', 21.0272, 105.8225, 0.78, 31],
+    ] as const;
+    const monthKey = new Date().toISOString().slice(0, 7);
+    await prisma.trafficQuota.create({ data: { monthKey, used: 120, monthlyLimit: 20000 } });
+    for (const [ward, latitude, longitude, factor, speed] of probeSpots) {
+        const probe = await prisma.trafficProbe.create({
+            data: { name: `${ward} · đoạn demo`, ward, latitude, longitude, isActive: true },
+        });
+        await prisma.trafficSample.create({
+            data: {
+                probeId: probe.id,
+                currentSpeed: speed,
+                freeFlowSpeed: Math.round(speed / factor),
+                travelTimeSec: 180,
+                confidence: 0.8,
+                roadClosure: false,
+                source: 'survey_fallback',
+            },
+        });
+        for (const hour of [7, 8, 16, 17, 18]) {
+            await prisma.speedProfile.create({
+                data: {
+                    probeId: probe.id,
+                    dayType: 'weekday',
+                    hourBucket: hour,
+                    medianSpeed: speed,
+                    congestionFactor: factor,
+                    sampleCount: 6,
+                },
+            });
+        }
+    }
+
     console.log('Creating telemetry...');
     for (const carrier of carriers) {
         for (const vehicle of vehiclesByCarrier[carrier.id].slice(0, 3)) {
@@ -799,14 +1064,20 @@ async function main() {
 - Vehicles: 18 (6/carrier, xe máy/e-bike/xe tải nhỏ)
 - Shippers: 9 (3/carrier)
 - Orders: ${orders.length}
-- Routes mẫu: 3 (planned / in_progress / completed với POD/COD)
+- Phiếu khảo sát: 8 (6 đã duyệt), 3 nhiệm vụ đang mở
+- Phản ánh điểm nghẽn: 6 · kịch bản chính sách: 2 · hệ số phát thải: 4
+- Đoạn tắc demo: 8 (Hoàn Kiếm, Cửa Nam, Ba Đình, Cầu Giấy, Đống Đa, Giảng Võ)
 
-🔐 Test accounts (password: 123456):
-- admin@platform.vn (Admin nền tảng)
-- regulator@hanoi.gov.vn (Regulator)
-- ops@fastship-cg.vn / ops@greenbike.vn / ops@trustgo.vn (Carrier-Ops)
-- shipper1@lastmile.vn ... shipper9@lastmile.vn (Shipper)
-- customer1@gmail.com ... customer8@gmail.com (Consumer)
+🔐 Tài khoản demo (mật khẩu đều là 123456):
+- admin@platform.vn — quản trị hệ thống
+- regulator@hanoi.gov.vn — cơ quan quản lý
+- researcher@utc.edu.vn — nghiên cứu
+- ops@fastship-cg.vn — quản trị doanh nghiệp FastShip
+- ops@greenbike.vn — quản trị GreenBike
+- ops@trustgo.vn — nhân viên TrustGo
+- member@utc.edu.vn — thành viên / nhiệm vụ khảo sát
+- shipper1@lastmile.vn … shipper9@lastmile.vn — shipper
+- customer1@gmail.com … customer8@gmail.com — khách hàng
   `);
 }
 
@@ -816,5 +1087,7 @@ main()
         process.exit(1);
     })
     .finally(async () => {
-        await prisma.$disconnect();
+        if (AppDataSource.isInitialized) {
+            await AppDataSource.destroy();
+        }
     });

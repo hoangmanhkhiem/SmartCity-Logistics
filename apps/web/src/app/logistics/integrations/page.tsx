@@ -112,9 +112,13 @@ export default function LogisticsIntegrationsPage() {
             key: 'isActive',
             header: 'Trạng thái',
             render: (c) => (
-                <Badge variant={c.isActive ? 'success' : 'default'}>
-                    {c.isActive ? 'Hoạt động' : 'Vô hiệu'}
-                </Badge>
+                <div className="flex items-center gap-2">
+                    <Badge variant={c.isActive ? 'success' : 'default'}>
+                        {c.isActive ? 'Hoạt động' : 'Vô hiệu'}
+                    </Badge>
+                    <button className="text-xs text-indigo-600" onClick={async () => { await integrationsApi.updateApiClient(c.id, { isActive: !c.isActive }); load(); }}>{c.isActive ? 'Thu hồi' : 'Mở lại'}</button>
+                    <button className="text-xs text-red-600" onClick={async () => { if (confirm('Xóa API key?')) { await integrationsApi.deleteApiClient(c.id); load(); } }}>Xóa</button>
+                </div>
             ),
         },
     ];

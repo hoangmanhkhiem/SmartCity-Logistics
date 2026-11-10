@@ -8,8 +8,9 @@ import { useAuthStore } from '@/stores/auth-store';
 import { shipperApi } from '@/api';
 
 const tabs = [
-    { href: '/shipper/today', label: 'Route hôm nay', icon: RouteIcon },
-    { href: '/shipper/history', label: 'Lịch sử', icon: History },
+    { href: '/thanh-vien/ban-do', label: 'Bản đồ', icon: RouteIcon },
+    { href: '/mobile', label: 'Báo nghẽn', icon: History },
+    { href: '/mobile/nhiem-vu', label: 'Nhiệm vụ', icon: History },
 ];
 
 export default function ShipperLayout({ children }: { children: ReactNode }) {
@@ -37,15 +38,14 @@ export default function ShipperLayout({ children }: { children: ReactNode }) {
     };
 
     return (
-        <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950">
-            {/* Top bar */}
-            <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-200 bg-white/80 backdrop-blur-sm px-4 dark:border-slate-800 dark:bg-slate-950/80">
+        <div className="flex min-h-screen flex-col bg-[#e7eee9]">
+            <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-[#d7e2db] bg-[#14352c] px-4 text-white">
                 <div className="flex items-center gap-2.5">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-cyan-500 text-white text-xs font-bold">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#1f6b56] text-white text-xs font-bold">
                         {user?.name?.charAt(0).toUpperCase() ?? 'S'}
                     </span>
                     <div>
-                        <p className="text-sm font-semibold text-slate-900 dark:text-white">{user?.name ?? 'Shipper'}</p>
+                        <p className="text-sm font-semibold text-white">{user?.name ?? 'Shipper'}</p>
                         {vehiclePlate && (
                             <p className="flex items-center gap-1 text-xs text-slate-500">
                                 <Truck size={12} /> {vehiclePlate}
@@ -65,7 +65,7 @@ export default function ShipperLayout({ children }: { children: ReactNode }) {
             <main className="flex-1 px-3 py-4 pb-20">{children}</main>
 
             {/* Bottom tab bar */}
-            <nav className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-slate-200 bg-white/95 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/95">
+            <nav className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-[#d7e2db] bg-white">
                 {tabs.map((tab) => {
                     const isActive = pathname === tab.href || pathname.startsWith(tab.href + '/');
                     const Icon = tab.icon;
@@ -74,7 +74,7 @@ export default function ShipperLayout({ children }: { children: ReactNode }) {
                             key={tab.href}
                             href={tab.href}
                             className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-xs font-medium transition-colors ${
-                                isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'
+                                isActive ? 'text-[#0e6e5c]' : 'text-slate-400'
                             }`}
                         >
                             <Icon size={22} />

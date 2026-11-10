@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export type UserRole = 'admin' | 'regulator' | 'carrier_ops' | 'shipper' | 'consumer';
+export type UserRole = 'admin' | 'regulator' | 'carrier_ops' | 'shipper' | 'consumer' | 'researcher';
 
 export interface User {
     id: number;
@@ -28,10 +28,15 @@ interface AuthState {
 
 const ROLE_NAME_MAP: Record<string, UserRole> = {
     platform_admin: 'admin',
+    sys_admin: 'admin',
     regulator: 'regulator',
     carrier_ops: 'carrier_ops',
+    org_admin: 'carrier_ops',
+    org_staff: 'carrier_ops',
     shipper: 'shipper',
+    member: 'shipper',
     consumer: 'consumer',
+    researcher: 'researcher',
 };
 
 export const useAuthStore = create<AuthState>()(
@@ -77,15 +82,17 @@ export const useAuthStore = create<AuthState>()(
 export const getDashboardPath = (role: UserRole | null): string => {
     switch (role) {
         case 'admin':
-            return '/logistics/dashboard';
+            return '/he-thong/du-lieu';
         case 'carrier_ops':
-            return '/delivery/dashboard';
+            return '/doanh-nghiep';
         case 'shipper':
-            return '/shipper/today';
+            return '/thanh-vien/ban-do';
         case 'regulator':
-            return '/regulator/reports';
+            return '/co-quan';
+        case 'researcher':
+            return '/nghien-cuu';
         case 'consumer':
-            return '/consumer';
+            return '/cong-khai';
         default:
             return '/';
     }

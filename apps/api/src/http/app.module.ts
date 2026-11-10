@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { loadEnvConfig } from '../config/env';
-import { PrismaModule } from '../db/prisma.module';
+import { DatabaseModule } from '../db/database.module';
 import { AuthModule } from './routes/auth/auth.module';
 import { UserModule } from './routes/user/user.module';
 import { OrganizationModule } from './routes/organization/organization.module';
@@ -19,6 +19,10 @@ import { ShippersModule } from './routes/shippers/shippers.module';
 import { TrackingModule } from './routes/tracking/tracking.module';
 import { TrafficRestrictionModule } from './routes/traffic-restriction/traffic-restriction.module';
 import { HealthController } from './routes/health.controller';
+import { SurveyModule } from './routes/survey/survey.module';
+import { PlatformModule } from './routes/platform/platform.module';
+import { PhasesModule } from './routes/phases/phases.module';
+import { TrafficModule } from './routes/traffic/traffic.module';
 
 @Module({
     imports: [
@@ -27,7 +31,7 @@ import { HealthController } from './routes/health.controller';
             envFilePath: ['.env', '../../.env'],
             load: [loadEnvConfig],
         }),
-        PrismaModule,
+        DatabaseModule,
         AuthModule,
         UserModule,
         OrganizationModule,
@@ -44,6 +48,10 @@ import { HealthController } from './routes/health.controller';
         ShippersModule,
         TrackingModule,
         TrafficRestrictionModule,
+        SurveyModule,
+        PlatformModule,
+        PhasesModule,
+        TrafficModule,
     ],
     controllers: [HealthController],
 })
