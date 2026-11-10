@@ -1,0 +1,14 @@
+**/.git
+**/node_modules
+**/.next
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+_bmad
+_bmad-output
+.claude
+.conversations
+*.sql
+*.md
+!README.md

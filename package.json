@@ -1,0 +1,17 @@
+{
+  "name": "smartcity-logistics",
+  "private": true,
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev:api": "npm run start:dev -w @smartcity/api",
+    "dev:web": "npm run dev -w @smartcity/web",
+    "build:api": "npm run build -w @smartcity/api",
+    "build:web": "npm run build -w @smartcity/web",
+    "prisma:generate": "npm run prisma:generate -w @smartcity/api",
+    "migration:deploy": "npm run prisma:migrate:deploy -w @smartcity/api",
+    "db:seed": "npm run db:seed -w @smartcity/api"
+  }
+}
