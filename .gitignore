@@ -1,6 +1,10 @@
 # dependencies
+node_modules/
 apps/web/node_modules
 apps/api/node_modules
+
+# local AI / notes (không track)
+.conversations/
 
 # build
 apps/web/.next
