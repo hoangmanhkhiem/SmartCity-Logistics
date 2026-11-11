@@ -99,7 +99,7 @@ async function main() {
 
     // ==================== ZONES (quận nội thành Hà Nội) ====================
     // Số liệu dân số/mật độ trích từ khảo sát thực địa 6 khu vực thu thập (Cầu Giấy, Đống Đa,
-    // Hoàn Kiếm, Cửa Nam, Ba Đình, Giảng Võ) — file _1..._6_*.sql ở gốc repo.
+    // Hoàn Kiếm, Cửa Nam, Ba Đình, Giảng Võ) — file sql/_1..._6_*.sql.
     console.log('Creating zones...');
     const zoneCauGiay = await prisma.zone.create({
         data: {
@@ -646,7 +646,7 @@ async function main() {
         prisma.facility.create({ data: { organizationId: orgPlatform.id, zoneId: zoneGiangVo.id, name: 'Bãi đỗ xe tư nhân 138B Giảng Võ', kind: 'hub', latitude: 21.0286, longitude: 105.8213, address: '138B Giảng Võ', capacity: 60 } }),
         prisma.facility.create({ data: { organizationId: orgPlatform.id, zoneId: zoneGiangVo.id, name: 'Trạm sạc Vincom Center Metropolis', kind: 'charging_station', latitude: 21.0347, longitude: 105.8145, address: 'Hầm B3, 29 Liễu Giai', capacity: 15 } }),
         prisma.facility.create({ data: { organizationId: orgPlatform.id, zoneId: zoneGiangVo.id, name: 'Petrolimex số 19 Ngọc Khánh', kind: 'fuel_station', latitude: 21.0296, longitude: 105.8152, address: '104 Ngọc Khánh, Ba Đình', capacity: null } }),
-        // Nhập từ facilities.sql (template import cũ, đã chuyển sang schema Int id hiện tại) — giữ nguyên tên/toạ độ/kind/capacity gốc
+        // Nhập từ sql/facilities.sql (template import cũ, đã chuyển sang schema Int id hiện tại) — giữ nguyên tên/toạ độ/kind/capacity gốc
         prisma.facility.create({ data: { organizationId: orgA.id, zoneId: zoneHoanKiem.id, name: 'Hub GHTK Hai Bà Trưng', kind: 'hub', latitude: 21.008, longitude: 105.85, address: 'Số 200 Bạch Mai', capacity: 400 } }),
         prisma.facility.create({ data: { organizationId: orgA.id, zoneId: zoneHoanKiem.id, name: 'Facility 11', kind: 'hub', latitude: 21.03119148, longitude: 105.8641246, capacity: 300 } }),
         prisma.facility.create({ data: { organizationId: orgA.id, zoneId: zoneHoanKiem.id, name: 'Facility 9', kind: 'charging_station', latitude: 21.05646183, longitude: 105.8895142, capacity: 200 } }),
