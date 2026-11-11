@@ -501,7 +501,8 @@ export default function Map({
         if (initialDrawFeature) {
             mbDraw.add(initialDrawFeature);
         }
-        mbDraw.changeMode(drawMode === 'polygon' ? 'draw_polygon' : 'draw_line_string');
+        const nextMode = drawMode === 'polygon' ? 'draw_polygon' : 'draw_line_string';
+        (mbDraw as { changeMode: (mode: string) => void }).changeMode(nextMode);
 
         if (map.current.getLayer(ZONES_FILL_LAYER_ID)) {
             map.current.setPaintProperty(ZONES_FILL_LAYER_ID, 'fill-opacity', 0.04);
