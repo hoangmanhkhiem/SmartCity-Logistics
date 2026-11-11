@@ -64,22 +64,21 @@ npm run dev:api   # terminal 1
 npm run dev:web   # terminal 2
 ```
 
-## Prod
+## Prod / CI-CD (GHCR + VPS)
+
+Push nhánh `main` build image lên `ghcr.io/<owner>/smartcity-logistics-api|web`. VPS pull image, không build trên máy chủ. Chi tiết: [deploy/README.md](deploy/README.md).
+
+Chạy local từ image hoặc build tại chỗ:
 
 ```bash
 cp .env.example .env
 # Đổi DB_PASSWORD, JWT_SECRET, DOCKER_REGISTRY, IMAGE_TAG
-docker compose -f docker-compose.prod.yml up --build -d
+docker compose -f docker-compose.prod.yml --profile gateway up -d
 ```
 
-- Web: http://localhost:3333 (map `WEB_PORT:3000`)  
-- API: http://localhost:3001  
-
-Cổng 80 qua Nginx (reverse proxy):
-
-```bash
-docker compose -f docker-compose.prod.yml --profile gateway up --build -d
-```
+- Web qua Nginx: http://localhost (`NGINX_HTTP_PORT`)
+- Web trực tiếp: http://localhost:3333 (`WEB_PORT`)
+- API: http://localhost:3001 (`API_PORT`)
 
 ## Cấu trúc `apps/api/src`
 
