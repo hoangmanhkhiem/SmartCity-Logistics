@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class DataProvenance20261110140000 implements MigrationInterface {
-    name = 'DataProvenance20261110140000';
+export class DataProvenance1731700000000 implements MigrationInterface {
+    name = 'DataProvenance1731700000000';
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         const col = await queryRunner.query(
@@ -10,6 +10,13 @@ export class DataProvenance20261110140000 implements MigrationInterface {
         if (Number(col[0]?.c) > 0) {
             console.log('[DataProvenance] Column zones.source already exists — skip.');
             return;
+        }
+
+        const zones = await queryRunner.query(
+            `SELECT COUNT(*) AS c FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'zones'`,
+        );
+        if (Number(zones[0]?.c) === 0) {
+            throw new Error('[DataProvenance] Table zones does not exist — InitialBaseline must run first.');
         }
 
         await queryRunner.query(`

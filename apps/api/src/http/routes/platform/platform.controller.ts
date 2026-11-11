@@ -1,8 +1,20 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { IsObject, IsOptional, IsString } from 'class-validator';
 import { JwtAuthGuard, RolesGuard } from '../../middlewares/guards';
 import { Public, Roles } from '../../middlewares/decorators';
 import { PlatformService } from './platform.service';
+
+class CreateScenarioDto {
+    @IsString() name: string;
+    @IsOptional() @IsString() kind?: string;
+    @IsOptional() @IsObject() changes?: Record<string, unknown>;
+}
+
+class PatchScenarioDto {
+    @IsOptional() @IsString() name?: string;
+    @IsOptional() @IsString() kind?: string;
+}
 
 @Controller()
 @ApiTags('platform')
@@ -100,7 +112,7 @@ export class PlatformController {
     @Get('plans')
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles('org_staff', 'dispatcher', 'carrier_ops', 'researcher', 'platform_admin', 'sys_admin')
+    @Roles('org_staff', 'org_admin', 'dispatcher', 'carrier_ops', 'researcher', 'platform_admin', 'sys_admin', 'regulator')
     listPlans() {
         return this.platform.listPlans();
     }
@@ -108,7 +120,7 @@ export class PlatformController {
     @Post('plans')
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles('org_staff', 'dispatcher', 'carrier_ops', 'researcher', 'member')
+    @Roles('org_staff', 'org_admin', 'dispatcher', 'carrier_ops', 'researcher', 'member', 'platform_admin', 'sys_admin')
     @ApiOperation({ summary: 'FR5.1 — lập kế hoạch tuyến, trả job_id' })
     plan(@Body() body: Record<string, unknown>, @Req() req: { user: { memberships?: { organizationId: number }[] } }) {
         const orgId = req.user.memberships?.[0]?.organizationId ?? null;
@@ -151,7 +163,7 @@ export class PlatformController {
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('regulator', 'researcher', 'sys_admin', 'platform_admin', 'member')
     @ApiOperation({ summary: 'FR18 — kịch bản chính sách' })
-    scenario(@Body() body: { name: string; kind?: string; changes?: Record<string, unknown> }) {
+    scenario(@Body() body: CreateScenarioDto) {
         return this.platform.createScenario(body.name, body.kind ?? 'policy', body.changes ?? {});
     }
 
@@ -166,7 +178,7 @@ export class PlatformController {
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('regulator', 'researcher', 'sys_admin', 'platform_admin')
-    updateScenario(@Param('id', ParseIntPipe) id: number, @Body() body: { name?: string; kind?: string }) {
+    updateScenario(@Param('id', ParseIntPipe) id: number, @Body() body: PatchScenarioDto) {
         return this.platform.updateScenario(id, body);
     }
 
@@ -176,6 +188,14 @@ export class PlatformController {
     @Roles('regulator', 'sys_admin', 'platform_admin')
     deleteScenario(@Param('id', ParseIntPipe) id: number) {
         return this.platform.deleteScenario(id);
+    }
+
+    @Get('jobs')
+    @ApiBearerAuth()
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('platform_admin', 'sys_admin')
+    listJobs() {
+        return this.platform.listJobs();
     }
 
     @Get('jobs/:id')

@@ -195,6 +195,10 @@ export class PlatformService {
         });
     }
 
+    listJobs() {
+        return this.jobs.find({ order: { id: 'DESC' }, take: 80 });
+    }
+
     getJob(id: number) {
         return this.jobs.findOne({ where: { id } }).then((j) => {
             if (!j) throw new NotFoundException('Job not found');

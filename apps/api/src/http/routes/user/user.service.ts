@@ -16,14 +16,14 @@ export class UserService {
             this.userRepo.find({
                 skip,
                 take: limitNum,
-                select: ['id', 'email', 'name', 'phone', 'isActive', 'createdAt', 'updatedAt'],
+                relations: ['memberships', 'memberships.organization', 'memberships.role'],
                 order: { createdAt: 'DESC' },
             }),
             this.userRepo.count(),
         ]);
 
         return {
-            data: users,
+            data: users.map(({ password: _pw, ...rest }) => rest),
             meta: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
         };
     }

@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/stores/auth-store';
 import Map from '@/components/shared/map';
 import type { GeoJsonFeatureCollection } from '@/components/shared/map';
 
@@ -14,6 +16,8 @@ const wards = [
 ];
 
 export default function PublicSitePage() {
+    const router = useRouter();
+    const { isAuthenticated, logout } = useAuthStore();
     const [congestion, setCongestion] = useState<GeoJsonFeatureCollection | null>(null);
     const [layers, setLayers] = useState({ heat: true, points: true, zones: true });
     const [query, setQuery] = useState('');
@@ -50,7 +54,11 @@ export default function PublicSitePage() {
                         <a href="#chi-so">Chỉ số phường</a>
                         <a href="#ket-qua">Nghiên cứu</a>
                         <a href="#du-lieu">Dữ liệu mở</a>
-                        <Link href="/login" className="rounded-lg bg-[#0e6e5c] px-3 py-1.5 font-semibold text-white">Đăng nhập</Link>
+                        {isAuthenticated ? (
+                            <button type="button" className="rounded-lg bg-[#0e6e5c] px-3 py-1.5 font-semibold text-white" onClick={() => { logout(); router.push('/login'); }}>Đăng xuất</button>
+                        ) : (
+                            <Link href="/login" className="rounded-lg bg-[#0e6e5c] px-3 py-1.5 font-semibold text-white">Đăng nhập</Link>
+                        )}
                     </nav>
                 </div>
             </header>

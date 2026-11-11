@@ -20,6 +20,10 @@ interface DataTableProps<T> {
         page: number;
         totalPages: number;
         onPageChange: (page: number) => void;
+        total?: number;
+        pageSize?: number;
+        pageSizeOptions?: number[];
+        onPageSizeChange?: (size: number) => void;
     };
     onRowClick?: (item: T) => void;
     className?: string;
@@ -108,13 +112,25 @@ export function DataTable<T extends { id?: string | number }>({
                 </table>
             </div>
 
-            {/* Pagination */}
-            {pagination && pagination.totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4 px-2">
+            {pagination && (
+                <div className="flex flex-wrap items-center justify-between gap-2 mt-4 px-2">
                     <span className="text-sm text-slate-500 dark:text-slate-400">
-                        Trang {pagination.page} / {pagination.totalPages}
+                        {pagination.total != null
+                            ? `Hiển thị trang ${pagination.page}/${pagination.totalPages} · ${pagination.total} dòng`
+                            : `Trang ${pagination.page} / ${pagination.totalPages}`}
                     </span>
                     <div className="flex items-center gap-1">
+                        {pagination.onPageSizeChange && (
+                            <select
+                                className="mr-2 rounded-md border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+                                value={pagination.pageSize ?? 10}
+                                onChange={(e) => pagination.onPageSizeChange?.(Number(e.target.value))}
+                            >
+                                {(pagination.pageSizeOptions ?? [5, 10, 20, 50]).map((n) => (
+                                    <option key={n} value={n}>{n}/trang</option>
+                                ))}
+                            </select>
+                        )}
                         <Button
                             variant="outline"
                             size="sm"

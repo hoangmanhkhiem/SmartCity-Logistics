@@ -13,7 +13,7 @@ export class UserController {
     constructor(private readonly userService: UserService) { }
 
     @Get()
-    @Roles('platform_admin')
+    @Roles('platform_admin', 'sys_admin', 'researcher')
     @ApiOperation({ summary: 'Get all users with pagination' })
     @ApiQuery({ name: 'page', required: false, type: Number })
     @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -22,7 +22,7 @@ export class UserController {
     }
 
     @Get(':id')
-    @Roles('platform_admin')
+    @Roles('platform_admin', 'sys_admin', 'researcher')
     @ApiOperation({ summary: 'Get user by ID' })
     findOne(@Param('id', ParseIntPipe) id: number) {
         return this.userService.findOne(id);
@@ -36,7 +36,7 @@ export class UserController {
         @CurrentUser() currentUser: { id: number; memberships?: { role: { name: string } }[] },
     ) {
         const isSelf = currentUser.id === id;
-        const isAdmin = currentUser.memberships?.some((m) => m.role.name === 'platform_admin');
+        const isAdmin = currentUser.memberships?.some((m) => ['platform_admin', 'sys_admin'].includes(m.role.name));
         if (!isSelf && !isAdmin) throw new ForbiddenException('Không có quyền sửa người dùng này');
         if (!isAdmin && updateUserDto.isActive != null) {
             throw new ForbiddenException('Chỉ platform_admin được đổi trạng thái hoạt động');
@@ -45,7 +45,7 @@ export class UserController {
     }
 
     @Delete(':id')
-    @Roles('platform_admin')
+    @Roles('platform_admin', 'sys_admin')
     @ApiOperation({ summary: 'Delete user' })
     remove(@Param('id', ParseIntPipe) id: number) {
         return this.userService.remove(id);

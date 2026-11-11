@@ -9,7 +9,7 @@ import { CreateRoadSegmentDto, UpdateRoadSegmentDto } from './dto';
 @ApiTags('road-segments')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('platform_admin', 'regulator')
+@Roles('platform_admin', 'sys_admin', 'regulator')
 export class RoadSegmentController {
     constructor(private readonly service: RoadSegmentService) { }
 

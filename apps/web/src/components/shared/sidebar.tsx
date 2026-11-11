@@ -266,8 +266,8 @@ export const regulatorNavItems: NavConfig[] = [
         label: 'Vùng & Quy định',
         icon: <Map size={20} />,
         items: [
-            { label: 'Vùng & Zone', href: '/regulator/zones', icon: <MapPin size={18} /> },
-            { label: 'Quản lý cấm đường', href: '/regulator/restrictions', icon: <Scale size={18} /> },
+            { label: 'Vùng & Zone', href: '/co-quan/zone', icon: <MapPin size={18} /> },
+            { label: 'Quản lý cấm đường', href: '/co-quan/zone', icon: <Scale size={18} /> },
         ],
     },
 
@@ -322,8 +322,8 @@ export const logisticsNavItems: NavConfig[] = [
         label: 'Quy định toàn thành phố',
         icon: <Shield size={20} />,
         items: [
-            { label: 'Vùng & Zone', href: '/logistics/zones', icon: <Map size={18} /> },
-            { label: 'Quản lý cấm đường', href: '/logistics/restrictions', icon: <Scale size={18} /> },
+            { label: 'Vùng & Zone', href: '/co-quan/zone', icon: <Map size={18} /> },
+            { label: 'Quản lý cấm đường', href: '/co-quan/zone', icon: <Scale size={18} /> },
         ],
     },
 ];

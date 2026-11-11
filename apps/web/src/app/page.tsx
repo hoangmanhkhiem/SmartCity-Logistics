@@ -38,7 +38,7 @@ export default function HomePage() {
                 <div className="mt-4 grid gap-6 rounded-2xl bg-[#e3ebe4] p-5 text-sm md:grid-cols-3">
                     <p><strong>Nhiệm vụ khảo sát</strong> · Nghiên cứu giao cho bất kỳ tài khoản nào (phường, mẫu phiếu, số phiếu, hạn). Người nhận thấy mục này trong menu và trên app mobile.</p>
                     <p><strong>Doanh nghiệp</strong> · Một vai trò, hai cấp: Quản trị DN và Nhân viên. Dữ liệu chỉ thấy trong phạm vi tổ chức mình.</p>
-                    <p><strong>Số liệu trên các màn</strong> · Chỉ là minh hoạ bố cục, chưa phải kết quả khảo sát.</p>
+                    <p><strong>Số liệu trên các màn</strong> · Lấy từ API sau khi seed. Đăng nhập rồi dùng nút Đăng xuất ở sidebar / header.</p>
                 </div>
             </div>
         </main>

@@ -19,7 +19,8 @@ const codebook = [
 
 export default function ExportPage() {
     const download = () => api.get('/phases/surveys/shipper/export').then((r) => {
-        const blob = new Blob([typeof r.data === 'string' ? r.data : JSON.stringify(r.data)], { type: 'text/csv' });
+        const csv = typeof r.data === 'string' ? r.data : (r.data?.csv ?? JSON.stringify(r.data));
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = 'shipper.csv';

@@ -28,9 +28,10 @@ export class RolesGuard implements CanActivate {
                 sys_admin: ['platform_admin', 'sys_admin'],
                 platform_admin: ['sys_admin', 'platform_admin'],
                 carrier_mgr: ['carrier_ops', 'org_admin', 'platform_admin', 'sys_admin'],
+                carrier_ops: ['carrier_ops', 'org_admin', 'org_staff'],
                 org_admin: ['org_admin', 'carrier_ops'],
-                dispatcher: ['carrier_ops', 'org_staff'],
-                org_staff: ['org_staff', 'carrier_ops'],
+                dispatcher: ['carrier_ops', 'org_staff', 'org_admin'],
+                org_staff: ['org_staff', 'carrier_ops', 'org_admin'],
                 member: ['shipper', 'consumer', 'member'],
                 researcher: ['researcher', 'platform_admin', 'sys_admin'],
             };

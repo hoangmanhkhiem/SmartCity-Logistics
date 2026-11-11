@@ -1,8 +1,19 @@
 import { Body, Controller, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { IsInt, IsOptional, IsString } from 'class-validator';
 import { JwtAuthGuard, RolesGuard } from '../../middlewares/guards';
 import { Public, Roles } from '../../middlewares/decorators';
 import { PhasesService } from './phases.service';
+
+class SimulateOrdersDto {
+    @IsOptional() @IsInt() count?: number;
+    @IsOptional() @IsInt() zoneId?: number;
+}
+
+class ImportCsvDto {
+    @IsString() csv: string;
+    @IsOptional() commit?: boolean;
+}
 
 @Controller('phases')
 @ApiTags('phases')
@@ -21,7 +32,7 @@ export class PhasesController {
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('researcher', 'platform_admin', 'sys_admin')
     @ApiOperation({ summary: 'FR11.1 — import CSV, báo lỗi từng dòng' })
-    importSurvey(@Body() body: { csv: string; commit?: boolean }) {
+    importSurvey(@Body() body: ImportCsvDto) {
         return body.commit ? this.phases.commitSurveyCsv(body.csv) : this.phases.importSurveyCsv(body.csv);
     }
 
@@ -56,14 +67,14 @@ export class PhasesController {
     @Post('orders/simulate')
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard)
-    simulate(@Body() body: { count?: number; zoneId?: number }) {
+    simulate(@Body() body: SimulateOrdersDto) {
         return this.phases.simulateOrders(body.count ?? 20, body.zoneId);
     }
 
     @Post('orders/import')
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard)
-    importOrders(@Body() body: { csv: string }) {
+    importOrders(@Body() body: ImportCsvDto) {
         return this.phases.importOrdersCsv(body.csv);
     }
 

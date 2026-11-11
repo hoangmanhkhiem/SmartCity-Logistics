@@ -2,13 +2,17 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { api } from '@/api';
+import { useAuthStore } from '@/stores/auth-store';
 
 const kinds = ['Ùn tắc', 'Cấm đường / cấm giờ', 'Không chỗ dừng đỗ', 'Ngõ nhỏ, khó quay đầu', 'Mưa / ngập', 'Sai vị trí bản đồ'];
 
 export default function MobileReportPage() {
     const [kind, setKind] = useState('Ùn tắc');
     const [message, setMessage] = useState('');
+    const router = useRouter();
+    const { isAuthenticated, logout } = useAuthStore();
     return (
         <main className="mx-auto flex min-h-screen max-w-md flex-col bg-[#e7eee9] text-[#14211c]">
             <div className="relative h-80 bg-[#d5e3cc]">
@@ -36,7 +40,11 @@ export default function MobileReportPage() {
                 <Link href="/thanh-vien/ban-do">Bản đồ</Link>
                 <Link href="/mobile" className="font-semibold text-[#0e6e5c]">Báo nghẽn</Link>
                 <Link href="/mobile/nhiem-vu">Nhiệm vụ</Link>
-                <Link href="/login">Tài khoản</Link>
+                {isAuthenticated ? (
+                    <button type="button" onClick={() => { logout(); router.push('/login'); }}>Đăng xuất</button>
+                ) : (
+                    <Link href="/login">Tài khoản</Link>
+                )}
             </nav>
         </main>
     );

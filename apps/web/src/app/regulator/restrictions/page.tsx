@@ -1,7 +1,5 @@
-'use client';
+import { redirect } from 'next/navigation';
 
-import RestrictionMapEditor from '@/components/logistics/restriction-map-editor';
-
-export default function RegulatorRestrictionsPage() {
-    return <RestrictionMapEditor readOnly={true} />;
+export default function Page() {
+    redirect('/co-quan/zone');
 }

@@ -82,6 +82,7 @@ interface MapProps {
     className?: string;
     onMarkerClick?: (id: string | number) => void;
     onRouteLoaded?: (routeCoordinates: [number, number][]) => void;
+    onZoneClick?: (zone: { id: number; name: string }) => void;
 }
 
 const RESTRICTIONS_SOURCE_ID = 'restrictions-source';
@@ -106,6 +107,7 @@ export default function Map({
     className = '',
     onMarkerClick,
     onRouteLoaded,
+    onZoneClick,
 }: MapProps) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const legendContainer = useRef<HTMLDivElement | null>(null);
@@ -120,6 +122,7 @@ export default function Map({
     const [showZonesLayer, setShowZonesLayer] = useState(true);
     const [showRestrictionsLayer, setShowRestrictionsLayer] = useState(true);
     const [inspected, setInspected] = useState<{ kind: 'zone'; data: ZoneFeature } | { kind: 'restriction'; data: RestrictionInfo } | null>(null);
+    const skipMapClick = useRef(false);
 
     // Fetch route from Mapbox Directions API
     const fetchRoute = useCallback(async (start: [number, number], end: [number, number]) => {
@@ -233,11 +236,22 @@ export default function Map({
             center,
             zoom,
         });
+        const ro = new ResizeObserver(() => map.current?.resize());
+        ro.observe(mapContainer.current);
 
         map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
         if (showZonesAndRestrictions) {
             const legendEl = document.createElement('div');
+            legendEl.className = 'mapboxgl-ctrl';
+            legendEl.style.pointerEvents = 'auto';
+            const stop = (e: Event) => e.stopPropagation();
+            legendEl.addEventListener('pointerdown', stop);
+            legendEl.addEventListener('mousedown', stop);
+            legendEl.addEventListener('click', stop);
+            legendEl.addEventListener('dblclick', stop);
+            legendEl.addEventListener('wheel', stop);
+            legendEl.addEventListener('touchstart', stop);
             legendContainer.current = legendEl;
             const legendControl: mapboxgl.IControl = {
                 onAdd: () => legendEl,
@@ -323,6 +337,7 @@ export default function Map({
         });
 
         return () => {
+            ro.disconnect();
             map.current?.remove();
             map.current = null;
             legendContainer.current = null;
@@ -390,16 +405,27 @@ export default function Map({
         if (map.current.getLayer(RESTRICTIONS_LAYER_ID)) map.current.setLayoutProperty(RESTRICTIONS_LAYER_ID, 'visibility', visibility);
     }, [showRestrictionsLayer, loaded]);
 
-    // Click để xem thông tin zone / đường cấm
+    // Click để xem thông tin zone / đường cấm — tắt khi đang vẽ để click thành đỉnh đa giác/đoạn đường
     useEffect(() => {
-        if (!map.current || !loaded || !showZonesAndRestrictions) return;
+        if (!map.current || !loaded || !showZonesAndRestrictions || drawMode) return;
         const m = map.current;
 
         const handleZoneClick = (e: mapboxgl.MapMouseEvent) => {
+            if (skipMapClick.current) {
+                skipMapClick.current = false;
+                return;
+            }
             const found = zones.find((z) => z.id === e.features?.[0]?.properties?.id);
-            if (found) setInspected({ kind: 'zone', data: found });
+            if (found) {
+                setInspected({ kind: 'zone', data: found });
+                onZoneClick?.({ id: found.id, name: found.name });
+            }
         };
         const handleRestrictionClick = (e: mapboxgl.MapMouseEvent) => {
+            if (skipMapClick.current) {
+                skipMapClick.current = false;
+                return;
+            }
             const props = e.features?.[0]?.properties as RestrictionInfo | undefined;
             if (props) setInspected({ kind: 'restriction', data: props });
         };
@@ -421,7 +447,7 @@ export default function Map({
             m.off('mouseenter', RESTRICTIONS_LAYER_ID, setPointer);
             m.off('mouseleave', RESTRICTIONS_LAYER_ID, unsetPointer);
         };
-    }, [zones, loaded, showZonesAndRestrictions]);
+    }, [zones, loaded, showZonesAndRestrictions, onZoneClick, drawMode]);
 
     // Vẽ tuyến đường tĩnh đã tính sẵn (ví dụ chỉ đường né cấm từ backend)
     useEffect(() => {
@@ -461,15 +487,24 @@ export default function Map({
 
         const mbDraw = new MapboxDraw({
             displayControlsDefault: false,
-            controls: { trash: true },
+            controls: {
+                polygon: drawMode === 'polygon',
+                line_string: drawMode === 'line',
+                trash: true,
+            },
             defaultMode: drawMode === 'polygon' ? 'draw_polygon' : 'draw_line_string',
         });
         draw.current = mbDraw;
         map.current.addControl(mbDraw, 'top-left');
+        map.current.getCanvas().style.cursor = 'crosshair';
 
         if (initialDrawFeature) {
             mbDraw.add(initialDrawFeature);
-            mbDraw.changeMode('simple_select');
+        }
+        mbDraw.changeMode(drawMode === 'polygon' ? 'draw_polygon' : 'draw_line_string');
+
+        if (map.current.getLayer(ZONES_FILL_LAYER_ID)) {
+            map.current.setPaintProperty(ZONES_FILL_LAYER_ID, 'fill-opacity', 0.04);
         }
 
         const handleChange = () => {
@@ -484,6 +519,10 @@ export default function Map({
         return () => {
             map.current?.off('draw.create', handleChange);
             map.current?.off('draw.update', handleChange);
+            if (map.current?.getCanvas()) map.current.getCanvas().style.cursor = '';
+            if (map.current?.getLayer(ZONES_FILL_LAYER_ID)) {
+                map.current.setPaintProperty(ZONES_FILL_LAYER_ID, 'fill-opacity', 0.12);
+            }
             if (draw.current) {
                 map.current?.removeControl(draw.current);
                 draw.current = null;
@@ -624,7 +663,14 @@ export default function Map({
             <div ref={mapContainer} className="w-full h-full" />
 
             {showZonesAndRestrictions && legendContainer.current && createPortal(
-                <div className="m-2 min-w-[190px] rounded-lg border border-slate-200 bg-white/95 p-2.5 text-xs shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
+                <div
+                    className="m-2 min-w-[190px] max-w-[280px] rounded-lg border border-slate-200 bg-white/95 p-2.5 text-xs shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-900/95"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    onDoubleClick={(e) => e.stopPropagation()}
+                    onWheel={(e) => e.stopPropagation()}
+                >
                     <p className="mb-1.5 flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-200">
                         <Layers size={13} /> Lớp bản đồ
                     </p>
@@ -667,7 +713,17 @@ export default function Map({
                                     {inspected.data.severity && <p className="text-slate-500">Mức độ: {inspected.data.severity}</p>}
                                 </>
                             )}
-                            <button type="button" onClick={() => setInspected(null)} className="mt-1 text-indigo-600 hover:underline">
+                            <button
+                                type="button"
+                                onPointerDown={(e) => { e.stopPropagation(); skipMapClick.current = true; }}
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    skipMapClick.current = true;
+                                    setInspected(null);
+                                }}
+                                className="mt-1 text-indigo-600 hover:underline"
+                            >
                                 Đóng
                             </button>
                         </div>

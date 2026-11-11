@@ -30,7 +30,7 @@ export class RestrictionController {
     @Post()
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles('platform_admin', 'regulator')
+    @Roles('platform_admin', 'sys_admin', 'regulator')
     @ApiOperation({ summary: 'Tạo quy định hạn chế' })
     create(@Body() dto: CreateRestrictionDto) {
         return this.service.create(dto);
@@ -39,7 +39,7 @@ export class RestrictionController {
     @Get()
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles('platform_admin', 'regulator')
+    @Roles('platform_admin', 'sys_admin', 'regulator')
     @ApiOperation({ summary: 'Danh sách quy định' })
     findAll() {
         return this.service.findAll();
@@ -48,7 +48,7 @@ export class RestrictionController {
     @Get(':id')
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles('platform_admin', 'regulator')
+    @Roles('platform_admin', 'sys_admin', 'regulator')
     @ApiOperation({ summary: 'Chi tiết quy định' })
     findOne(@Param('id', ParseIntPipe) id: number) {
         return this.service.findOne(id);
@@ -57,7 +57,7 @@ export class RestrictionController {
     @Patch(':id')
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles('platform_admin', 'regulator')
+    @Roles('platform_admin', 'sys_admin', 'regulator')
     @ApiOperation({ summary: 'Cập nhật quy định' })
     update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateRestrictionDto) {
         return this.service.update(id, dto);
@@ -66,7 +66,7 @@ export class RestrictionController {
     @Delete(':id')
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles('platform_admin', 'regulator')
+    @Roles('platform_admin', 'sys_admin', 'regulator')
     @ApiOperation({ summary: 'Xóa quy định' })
     remove(@Param('id', ParseIntPipe) id: number) {
         return this.service.remove(id);

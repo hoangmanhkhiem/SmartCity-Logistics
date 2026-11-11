@@ -1,16 +1,6 @@
-'use client';
+import type { ReactNode } from 'react';
 
-import { ReactNode } from 'react';
-import { Sidebar, regulatorNavItems, Header } from '@/components/shared';
-
+/** Trang /regulator/* chuyển về shell /co-quan — không bọc sidebar cũ. */
 export default function RegulatorLayout({ children }: { children: ReactNode }) {
-    return (
-        <div className="flex min-h-screen bg-[#e7eee9]">
-            <Sidebar title="Quản lý" navItems={regulatorNavItems} />
-            <div className="flex-1 flex flex-col">
-                <Header title="Cơ quan Quản lý" />
-                <main className="flex-1 p-6">{children}</main>
-            </div>
-        </div>
-    );
+    return children;
 }
