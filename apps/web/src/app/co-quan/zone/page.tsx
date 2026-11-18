@@ -41,6 +41,22 @@ function extractPolygons(geo: unknown): GeoJSON.Polygon[] {
     return [];
 }
 
+function parsePolygon(boundary?: string | null): GeoJSON.Polygon | null {
+    if (!boundary) return null;
+    try {
+        return extractPolygons(JSON.parse(boundary))[0] ?? null;
+    } catch {
+        return null;
+    }
+}
+
+function polygonCenter(poly: GeoJSON.Polygon): [number, number] {
+    const ring = poly.coordinates[0] ?? [];
+    const n = Math.max(1, ring.length);
+    const sum = ring.reduce<[number, number]>((acc, p) => [acc[0] + Number(p[0]), acc[1] + Number(p[1])], [0, 0]);
+    return [sum[0] / n, sum[1] / n];
+}
+
 export default function ZonePolicyPage() {
     const pathname = usePathname();
     const inAdmin = pathname.startsWith('/logistics');
@@ -52,6 +68,8 @@ export default function ZonePolicyPage() {
     const [loading, setLoading] = useState(true);
 
     const [editingRule, setEditingRule] = useState<RestrictionRow | null>(null);
+    const [editingZone, setEditingZone] = useState<Zone | null>(null);
+    const [mapCenter, setMapCenter] = useState<[number, number]>([105.851, 21.03]);
     const [drawnPolygon, setDrawnPolygon] = useState<GeoJSON.Polygon | null>(null);
     const [drawnLine, setDrawnLine] = useState<GeoJSON.LineString | null>(null);
     const [saving, setSaving] = useState(false);
@@ -96,6 +114,7 @@ export default function ZonePolicyPage() {
 
     const resetForm = () => {
         setEditingRule(null);
+        setEditingZone(null);
         setDrawnLine(null);
         setDrawnPolygon(null);
         setForm({ name: '', zoneId: '', timeFrom: '06:00', timeTo: '09:00', description: '', legalRef: '', vehicles: ['motorbike_ice'], severity: 'prohibited' });
@@ -103,8 +122,33 @@ export default function ZonePolicyPage() {
 
     const selectWard = (zone: { id: number; name: string }) => {
         setMode('ward');
+        setEditingZone(null);
         setForm((prev) => ({ ...prev, zoneId: String(zone.id), name: prev.name || zone.name }));
-        showToast(`Đã chọn phường/vùng: ${zone.name}`, 'success');
+        const full = zones.find((z) => z.id === zone.id);
+        const poly = parsePolygon(full?.boundary);
+        if (poly) setMapCenter(polygonCenter(poly));
+        showToast(`Đã chọn phường/vùng: ${zone.name} (tô cam trên bản đồ)`, 'success');
+    };
+
+    const startEditZone = (zone: Zone) => {
+        const poly = parsePolygon(zone.boundary);
+        if (!poly) {
+            showToast('Vùng này chưa có hình ranh giới để sửa');
+            return;
+        }
+        setEditingRule(null);
+        setEditingZone(zone);
+        setMode('polygon');
+        setDrawnPolygon(poly);
+        setDrawnLine(null);
+        setMapCenter(polygonCenter(poly));
+        setForm((prev) => ({
+            ...prev,
+            name: zone.name,
+            zoneId: String(zone.id),
+            description: zone.description || prev.description,
+        }));
+        showToast(`Đang sửa hình vùng ${zone.name} — kéo đỉnh trên bản đồ`, 'success');
     };
 
     const saveRule = async (e: FormEvent) => {
@@ -114,7 +158,19 @@ export default function ZonePolicyPage() {
             const desc = [form.description, form.legalRef && `Căn cứ: ${form.legalRef}`].filter(Boolean).join(' · ');
             let zoneId = form.zoneId ? Number(form.zoneId) : undefined;
 
-            if (editingRule) {
+            if (editingZone && !editingRule) {
+                if (!drawnPolygon) {
+                    showToast('Kéo đỉnh trên bản đồ hoặc vẽ lại đa giác trước khi lưu.');
+                    setSaving(false);
+                    return;
+                }
+                await zoneApi.update(editingZone.id, {
+                    name: form.name || editingZone.name,
+                    description: form.description || undefined,
+                    boundary: JSON.stringify(drawnPolygon),
+                });
+                showToast('Đã lưu hình vùng', 'success');
+            } else if (editingRule) {
                 if (editingRule.roadSegment?.id && (form.name || drawnLine)) {
                     await roadSegmentApi.update(editingRule.roadSegment.id, {
                         name: form.name || undefined,
@@ -130,6 +186,9 @@ export default function ZonePolicyPage() {
                     vehicleTypes: form.vehicles,
                     daysOfWeek: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
                 });
+                if (drawnPolygon && zoneId) {
+                    await zoneApi.update(zoneId, { boundary: JSON.stringify(drawnPolygon) });
+                }
                 showToast('Đã cập nhật quy định', 'success');
             } else if (mode === 'line') {
                 if (!drawnLine) {
@@ -221,6 +280,7 @@ export default function ZonePolicyPage() {
         try {
             await zoneApi.delete(zone.id);
             showToast('Đã xóa vùng', 'success');
+            if (editingZone?.id === zone.id) resetForm();
             await load();
         } catch (error) {
             showToast(getErrorMessage(error, 'Không xóa được vùng'));
@@ -247,13 +307,15 @@ export default function ZonePolicyPage() {
     };
 
     const hint =
-        mode === 'polygon' ? (drawnPolygon ? 'Đã vẽ đa giác — có thể lưu quy định.' : 'Click nhiều điểm trên bản đồ, double-click để khép vùng.')
-            : mode === 'line' ? (drawnLine ? `Đã vẽ ${drawnLine.coordinates.length} điểm trên đoạn đường.` : 'Click dọc tuyến phố, double-click để kết thúc đoạn.')
-                : form.zoneId ? `Phường đang chọn: ${zones.find((z) => String(z.id) === form.zoneId)?.name || form.zoneId}` : 'Bấm một dòng phường bên dưới, hoặc click vùng trên bản đồ.';
+        editingZone && !editingRule
+            ? `Đang sửa hình vùng ${editingZone.name} (tô cam). Kéo các đỉnh trên bản đồ rồi Lưu hình vùng.`
+            : mode === 'polygon' ? (drawnPolygon ? 'Đã có đa giác — kéo đỉnh để chỉnh, hoặc lưu quy định.' : 'Click nhiều điểm trên bản đồ, double-click để khép vùng.')
+            : mode === 'line' ? (drawnLine ? `Đoạn đường ${drawnLine.coordinates.length} điểm — kéo đỉnh để chỉnh.` : 'Click dọc tuyến phố, double-click để kết thúc đoạn.')
+                : form.zoneId ? `Phường đang chọn (tô cam): ${zones.find((z) => String(z.id) === form.zoneId)?.name || form.zoneId}` : 'Bấm Sửa hình / Chọn trên danh sách, hoặc click vùng trên bản đồ.';
 
     const startEdit = (r: RestrictionRow) => {
         setEditingRule(r);
-        setMode(r.roadSegment?.geometry ? 'line' : 'ward');
+        const zone = r.zoneId ? zones.find((z) => z.id === r.zoneId) ?? null : null;
         setForm({
             name: r.roadSegment?.name || r.description || '',
             zoneId: r.zoneId ? String(r.zoneId) : '',
@@ -264,7 +326,24 @@ export default function ZonePolicyPage() {
             vehicles: r.vehicleTypes?.length ? r.vehicleTypes : ['motorbike_ice'],
             severity: r.severity || 'prohibited',
         });
-        try { setDrawnLine(r.roadSegment?.geometry ? JSON.parse(r.roadSegment.geometry) : null); } catch { setDrawnLine(null); }
+        let line: GeoJSON.LineString | null = null;
+        try { line = r.roadSegment?.geometry ? JSON.parse(r.roadSegment.geometry) : null; } catch { line = null; }
+        if (line?.type === 'LineString') {
+            setMode('line');
+            setEditingZone(null);
+            setDrawnLine(line);
+            setDrawnPolygon(null);
+            const mid = line.coordinates[Math.floor(line.coordinates.length / 2)];
+            if (mid) setMapCenter([Number(mid[0]), Number(mid[1])]);
+        } else {
+            const poly = parsePolygon(zone?.boundary);
+            setMode('polygon');
+            setEditingZone(zone);
+            setDrawnLine(null);
+            setDrawnPolygon(poly);
+            if (poly) setMapCenter(polygonCenter(poly));
+        }
+        showToast('Kéo đỉnh trên bản đồ để đổi hình, rồi lưu', 'success');
     };
 
     const filteredRules = rules.filter((r) => {
@@ -288,14 +367,13 @@ export default function ZonePolicyPage() {
         { key: 'isActive', header: 'Trạng thái', render: (r) => (r.isActive === false ? 'Tắt' : 'Đang áp dụng') },
         {
             key: 'actions',
-            header: '',
+            header: 'Thao tác',
             className: 'text-right whitespace-nowrap',
             render: (r) => (
-                <>
-                    <button type="button" className="text-[#0e6e5c] hover:underline" onClick={() => startEdit(r)}>Sửa</button>
-                    {' '}
-                    <button type="button" className="text-red-700 hover:underline" onClick={() => deleteRule(r)}>Xóa</button>
-                </>
+                <div className="inline-flex items-center justify-end gap-1.5">
+                    <button type="button" className="h-8 rounded-lg border border-[#dce3ed] bg-white px-2.5 text-xs font-semibold text-[#0e6e5c] hover:bg-[#e9f9f2]" onClick={() => startEdit(r)}>Sửa</button>
+                    <button type="button" className="h-8 rounded-lg border border-[#f3c4c4] bg-[#fff5f5] px-2.5 text-xs font-semibold text-[#c81e1e] hover:bg-[#fde8e8]" onClick={() => deleteRule(r)}>Xóa</button>
+                </div>
             ),
         },
     ];
@@ -305,14 +383,14 @@ export default function ZonePolicyPage() {
         { key: 'type', header: 'Loại', render: (z) => z.type || '—' },
         {
             key: 'actions',
-            header: '',
+            header: 'Thao tác',
             className: 'text-right whitespace-nowrap',
             render: (z) => (
-                <>
-                    <button type="button" className="text-[#0e6e5c] hover:underline" onClick={() => selectWard(z)}>Chọn</button>
-                    {' '}
-                    <button type="button" className="text-red-700 hover:underline" onClick={() => deleteZone(z)}>Xóa vùng</button>
-                </>
+                <div className="inline-flex items-center justify-end gap-1.5">
+                    <button type="button" className="h-8 rounded-lg border border-[#dce3ed] bg-white px-2.5 text-xs font-semibold text-[#0e6e5c] hover:bg-[#e9f9f2]" onClick={() => startEditZone(z)}>Sửa hình</button>
+                    <button type="button" className="h-8 rounded-lg border border-[#dce3ed] bg-white px-2.5 text-xs font-semibold text-[#2f6bff] hover:bg-[#eef3ff]" onClick={() => selectWard(z)}>Chọn</button>
+                    <button type="button" className="h-8 rounded-lg border border-[#f3c4c4] bg-[#fff5f5] px-2.5 text-xs font-semibold text-[#c81e1e] hover:bg-[#fde8e8]" onClick={() => deleteZone(z)}>Xóa</button>
+                </div>
             ),
         },
     ];
@@ -354,18 +432,22 @@ export default function ZonePolicyPage() {
                     <div className="relative h-[min(72vh,720px)] min-h-[560px] overflow-hidden rounded-2xl bg-white">
                         {mode !== 'ward' && (
                             <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full bg-[#2f6bff] px-4 py-1.5 text-xs font-semibold text-white shadow">
-                                {mode === 'polygon'
-                                    ? 'Con trỏ chữ thập: click lần lượt các đỉnh → double-click để khép vùng'
-                                    : 'Con trỏ chữ thập: click dọc phố → double-click để kết thúc đoạn'}
+                                {drawnPolygon || drawnLine
+                                    ? 'Kéo các đỉnh (ô vuông) trên hình đang tô để sửa — thùng rác góc bản đồ để xóa và vẽ lại'
+                                    : mode === 'polygon'
+                                        ? 'Con trỏ chữ thập: click lần lượt các đỉnh → double-click để khép vùng'
+                                        : 'Con trỏ chữ thập: click dọc phố → double-click để kết thúc đoạn'}
                             </div>
                         )}
                         <Map
-                            key={mode}
                             className="h-full w-full"
-                            center={[105.851, 21.03]}
+                            center={mapCenter}
                             zoom={14.2}
                             showZonesAndRestrictions
+                            highlightedZoneId={editingZone?.id ?? (form.zoneId ? Number(form.zoneId) : null)}
+                            highlightedRestrictionId={editingRule?.roadSegment ? editingRule.id : null}
                             drawMode={mode === 'ward' ? null : mode}
+                            drawSessionId={`${mode}-${editingZone?.id ?? 'n'}-${editingRule?.id ?? 'n'}`}
                             onZoneClick={(z) => selectWard(z)}
                             onDrawComplete={(feature) => {
                                 if (feature.geometry.type === 'Polygon') setDrawnPolygon(feature.geometry);
@@ -403,30 +485,36 @@ export default function ZonePolicyPage() {
                             }}
                         />
                     </div>
-                    {mode === 'ward' && (
-                        <div className="rounded-xl bg-white p-3">
-                            <DataTable
-                                columns={zoneColumns}
-                                data={pagedZones}
-                                emptyMessage="Chưa có vùng"
-                                pagination={{
-                                    page: safeZonePage,
-                                    totalPages: zonePages,
-                                    onPageChange: setZonePage,
-                                    total: zones.length,
-                                    pageSize: zonePageSize,
-                                    pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
-                                    onPageSizeChange: (n) => { setZonePageSize(n); setZonePage(1); },
-                                }}
-                            />
-                        </div>
-                    )}
+                    <div className="rounded-xl bg-white p-3">
+                        <p className="mb-2 text-sm font-semibold text-[#11213e]">Danh sách vùng — Sửa hình để kéo ranh giới trên bản đồ</p>
+                        <DataTable
+                            columns={zoneColumns}
+                            data={pagedZones}
+                            emptyMessage="Chưa có vùng"
+                            pagination={{
+                                page: safeZonePage,
+                                totalPages: zonePages,
+                                onPageChange: setZonePage,
+                                total: zones.length,
+                                pageSize: zonePageSize,
+                                pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
+                                onPageSizeChange: (n) => { setZonePageSize(n); setZonePage(1); },
+                            }}
+                        />
+                    </div>
                 </div>
 
                 <form className="h-fit space-y-2 rounded-2xl bg-white p-4 text-sm" onSubmit={saveRule}>
-                    <h2 className="font-semibold">{editingRule ? 'Sửa quy định' : 'Quy định mới'} · {mode === 'polygon' ? 'vùng đang vẽ' : mode === 'line' ? 'đoạn đường' : 'theo phường'}</h2>
+                    <h2 className="font-semibold">
+                        {editingZone && !editingRule
+                            ? `Sửa hình vùng · ${editingZone.name}`
+                            : editingRule
+                                ? 'Sửa quy định'
+                                : 'Quy định mới'}
+                        {!(editingZone && !editingRule) && ` · ${mode === 'polygon' ? 'vùng đang vẽ' : mode === 'line' ? 'đoạn đường' : 'theo phường'}`}
+                    </h2>
                     <label className="block">Tên<input className="mt-1 w-full rounded border px-2 py-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={mode === 'line' ? 'Tên tuyến phố' : 'Tên quy định'} /></label>
-                    {mode !== 'polygon' && (
+                    {(mode !== 'polygon' || Boolean(editingRule)) && (
                         <label className="block">Phường / vùng
                             <select className="mt-1 w-full rounded border px-2 py-1" value={form.zoneId} onChange={(e) => setForm({ ...form, zoneId: e.target.value })}>
                                 <option value="">Chưa chọn</option>
@@ -434,25 +522,31 @@ export default function ZonePolicyPage() {
                             </select>
                         </label>
                     )}
-                    <p className="text-xs text-[#7b8781]">Áp dụng cho</p>
-                    {vehicleChoices.map((v) => (
-                        <label key={v.value} className="flex gap-2"><input type="checkbox" checked={form.vehicles.includes(v.value)} onChange={() => toggleVehicle(v.value)} /> {v.label}</label>
-                    ))}
-                    <div className="grid grid-cols-2 gap-2">
-                        <label>Từ giờ<input className="mt-1 w-full rounded border px-2 py-1" value={form.timeFrom} onChange={(e) => setForm({ ...form, timeFrom: e.target.value })} /></label>
-                        <label>Đến giờ<input className="mt-1 w-full rounded border px-2 py-1" value={form.timeTo} onChange={(e) => setForm({ ...form, timeTo: e.target.value })} /></label>
-                    </div>
-                    <label className="block">Mức độ
-                        <select className="mt-1 w-full rounded border px-2 py-1" value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
-                            <option value="prohibited">Cấm</option>
-                            <option value="restricted">Hạn chế</option>
-                            <option value="allowed_window">Khung được phép</option>
-                        </select>
-                    </label>
-                    <label className="block">Căn cứ pháp lý<input className="mt-1 w-full rounded border px-2 py-1" value={form.legalRef} onChange={(e) => setForm({ ...form, legalRef: e.target.value })} placeholder="số văn bản" /></label>
+                    {!(editingZone && !editingRule) && (
+                        <>
+                            <p className="text-xs text-[#7b8781]">Áp dụng cho</p>
+                            {vehicleChoices.map((v) => (
+                                <label key={v.value} className="flex gap-2"><input type="checkbox" checked={form.vehicles.includes(v.value)} onChange={() => toggleVehicle(v.value)} /> {v.label}</label>
+                            ))}
+                            <div className="grid grid-cols-2 gap-2">
+                                <label>Từ giờ<input className="mt-1 w-full rounded border px-2 py-1" value={form.timeFrom} onChange={(e) => setForm({ ...form, timeFrom: e.target.value })} /></label>
+                                <label>Đến giờ<input className="mt-1 w-full rounded border px-2 py-1" value={form.timeTo} onChange={(e) => setForm({ ...form, timeTo: e.target.value })} /></label>
+                            </div>
+                            <label className="block">Mức độ
+                                <select className="mt-1 w-full rounded border px-2 py-1" value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
+                                    <option value="prohibited">Cấm</option>
+                                    <option value="restricted">Hạn chế</option>
+                                    <option value="allowed_window">Khung được phép</option>
+                                </select>
+                            </label>
+                            <label className="block">Căn cứ pháp lý<input className="mt-1 w-full rounded border px-2 py-1" value={form.legalRef} onChange={(e) => setForm({ ...form, legalRef: e.target.value })} placeholder="số văn bản" /></label>
+                        </>
+                    )}
                     <label className="block">Mô tả<input className="mt-1 w-full rounded border px-2 py-1" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
                     <div className="flex gap-2 pt-2">
-                        <button type="submit" disabled={saving} className="flex-1 rounded-lg bg-[#2f6bff] py-2 text-white">{saving ? 'Đang lưu…' : 'Lưu quy định'}</button>
+                        <button type="submit" disabled={saving} className="flex-1 rounded-lg bg-[#2f6bff] py-2 text-white">
+                            {saving ? 'Đang lưu…' : editingZone && !editingRule ? 'Lưu hình vùng' : 'Lưu quy định'}
+                        </button>
                     </div>
                 </form>
             </div>

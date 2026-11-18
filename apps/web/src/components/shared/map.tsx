@@ -99,6 +99,12 @@ interface MapProps {
     onMarkerClick?: (id: string | number) => void;
     onRouteLoaded?: (routeCoordinates: [number, number][]) => void;
     onZoneClick?: (zone: { id: number; name: string }) => void;
+    /** Vùng đang chọn/sửa — tô cam để dễ nhận. */
+    highlightedZoneId?: number | null;
+    /** Quy định đoạn đường đang sửa. */
+    highlightedRestrictionId?: number | null;
+    /** Đổi khi bắt đầu sửa/tạo mới để gắn lại công cụ vẽ, không reset cả bản đồ. */
+    drawSessionId?: string;
 }
 
 const RESTRICTIONS_SOURCE_ID = 'restrictions-source';
@@ -147,6 +153,9 @@ export default function Map({
     onMarkerClick,
     onRouteLoaded,
     onZoneClick,
+    highlightedZoneId = null,
+    highlightedRestrictionId = null,
+    drawSessionId,
 }: MapProps) {
     const pathname = usePathname();
     const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -394,14 +403,20 @@ export default function Map({
                 id: ZONES_FILL_LAYER_ID,
                 type: 'fill',
                 source: ZONES_SOURCE_ID,
-                paint: { 'fill-color': '#6366f1', 'fill-opacity': 0.12 },
+                paint: {
+                    'fill-color': ['case', ['==', ['get', 'id'], -1], '#f59e0b', '#6366f1'],
+                    'fill-opacity': ['case', ['==', ['get', 'id'], -1], 0.38, 0.12],
+                },
             });
             map.current!.addLayer({
                 id: ZONES_OUTLINE_LAYER_ID,
                 type: 'line',
                 source: ZONES_SOURCE_ID,
                 layout: { 'line-join': 'round', 'line-cap': 'round' },
-                paint: { 'line-color': '#6366f1', 'line-width': 2 },
+                paint: {
+                    'line-color': ['case', ['==', ['get', 'id'], -1], '#ea580c', '#6366f1'],
+                    'line-width': ['case', ['==', ['get', 'id'], -1], 4, 2],
+                },
             });
 
             map.current!.addSource('congestion', {
@@ -542,6 +557,31 @@ export default function Map({
 
     useEffect(() => {
         if (!map.current || !loaded) return;
+        const zid = highlightedZoneId ?? -1;
+        const zMatch: mapboxgl.Expression = ['==', ['to-number', ['get', 'id']], zid];
+        if (map.current.getLayer(ZONES_FILL_LAYER_ID)) {
+            map.current.setPaintProperty(ZONES_FILL_LAYER_ID, 'fill-color', ['case', zMatch, '#f59e0b', '#6366f1']);
+            map.current.setPaintProperty(ZONES_FILL_LAYER_ID, 'fill-opacity', ['case', zMatch, 0.4, 0.12]);
+        }
+        if (map.current.getLayer(ZONES_OUTLINE_LAYER_ID)) {
+            map.current.setPaintProperty(ZONES_OUTLINE_LAYER_ID, 'line-color', ['case', zMatch, '#ea580c', '#6366f1']);
+            map.current.setPaintProperty(ZONES_OUTLINE_LAYER_ID, 'line-width', ['case', zMatch, 4, 2]);
+        }
+        const rid = highlightedRestrictionId ?? -1;
+        const rMatch: mapboxgl.Expression = ['==', ['to-number', ['get', 'restrictionId']], rid];
+        if (map.current.getLayer(RESTRICTIONS_LAYER_ID)) {
+            map.current.setPaintProperty(RESTRICTIONS_LAYER_ID, 'line-color', [
+                'case',
+                rMatch,
+                '#f59e0b',
+                ['coalesce', ['get', 'color'], '#ea580c'],
+            ]);
+            map.current.setPaintProperty(RESTRICTIONS_LAYER_ID, 'line-width', ['case', rMatch, 8, 4]);
+        }
+    }, [highlightedZoneId, highlightedRestrictionId, loaded]);
+
+    useEffect(() => {
+        if (!map.current || !loaded) return;
         const source = map.current.getSource(INCIDENTS_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
         source?.setData(autoIncidents);
     }, [autoIncidents, loaded]);
@@ -660,16 +700,24 @@ export default function Map({
         });
         draw.current = mbDraw;
         map.current.addControl(mbDraw, 'top-left');
-        setMapCursor(map.current, 'crosshair');
+
+        const changeMode = (mode: string, opts?: Record<string, unknown>) => {
+            (mbDraw as { changeMode: (m: string, o?: Record<string, unknown>) => void }).changeMode(mode, opts);
+        };
 
         if (initialDrawFeature) {
-            mbDraw.add(initialDrawFeature);
-        }
-        const nextMode = drawMode === 'polygon' ? 'draw_polygon' : 'draw_line_string';
-        (mbDraw as { changeMode: (mode: string) => void }).changeMode(nextMode);
-
-        if (map.current.getLayer(ZONES_FILL_LAYER_ID)) {
-            map.current.setPaintProperty(ZONES_FILL_LAYER_ID, 'fill-opacity', 0.04);
+            const ids = mbDraw.add(initialDrawFeature);
+            const featureId = ids[0];
+            setMapCursor(map.current, 'pointer');
+            try {
+                changeMode('direct_select', { featureId });
+            } catch {
+                changeMode('simple_select', { featureIds: [featureId] });
+            }
+            onDrawComplete?.(initialDrawFeature);
+        } else {
+            setMapCursor(map.current, 'crosshair');
+            changeMode(drawMode === 'polygon' ? 'draw_polygon' : 'draw_line_string');
         }
 
         const handleChange = () => {
@@ -685,16 +733,13 @@ export default function Map({
             map.current?.off('draw.create', handleChange);
             map.current?.off('draw.update', handleChange);
             setMapCursor(map.current, '');
-            if (map.current?.getLayer(ZONES_FILL_LAYER_ID)) {
-                map.current.setPaintProperty(ZONES_FILL_LAYER_ID, 'fill-opacity', 0.12);
-            }
             if (draw.current) {
                 map.current?.removeControl(draw.current);
                 draw.current = null;
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [drawMode, loaded]);
+    }, [drawMode, loaded, drawSessionId]);
 
     // Update markers
     useEffect(() => {
