@@ -6,14 +6,19 @@ import { getDashboardPath, useAuthStore } from '@/stores/auth-store';
 import { canAccessPath, isPublicPath } from '@/lib/route-access';
 
 function useAuthHydrated() {
-    const [hydrated, setHydrated] = useState(() => useAuthStore.persist.hasHydrated());
+    const [hydrated, setHydrated] = useState(false);
 
     useEffect(() => {
-        if (useAuthStore.persist.hasHydrated()) {
+        const persist = useAuthStore.persist;
+        if (!persist?.hasHydrated) {
             setHydrated(true);
             return;
         }
-        return useAuthStore.persist.onFinishHydration(() => setHydrated(true));
+        if (persist.hasHydrated()) {
+            setHydrated(true);
+            return;
+        }
+        return persist.onFinishHydration(() => setHydrated(true));
     }, []);
 
     return hydrated;
