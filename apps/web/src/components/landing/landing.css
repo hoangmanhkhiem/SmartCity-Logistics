@@ -566,8 +566,7 @@
     }
     .section-head h2,
     .operation-copy h2,
-    .network h2,
-    .cta h2 {
+    .network h2 {
         margin: 0;
         font-size: 42px;
         line-height: 1.15;
@@ -949,40 +948,6 @@
     .district-4 { left: 14%; bottom: 18%; }
     .district-5 { left: 44%; top: 4%; }
 
-    .cta-section { padding: 100px 0; background: #f4f6fb; }
-    .cta {
-        min-height: 260px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 54px 64px;
-        border-radius: 20px;
-        color: white;
-        background: linear-gradient(115deg, #12254a, #07142d);
-        box-shadow: 0 25px 70px rgba(11, 27, 58, 0.14);
-    }
-    .cta-action { max-width: 330px; }
-    .cta-action p {
-        margin: 0 0 22px;
-        color: rgba(255, 255, 255, 0.6);
-        font-size: 12px;
-        line-height: 1.7;
-    }
-    .cta-action button,
-    .cta-action a {
-        height: 48px;
-        display: flex;
-        width: fit-content;
-        align-items: center;
-        gap: 12px;
-        padding: 0 19px;
-        border: 0;
-        border-radius: 9px;
-        color: #ffffff;
-        background: #ff6a2b;
-        font-size: 11px;
-        font-weight: 800;
-    }
     footer { background: white; }
     .footer-top {
         min-height: 170px;
@@ -1100,8 +1065,7 @@
         .section-head { display: block; }
         .section-head h2,
         .operation-copy h2,
-        .network h2,
-        .cta h2 { font-size: 34px; }
+        .network h2 { font-size: 34px; }
         .section-head > p { margin-top: 20px; }
         .features-grid { grid-template-columns: 1fr; }
         .feature-card { min-height: 330px; }
@@ -1119,9 +1083,6 @@
         .orbit-c { width: 330px; height: 330px; }
         .orbit-b { width: 245px; height: 245px; }
         .network-numbers { gap: 20px; }
-        .cta-section { padding: 70px 0; }
-        .cta { display: block; padding: 40px 26px; }
-        .cta-action { margin-top: 30px; }
         .footer-top {
             flex-direction: column;
             align-items: start;

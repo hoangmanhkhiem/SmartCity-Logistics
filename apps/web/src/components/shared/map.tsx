@@ -2,12 +2,15 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import mapboxgl from 'mapbox-gl';
 import MapboxDraw from '@mapbox/mapbox-gl-draw';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
 import { api, zoneApi, restrictionApi } from '@/api';
 import { normalizeRestrictionFeatureCollection, normalizePolygonCoordinates } from '@/lib/geojson-lnglat';
+import { useAuthStore } from '@/stores/auth-store';
 import { Layers, Eye, EyeOff } from 'lucide-react';
 
 interface ZoneFeature {
@@ -30,6 +33,7 @@ interface IncidentInfo {
     id?: number;
     issueType?: string;
     note?: string | null;
+    status?: string;
 }
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || 'pk.eyJ1Ijoia2hpZW1obTA0IiwiYSI6ImNtazNnc216ajBkZHgzZ3EyaWJ3OGFrZ2QifQ.3EGQJyiXL-oU1l1Ug4qfTQ';
@@ -144,6 +148,8 @@ export default function Map({
     onRouteLoaded,
     onZoneClick,
 }: MapProps) {
+    const pathname = usePathname();
+    const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
     const mapContainer = useRef<HTMLDivElement>(null);
     const legendContainer = useRef<HTMLDivElement | null>(null);
     const map = useRef<mapboxgl.Map | null>(null);
@@ -166,6 +172,9 @@ export default function Map({
         | null
     >(null);
     const skipMapClick = useRef(false);
+    const [incidentsNonce, setIncidentsNonce] = useState(0);
+    const [clearBusy, setClearBusy] = useState(false);
+    const [clearMsg, setClearMsg] = useState('');
 
     // Fetch route from Mapbox Directions API
     const fetchRoute = useCallback(async (start: [number, number], end: [number, number]) => {
@@ -294,7 +303,7 @@ export default function Map({
             return;
         }
         let cancelled = false;
-        const apply = (payload: { geojson?: GeoJsonFeatureCollection; items?: Array<{ id: number; longitude: number; latitude: number; issueType?: string; note?: string | null }> }) => {
+        const apply = (payload: { geojson?: GeoJsonFeatureCollection; items?: Array<{ id: number; longitude: number; latitude: number; issueType?: string; note?: string | null; status?: string }> }) => {
             if (payload.geojson?.features) {
                 setAutoIncidents(payload.geojson);
                 return;
@@ -309,7 +318,8 @@ export default function Map({
                         id: item.id,
                         issueType: item.issueType,
                         note: item.note,
-                        color: item.issueType === 'accident' ? '#7f1d1d' : '#dc2626',
+                        status: item.status,
+                        color: item.status === 'clear_pending' ? '#d97706' : item.issueType === 'accident' ? '#7f1d1d' : '#dc2626',
                     },
                 })),
             });
@@ -324,7 +334,7 @@ export default function Map({
             }).catch(() => setAutoIncidents({ type: 'FeatureCollection', features: [] }));
         });
         return () => { cancelled = true; };
-    }, [showApprovedIncidents]);
+    }, [showApprovedIncidents, incidentsNonce]);
 
     useEffect(() => {
         if (!mapContainer.current || map.current) return;
@@ -919,7 +929,51 @@ export default function Map({
                                 <>
                                     <p className="font-semibold text-slate-800 dark:text-white">{ISSUE_TYPE_VI[inspected.data.issueType || ''] || inspected.data.issueType || 'Báo cáo'}</p>
                                     {inspected.data.note && <p className="text-slate-500">{inspected.data.note}</p>}
-                                    <p className="text-slate-500">Đã duyệt — tuyến sẽ ưu tiên né điểm này</p>
+                                    {inspected.data.status === 'clear_pending' ? (
+                                        <p className="text-amber-700">Đang chờ cơ quan xác nhận đã hết — tuyến vẫn né điểm này</p>
+                                    ) : (
+                                        <p className="text-slate-500">Đang hiệu lực — tuyến sẽ ưu tiên né điểm này</p>
+                                    )}
+                                    {inspected.data.status !== 'clear_pending' && inspected.data.id != null && (
+                                        isAuthenticated ? (
+                                            <button
+                                                type="button"
+                                                disabled={clearBusy}
+                                                onPointerDown={(e) => { e.stopPropagation(); skipMapClick.current = true; }}
+                                                onClick={async (e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    skipMapClick.current = true;
+                                                    const id = Number(inspected.data.id);
+                                                    if (!Number.isFinite(id)) return;
+                                                    setClearBusy(true);
+                                                    setClearMsg('');
+                                                    try {
+                                                        await api.patch(`/issues/${id}/clear`, {});
+                                                        setClearMsg('Đã gửi. Chờ cơ quan xác nhận.');
+                                                        setInspected({ kind: 'incident', data: { ...inspected.data, status: 'clear_pending' } });
+                                                        setIncidentsNonce((n) => n + 1);
+                                                    } catch (err: unknown) {
+                                                        const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+                                                        setClearMsg(msg || 'Không gửi được. Thử lại sau.');
+                                                    } finally {
+                                                        setClearBusy(false);
+                                                    }
+                                                }}
+                                                className="mt-1.5 w-full rounded-md bg-[#d97706] px-2 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60"
+                                            >
+                                                {clearBusy ? 'Đang gửi…' : 'Báo điểm này đã hết'}
+                                            </button>
+                                        ) : (
+                                            <Link
+                                                href={`/login?next=${encodeURIComponent(pathname || '/')}`}
+                                                className="mt-1.5 block text-[11px] font-semibold text-indigo-600 hover:underline"
+                                            >
+                                                Đăng nhập để báo đã hết
+                                            </Link>
+                                        )
+                                    )}
+                                    {clearMsg && <p className="mt-1 text-[11px] text-slate-600">{clearMsg}</p>}
                                 </>
                             ) : (
                                 <>

@@ -102,6 +102,18 @@ export class PlatformController {
         return this.platform.reportIssue(req.user.id, body);
     }
 
+    @Patch('issues/:id/clear')
+    @ApiBearerAuth()
+    @UseGuards(JwtAuthGuard)
+    @ApiOperation({ summary: 'Cộng đồng báo điểm đã hết — chờ cơ quan xác nhận' })
+    requestClear(
+        @Param('id', ParseIntPipe) id: number,
+        @Body() body: { note?: string },
+        @Req() req: { user: { id: number } },
+    ) {
+        return this.platform.requestClear(id, req.user.id, body?.note);
+    }
+
     @Patch('issues/:id/review')
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard, RolesGuard)

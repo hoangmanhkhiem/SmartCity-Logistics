@@ -355,26 +355,7 @@ export function LandingPage() {
                 </div>
             </section>
 
-            <section className="cta-section" id="about">
-                <div className="cta container">
-                    <div>
-                        <span className="eyebrow">SẴN SÀNG BẮT ĐẦU?</span>
-                        <h2>
-                            Đưa vận hành logistics
-                            <br />
-                            lên một tầm cao mới.
-                        </h2>
-                    </div>
-                    <div className="cta-action">
-                        <p>Trải nghiệm nền tảng cùng chuyên gia vận hành của chúng tôi.</p>
-                        <Link href="/studio/doi-tac">
-                            Đăng ký tư vấn <Icon name="arrow" size={18} />
-                        </Link>
-                    </div>
-                </div>
-            </section>
-
-            <footer>
+            <footer id="about">
                 <div className="container footer-top">
                     <Brand dark />
                     <p>Nền tảng vận hành giao nhận nội đô dành cho doanh nghiệp hiện đại.</p>

@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DemandAgg, EmissionFactor, IssueReport, JobRecord, Plan, Scenario } from '../../../db/entities/platform.entity';
@@ -45,7 +45,10 @@ function reporterHashFor(userId: number) {
     return createHash('sha256').update(String(userId)).digest('hex');
 }
 
+const LIVE_ISSUE_STATUSES = ['approved', 'clear_pending'] as const;
+
 function issueToFeature(row: IssueReport) {
+    const waitingClear = row.status === 'clear_pending';
     return {
         type: 'Feature' as const,
         geometry: { type: 'Point' as const, coordinates: [row.longitude, row.latitude] as [number, number] },
@@ -53,8 +56,15 @@ function issueToFeature(row: IssueReport) {
             id: row.id,
             issueType: row.issueType,
             note: row.note,
+            status: row.status,
             weight: row.issueType === 'accident' || row.issueType === 'long_jam' ? 1 : row.issueType === 'congestion' ? 0.9 : 0.65,
-            color: row.issueType === 'accident' ? '#7f1d1d' : row.issueType === 'congestion' || row.issueType === 'long_jam' ? '#dc2626' : '#ea580c',
+            color: waitingClear
+                ? '#d97706'
+                : row.issueType === 'accident'
+                    ? '#7f1d1d'
+                    : row.issueType === 'congestion' || row.issueType === 'long_jam'
+                        ? '#dc2626'
+                        : '#ea580c',
         },
     };
 }
@@ -199,15 +209,38 @@ export class PlatformService {
         );
     }
 
+    async requestClear(id: number, _userId: number, note?: string) {
+        const row = await this.issues.findOne({ where: { id } });
+        if (!row) throw new NotFoundException('Issue not found');
+        if (row.status === 'clear_pending') {
+            throw new ConflictException('Điểm này đang chờ cơ quan xác nhận đã hết');
+        }
+        if (row.status !== 'approved') {
+            throw new BadRequestException('Chỉ báo đã hết với điểm đang còn hiệu lực trên bản đồ');
+        }
+        row.status = 'clear_pending';
+        const stamp = `Cộng đồng báo đã hết (${new Date().toISOString()})`;
+        row.note = [row.note, note?.trim(), stamp].filter(Boolean).join(' · ');
+        return this.issues.save(row);
+    }
+
     async reviewIssue(id: number, status: 'approved' | 'rejected') {
         const row = await this.issues.findOne({ where: { id } });
         if (!row) throw new NotFoundException('Issue not found');
+        if (row.status === 'cleared') {
+            throw new BadRequestException('Báo cáo này đã đóng');
+        }
+        if (row.status === 'clear_pending') {
+            // Duyệt = xác nhận đã hết; Loại = vẫn còn sự cố, giữ trên bản đồ.
+            row.status = status === 'approved' ? 'cleared' : 'approved';
+            return this.issues.save(row);
+        }
         row.status = status;
         return this.issues.save(row);
     }
 
     async bottlenecks(issueType?: string) {
-        const qb = this.issues.createQueryBuilder('i').where('i.status = :s', { s: 'approved' });
+        const qb = this.issues.createQueryBuilder('i').where('i.status IN (:...s)', { s: [...LIVE_ISSUE_STATUSES] });
         if (issueType) qb.andWhere('i.issue_type = :t', { t: normalizeIssueType(issueType) });
         const rows = await qb.orderBy('i.id', 'DESC').take(400).getMany();
         const geojson = { type: 'FeatureCollection' as const, features: rows.map(issueToFeature) };
@@ -216,7 +249,7 @@ export class PlatformService {
 
     async approvedIncidentPoints() {
         const rows = await this.issues.find({
-            where: { status: 'approved' },
+            where: LIVE_ISSUE_STATUSES.map((status) => ({ status })),
             order: { id: 'DESC' },
             take: 400,
         });

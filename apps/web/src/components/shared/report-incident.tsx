@@ -21,7 +21,7 @@ const HN: [number, number] = [105.8542, 21.0285];
 
 function statusPill(status?: string) {
     if (status === 'approved') return 'cq-pill green';
-    if (status === 'rejected') return 'cq-pill red';
+    if (status === 'rejected' || status === 'cleared') return 'cq-pill red';
     return 'cq-pill orange';
 }
 

@@ -139,8 +139,10 @@ export default function RegulatorReportsPage() {
                             <select className="h-9 rounded-lg border border-[#dfe6ef] px-2 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                                 <option value="">Tất cả trạng thái</option>
                                 <option value="pending">Chờ xác minh</option>
+                                <option value="clear_pending">Chờ xác nhận hết</option>
                                 <option value="approved">Đã duyệt</option>
                                 <option value="rejected">Từ chối</option>
+                                <option value="cleared">Đã hết</option>
                             </select>
                         </div>
                     </div>
@@ -162,18 +164,27 @@ export default function RegulatorReportsPage() {
                             { key: 'reporterHash', header: 'Người báo', render: (r) => reporterLabel(r.reporterHash, r.id) },
                             { key: 'createdAt', header: 'Thời gian', render: (r) => relativeTimeVi(r.createdAt) },
                             { key: 'status', header: 'Trạng thái', render: (r) => (
-                                <span className={r.status === 'approved' ? 'cq-pill green' : r.status === 'rejected' ? 'cq-pill red' : 'cq-pill orange'}>
+                                <span className={
+                                    r.status === 'approved' ? 'cq-pill green'
+                                    : r.status === 'rejected' || r.status === 'cleared' ? 'cq-pill red'
+                                    : 'cq-pill orange'
+                                }>
                                     {issueStatusLabel(r.status)}
                                 </span>
                             ) },
                             { key: 'actions', header: '', className: 'text-right whitespace-nowrap', render: (r) => (
                                 <div className="flex justify-end gap-2">
-                                    {isPendingStatus(r.status) && (
+                                    {r.status === 'clear_pending' ? (
+                                        <>
+                                            <button type="button" className="text-[#2f6bff]" onClick={() => review(r.id, 'approved')}>Xác nhận hết</button>
+                                            <button type="button" className="text-red-600" onClick={() => review(r.id, 'rejected')}>Vẫn còn</button>
+                                        </>
+                                    ) : isPendingStatus(r.status) ? (
                                         <>
                                             <button type="button" className="text-[#2f6bff]" onClick={() => review(r.id, 'approved')}>Duyệt</button>
                                             <button type="button" className="text-red-600" onClick={() => review(r.id, 'rejected')}>Loại</button>
                                         </>
-                                    )}
+                                    ) : null}
                                     <Eye size={16} className="text-[#98a4b7]" />
                                 </div>
                             ) },

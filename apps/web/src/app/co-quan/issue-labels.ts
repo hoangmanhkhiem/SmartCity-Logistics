@@ -41,11 +41,13 @@ export function issueTypeLabel(type?: string) {
 export function issueStatusLabel(status?: string) {
     if (status === 'approved') return 'Đã duyệt';
     if (status === 'rejected') return 'Từ chối';
+    if (status === 'clear_pending') return 'Chờ xác nhận hết';
+    if (status === 'cleared') return 'Đã hết';
     return 'Chờ xác minh';
 }
 
 export function isPendingStatus(status?: string) {
-    return status !== 'approved' && status !== 'rejected';
+    return status !== 'approved' && status !== 'rejected' && status !== 'cleared';
 }
 
 export function relativeTimeVi(iso?: string) {
