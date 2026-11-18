@@ -10,7 +10,7 @@ type Rule = {
 };
 
 /** Longest prefix wins. */
-export const ROUTE_RULES: Rule[] = [
+const RULES: Rule[] = [
     { prefix: '/thanh-vien/don-hang', roles: ['shipper'], rawRoles: ['shipper'] },
     { prefix: '/thanh-vien', roles: ['shipper'] },
     { prefix: '/doanh-nghiep', roles: ['carrier_ops'] },
@@ -23,7 +23,9 @@ export const ROUTE_RULES: Rule[] = [
         prefix: '/profile',
         roles: ['admin', 'regulator', 'carrier_ops', 'shipper', 'consumer', 'researcher'],
     },
-].sort((a, b) => b.prefix.length - a.prefix.length);
+];
+
+export const ROUTE_RULES: Rule[] = [...RULES].sort((a, b) => b.prefix.length - a.prefix.length);
 
 export function isPublicPath(path: string): boolean {
     if (PUBLIC_EXACT.has(path)) return true;
