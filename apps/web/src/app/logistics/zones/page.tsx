@@ -1,5 +1,3 @@
-import { redirect } from 'next/navigation';
+'use client';
 
-export default function Page() {
-    redirect('/co-quan/zone');
-}
+export { default } from '../../co-quan/zone/page';

@@ -49,8 +49,8 @@ export function TabsTrigger({ value, children, className }: { value: string; chi
             className={cn(
                 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
                 isActive
-                    ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
-                    : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
+                    ? 'border-[#2f6bff] text-[#2f6bff]'
+                    : 'border-transparent text-[#66728b] hover:text-[#0b1b3a]',
                 className,
             )}
         >

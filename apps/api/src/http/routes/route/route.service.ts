@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { lineString, point, pointToLineDistance, nearestPointOnLine, destination, bearing } from '@turf/turf';
+import { lineString, point, pointToLineDistance, nearestPointOnLine, destination, bearing, distance as turfDistance } from '@turf/turf';
 import { DataSource, In, Not, IsNull, Repository } from 'typeorm';
 import { Facility, Order, Route, ShipperProfile, Stop, Vehicle, Zone } from '../../../db/entities';
 import { haversineKm } from '../../middlewares/utils/geo';
@@ -15,7 +15,10 @@ import { SuggestFacilitiesDto } from './dto/suggest-facilities.dto';
 import { DrivingSegmentDto } from './dto/driving-segment.dto';
 import { RestrictionService } from '../traffic-restriction/restriction.service';
 import { TrafficService } from '../traffic/traffic.service';
+import { PlatformService } from '../platform/platform.service';
 import type { GeoJsonFeatureCollection } from '../traffic-restriction/restriction.service';
+
+type IncidentPoint = { id: number; issueType: string; lat: number; lon: number };
 
 /** Trạng thái route chỉ đi tới hoặc hủy — khớp với luồng start/complete của shipper self-service. */
 const ROUTE_STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -39,6 +42,7 @@ export class RouteService {
         private readonly config: ConfigService,
         private readonly restrictionService: RestrictionService,
         private readonly traffic: TrafficService,
+        private readonly platform: PlatformService,
     ) {}
 
     /** Đơn hàng chưa gom vào route nào (status=pending) của 1 carrier, lọc theo zone tuỳ chọn. */
@@ -348,22 +352,33 @@ export class RouteService {
             throw new BadRequestException('restrictionAt không hợp lệ (ISO 8601)');
         }
         const restrictions = await this.restrictionService.findActiveAsGeoJson(at, dto.restrictionVehicleType);
+        const incidents = await this.platform.approvedIncidentPoints().catch(() => [] as IncidentPoint[]);
+        const profile = dto.profile === 'driving' ? 'driving' : 'driving-traffic';
         const routes = await this.fetchMapboxDrivingAlternatives(
             dto.originLon,
             dto.originLat,
             dto.destLon,
             dto.destLat,
             token,
+            [],
+            profile,
         );
         if (!routes.length) {
             throw new BadRequestException('Không lấy được tuyến từ Mapbox');
         }
-        let route = this.pickBestRouteAmongAlternatives(routes, restrictions);
+        let route = this.pickBestRouteAmongAlternatives(routes, restrictions, incidents);
         let usedWaypoint = false;
 
         const prohibitedOverlap = this.findProhibitedOverlap(route.geometry.coordinates, restrictions);
-        if (prohibitedOverlap) {
-            const waypoint = this.computeAvoidanceWaypoint(prohibitedOverlap);
+        const incidentOverlap = this.findIncidentOverlap(route.geometry.coordinates, incidents);
+        const avoidLine = prohibitedOverlap ?? (incidentOverlap
+            ? [
+                [incidentOverlap.lon - 0.0008, incidentOverlap.lat],
+                [incidentOverlap.lon + 0.0008, incidentOverlap.lat],
+            ]
+            : null);
+        if (avoidLine) {
+            const waypoint = this.computeAvoidanceWaypoint(avoidLine);
             try {
                 const waypointRoutes = await this.fetchMapboxDrivingAlternatives(
                     dto.originLon,
@@ -372,11 +387,12 @@ export class RouteService {
                     dto.destLat,
                     token,
                     [waypoint],
+                    profile,
                 );
                 if (waypointRoutes.length) {
-                    const bestWithWaypoint = this.pickBestRouteAmongAlternatives(waypointRoutes, restrictions);
-                    const currentPenalty = this.restrictionOverlapPenalty(route.geometry.coordinates, restrictions);
-                    const waypointPenalty = this.restrictionOverlapPenalty(bestWithWaypoint.geometry.coordinates, restrictions);
+                    const bestWithWaypoint = this.pickBestRouteAmongAlternatives(waypointRoutes, restrictions, incidents);
+                    const currentPenalty = this.combinedRoutePenalty(route.geometry.coordinates, restrictions, incidents);
+                    const waypointPenalty = this.combinedRoutePenalty(bestWithWaypoint.geometry.coordinates, restrictions, incidents);
                     if (waypointPenalty < currentPenalty) {
                         route = bestWithWaypoint;
                         usedWaypoint = true;
@@ -387,17 +403,34 @@ export class RouteService {
             }
         }
 
+        const incidentHits = this.incidentHitCount(route.geometry.coordinates, incidents);
+        const restrictionHits = this.restrictionOverlapPenalty(route.geometry.coordinates, restrictions) > 0 ? 1 : 0;
+        const duration = route.duration * (1 + Math.min(0.55, incidentHits * 0.12));
+        const compared = [...routes]
+            .map((r) => ({
+                distanceM: Math.round(r.distance),
+                durationSec: Math.round(r.duration),
+                hazardScore: Math.round(this.combinedRoutePenalty(r.geometry.coordinates, restrictions, incidents)),
+            }))
+            .sort((a, b) => a.hazardScore - b.hazardScore || a.durationSec - b.durationSec)
+            .slice(0, 4);
+
         return {
             route: {
                 distance: route.distance,
-                duration: route.duration,
+                duration,
                 geometry: route.geometry,
             },
             restrictionsGeoJson: restrictions,
+            incidentCount: incidents.length,
+            incidentHits,
+            restrictionHits,
+            compared,
             avoidedProhibited: usedWaypoint,
+            profile,
             routingNote: usedWaypoint
-                ? 'Đã chèn điểm vòng để né đoạn cấm hoàn toàn (severity=prohibited).'
-                : 'Trong các phương án Mapbox, chọn tuyến có điểm phạt thấp nhất khi lệch gần đoạn cấm/hạn chế (ước lượng; không thay cho cấm đường chính thức).',
+                ? 'Đã vòng để né đoạn cấm / ùn tắc, đồng thời giữ thời gian thấp nhất trong các phương án còn lại.'
+                : 'Chọn phương án ít chồng lấp nhất với đường cấm, hạn chế và điểm ùn tắc đã duyệt; nếu bằng nhau thì lấy thời gian ngắn nhất.',
         };
     }
 
@@ -535,11 +568,13 @@ export class RouteService {
         destLat: number,
         token: string,
         waypoints: Array<[number, number]> = [],
+        profile = 'driving',
     ): Promise<Array<{ distance: number; duration: number; geometry: { coordinates: [number, number][] } }>> {
         const waypointsStr = waypoints.map(([lon, lat]) => `${lon},${lat}`).join(';');
         const coordsStr = waypointsStr
             ? `${originLon},${originLat};${waypointsStr};${destLon},${destLat}`
             : `${originLon},${originLat};${destLon},${destLat}`;
+        const mode = profile === 'driving-traffic' ? 'driving-traffic' : 'driving';
         const params = new URLSearchParams({
             geometries: 'geojson',
             overview: 'full',
@@ -547,8 +582,11 @@ export class RouteService {
             // Mapbox không hỗ trợ alternatives khi có waypoint trung gian
             alternatives: waypoints.length ? 'false' : 'true',
         });
-        const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordsStr}?${params.toString()}`;
-        const res = await fetch(url);
+        const urlFor = (p: string) => `https://api.mapbox.com/directions/v5/mapbox/${p}/${coordsStr}?${params.toString()}`;
+        let res = await fetch(urlFor(mode));
+        if (!res.ok && mode === 'driving-traffic') {
+            res = await fetch(urlFor('driving'));
+        }
         if (!res.ok) {
             const text = await res.text();
             throw new BadRequestException(`Mapbox Directions lỗi: ${res.status} ${text.slice(0, 200)}`);
@@ -593,21 +631,75 @@ export class RouteService {
         return penalty;
     }
 
+    private combinedRoutePenalty(
+        routeCoords: [number, number][],
+        restrictions: GeoJsonFeatureCollection,
+        incidents: IncidentPoint[],
+    ) {
+        return this.restrictionOverlapPenalty(routeCoords, restrictions) + this.incidentOverlapPenalty(routeCoords, incidents);
+    }
+
+    private incidentOverlapPenalty(routeCoords: [number, number][], incidents: IncidentPoint[], thresholdM = 90) {
+        if (!incidents.length || !routeCoords.length) return 0;
+        let penalty = 0;
+        const step = Math.max(1, Math.ceil(routeCoords.length / 100));
+        for (const inc of incidents) {
+            const ip = point([inc.lon, inc.lat]);
+            let best = Infinity;
+            for (let i = 0; i < routeCoords.length; i += step) {
+                const d = turfDistance(ip, point(routeCoords[i]), { units: 'meters' });
+                if (d < best) best = d;
+            }
+            if (best < thresholdM) {
+                const w = inc.issueType === 'accident' ? 1.6 : inc.issueType === 'long_jam' ? 1.4 : inc.issueType === 'congestion' ? 1.2 : 0.9;
+                penalty += (thresholdM - best) * w;
+            }
+        }
+        return penalty;
+    }
+
+    private incidentHitCount(routeCoords: [number, number][], incidents: IncidentPoint[], thresholdM = 90) {
+        if (!incidents.length || !routeCoords.length) return 0;
+        let hits = 0;
+        const step = Math.max(1, Math.ceil(routeCoords.length / 80));
+        for (const inc of incidents) {
+            const ip = point([inc.lon, inc.lat]);
+            for (let i = 0; i < routeCoords.length; i += step) {
+                if (turfDistance(ip, point(routeCoords[i]), { units: 'meters' }) < thresholdM) {
+                    hits += 1;
+                    break;
+                }
+            }
+        }
+        return hits;
+    }
+
+    private findIncidentOverlap(routeCoords: [number, number][], incidents: IncidentPoint[], thresholdM = 90): IncidentPoint | null {
+        let best: { inc: IncidentPoint; d: number } | null = null;
+        const step = Math.max(1, Math.ceil(routeCoords.length / 80));
+        for (const inc of incidents) {
+            const ip = point([inc.lon, inc.lat]);
+            for (let i = 0; i < routeCoords.length; i += step) {
+                const d = turfDistance(ip, point(routeCoords[i]), { units: 'meters' });
+                if (d < thresholdM && (!best || d < best.d)) best = { inc, d };
+            }
+        }
+        return best?.inc ?? null;
+    }
+
     private pickBestRouteAmongAlternatives(
         routes: Array<{ distance: number; duration: number; geometry: { coordinates: [number, number][] } }>,
         restrictions: GeoJsonFeatureCollection,
+        incidents: IncidentPoint[] = [],
     ): (typeof routes)[0] {
         if (!routes.length) {
             throw new BadRequestException('Không có tuyến từ Mapbox');
-        }
-        if (!restrictions.features?.length) {
-            return routes[0];
         }
 
         const scored = routes.map((r, idx) => ({
             r,
             idx,
-            pen: this.restrictionOverlapPenalty(r.geometry.coordinates, restrictions),
+            pen: this.combinedRoutePenalty(r.geometry.coordinates, restrictions, incidents),
         }));
         scored.sort((a, b) => {
             if (a.pen !== b.pen) return a.pen - b.pen;

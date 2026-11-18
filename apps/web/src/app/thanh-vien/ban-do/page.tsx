@@ -2,51 +2,116 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { AlertTriangle, Clock } from 'lucide-react';
 import { api } from '@/api';
 import Map from '@/components/shared/map';
-import { PageHead, StudioShell } from '@/components/studio/shell';
 import type { GeoJsonFeatureCollection } from '@/components/shared/map';
-
-const layers = ['Điểm giao nhận & đỗ', 'Mật độ nghẽn', 'Vùng hạn chế'];
+import { DataCard } from '@/components/studio/page-ui';
+import { PageHead, StudioShell, memberNav } from '@/components/studio/shell';
+import { type IssueRow, issueTypeLabel, relativeTimeVi } from '@/app/co-quan/issue-labels';
 
 export default function MemberMapPage() {
     const [congestion, setCongestion] = useState<GeoJsonFeatureCollection | null>(null);
-    const [active, setActive] = useState(layers[0]);
-    useEffect(() => { api.get('/traffic/segments').then((r) => setCongestion(r.data)).catch(() => undefined); }, []);
+    const [issues, setIssues] = useState<IssueRow[]>([]);
+    const [fleetFilter, setFleetFilter] = useState<'all' | 'van' | 'bike'>('all');
+    const [now, setNow] = useState('');
+
+    useEffect(() => {
+        api.get('/traffic/segments').then((r) => setCongestion(r.data)).catch(() => undefined);
+        api.get('/bottlenecks').then((r) => setIssues(Array.isArray(r.data?.items) ? r.data.items : [])).catch(() => setIssues([]));
+    }, []);
+
+    useEffect(() => {
+        const tick = () =>
+            setNow(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        tick();
+        const id = window.setInterval(tick, 1000);
+        return () => window.clearInterval(id);
+    }, []);
+
+    const jam = issues.filter((i) => i.issueType === 'congestion' || i.issueType === 'long_jam');
+
     return (
-        <StudioShell group="THÀNH VIÊN" role="Thành viên" items={[{ href: '/thanh-vien/ban-do', label: 'Bản đồ' }, { href: '/mobile', label: 'Cảnh báo & báo nghẽn (mobile)' }]}>
-            <PageHead title="Bản đồ" extra={<span className="rounded-lg bg-white px-3 py-1.5 text-sm">Loại xe ▾</span>} />
-            <div className="space-y-3 px-6 pb-6">
-                <div className="flex items-center justify-between rounded-xl bg-[#f8ead6] px-4 py-2.5 text-sm">
-                    <span>Đang có hạn chế với xe máy xăng: 3 đoạn cấm giờ trong khung nhìn, hiệu lực đến 9:00.</span>
-                    <Link href="/cong-khai" className="font-semibold text-[#0e6e5c]">Xem trên bản đồ</Link>
-                </div>
-                <div className="flex gap-2 text-sm">
-                    {layers.map((item) => (
-                        <button key={item} type="button" onClick={() => setActive(item)} className={`rounded-full px-3 py-1 ${active === item ? 'bg-[#14352c] text-white' : 'bg-white'}`}>{item}</button>
-                    ))}
-                </div>
-                <div className="grid gap-3 lg:grid-cols-[1fr_280px]">
-                    <div className="h-[540px] overflow-hidden rounded-2xl bg-white">
-                        <Map className="h-full w-full" center={[105.845, 21.027]} zoom={14} showZonesAndRestrictions congestionGeoJson={active === 'Vùng hạn chế' ? null : congestion} />
+        <StudioShell group="ĐIỀU HÀNH" role="Thành viên" items={memberNav}>
+            <PageHead
+                title="Tình hình giao thông"
+                crumb="Bản đồ giao thông"
+                eyebrow={null}
+                description="Theo dõi vận hành giao thông theo thời gian thực."
+            />
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {[
+                    { title: 'Điểm ùn tắc', value: jam.length, note: `${jam.length} điểm cần chú ý`, icon: <AlertTriangle size={18} />, tone: 'orange' },
+                    { title: 'Cập nhật', value: now || '—', note: 'Thời gian máy', icon: <Clock size={18} />, tone: 'purple' },
+                ].map((card) => (
+                    <article className="cq-kpi" key={card.title}>
+                        <span className={`metric-icon ${card.tone}`}>{card.icon}</span>
+                        <div>
+                            <p className="text-[12px] font-extrabold tracking-wide text-[#8490a5]">{card.title.toUpperCase()}</p>
+                            <p className="mt-0.5 text-[26px] font-extrabold tracking-tight text-[#11213e]">{card.value}</p>
+                            <p className="mt-1 text-[11px] text-[#087a69]">{card.note}</p>
+                        </div>
+                    </article>
+                ))}
+            </div>
+
+            <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <DataCard
+                    title="Bản đồ vận hành"
+                    subtitle={now ? `Cập nhật lúc ${now}` : 'Đang cập nhật'}
+                    toolbar={
+                        <div className="flex rounded-[10px] border border-[#e2e8f1] bg-[#f7f9fc] p-0.5 text-[12px] font-semibold">
+                            {([['all', 'Tất cả'], ['van', 'Xe tải'], ['bike', 'Xe máy']] as const).map(([id, label]) => (
+                                <button
+                                    key={id}
+                                    type="button"
+                                    className={`h-8 rounded-[8px] px-3 ${fleetFilter === id ? 'bg-white text-[#152542] shadow-sm' : 'text-[#748298]'}`}
+                                    onClick={() => setFleetFilter(id)}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                    }
+                >
+                    <div className="dn-map px-4 pb-4">
+                        <Map
+                            className="h-full w-full rounded-[12px]"
+                            center={[105.845, 21.027]}
+                            zoom={13.2}
+                            showZonesAndRestrictions
+                            showApprovedIncidents
+                            congestionGeoJson={congestion}
+                        />
                     </div>
-                    <aside className="rounded-2xl bg-white p-4 text-sm">
-                        <p className="text-xs text-[#7b8781]">Điểm chờ đón</p>
-                        <h2 className="text-base font-semibold">[Tên phố / giao lộ]</h2>
-                        <p className="text-xs text-[#7b8781]">Phường Hoàn Kiếm · cách bạn 350 m</p>
-                        <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                            <div><dt className="text-[#7b8781]">Mức khó đỗ</dt><dd className="font-semibold">4 / 5</dd></div>
-                            <div><dt className="text-[#7b8781]">Tình trạng</dt><dd>Chưa xác minh</dd></div>
-                            <div><dt className="text-[#7b8781]">Đúng đối giao thông</dt><dd>Có</dd></div>
-                            <div><dt className="text-[#7b8781]">Phản ánh 30 ngày</dt><dd>12</dd></div>
-                        </dl>
-                        <p className="mt-3 text-xs font-semibold">Khó khăn hay gặp</p>
-                        <p className="text-xs text-[#56635d]">Không chỗ đỗ · Bị nhắc nhở · Ùn tắc giờ trưa</p>
-                        <Link href="/mobile" className="mt-4 block rounded-lg bg-[#0e6e5c] py-2.5 text-center font-semibold text-white">Báo tình trạng điểm này</Link>
-                        <Link href="/doanh-nghiep/toi-uu" className="mt-2 block rounded-lg border py-2.5 text-center">Mở mô phỏng tuyến (sandbox)</Link>
-                    </aside>
-                </div>
-                <p className="text-xs text-[#56635d]">Kho / hub · Điểm chờ đón · Điểm đỗ đã xác minh · Đoạn cấm giờ</p>
+                </DataCard>
+
+                <DataCard
+                    title="Cảnh báo mới"
+                    subtitle="Cập nhật theo khu vực"
+                    toolbar={<Link href="/thanh-vien/bao-cao" className="text-sm font-semibold text-[#2f6bff]">Xem tất cả</Link>}
+                >
+                    <ul>
+                        {issues.slice(0, 6).map((item) => (
+                            <li key={item.id} className="flex gap-3 border-t border-[#edf0f5] px-5 py-3.5">
+                                <span className="grid size-9 shrink-0 place-items-center rounded-[11px] bg-[#fff0e9] text-[#ff6a2b]">
+                                    <AlertTriangle size={16} />
+                                </span>
+                                <div className="min-w-0">
+                                    <p className="truncate text-sm font-semibold text-[#152542]">{item.note || issueTypeLabel(item.issueType)}</p>
+                                    <p className="text-[11px] text-[#8490a5]">{issueTypeLabel(item.issueType)} · {relativeTimeVi(item.createdAt)}</p>
+                                </div>
+                            </li>
+                        ))}
+                        {!issues.length && <p className="px-5 py-6 text-sm text-[#8490a5]">Chưa có cảnh báo đã duyệt.</p>}
+                    </ul>
+                    <div className="m-4 rounded-[14px] bg-gradient-to-br from-[#152542] to-[#2f6bff] px-4 py-4 text-white">
+                        <p className="text-[11px] font-semibold tracking-wide text-white/70">GỬI BÁO CÁO</p>
+                        <p className="mt-1 text-sm">Gặp ùn tắc hoặc tai nạn trên đường?</p>
+                        <Link href="/thanh-vien/bao-cao" className="mt-3 inline-flex h-9 items-center rounded-[10px] bg-white px-3 text-sm font-semibold text-[#152542]">Báo cáo giao thông</Link>
+                    </div>
+                </DataCard>
             </div>
         </StudioShell>
     );

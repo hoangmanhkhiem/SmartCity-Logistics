@@ -82,7 +82,7 @@ export const useAuthStore = create<AuthState>()(
 export const getDashboardPath = (role: UserRole | null): string => {
     switch (role) {
         case 'admin':
-            return '/he-thong/du-lieu';
+            return '/logistics/dashboard';
         case 'carrier_ops':
             return '/doanh-nghiep';
         case 'shipper':

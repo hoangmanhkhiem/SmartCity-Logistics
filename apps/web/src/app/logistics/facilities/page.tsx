@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardBody, CardHeader, DataTable, Badge, Select, Button, Input, Modal, Drawer, Tag, TimePicker } from '@/components/ui';
+import { DataTable, Badge, Select, Button, Input, Modal, Drawer, Tag, TimePicker, TABLE_PAGE_SIZE, TABLE_PAGE_SIZE_OPTIONS } from '@/components/ui';
 import type { Column } from '@/components/ui';
 import { facilityApi, zoneApi, organizationApi } from '@/api';
 import { Facility, Zone, Organization } from '@/types';
 import FacilityMapPicker from '@/components/logistics/facility-map-picker';
+import { PageHead } from '@/components/studio/shell';
+import { MetricStat, DataCard } from '@/components/studio/page-ui';
 import {
     Warehouse,
     Plus,
@@ -40,6 +42,7 @@ export default function LogisticsFacilitiesPage() {
     const [organizations, setOrganizations] = useState<Organization[]>([]);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE);
     const [totalPages, setTotalPages] = useState(1);
     const [kindFilter, setKindFilter] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
@@ -65,7 +68,7 @@ export default function LogisticsFacilitiesPage() {
         setLoading(true);
         try {
             const [facilitiesRes, zonesRes, orgRes] = await Promise.all([
-                facilityApi.getAll({ page, limit: 10, kind: kindFilter || undefined }),
+                facilityApi.getAll({ page, limit: pageSize, kind: kindFilter || undefined }),
                 zoneApi.getAll({ limit: 50 }),
                 organizationApi.getAll({ limit: 100 }),
             ]);
@@ -83,7 +86,7 @@ export default function LogisticsFacilitiesPage() {
     useEffect(() => {
         fetchData();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, kindFilter]);
+    }, [page, pageSize, kindFilter]);
 
     const resetForm = () => {
         setFormData({
@@ -223,56 +226,32 @@ export default function LogisticsFacilitiesPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-800 dark:text-white">
-                        <Warehouse size={24} /> Cơ sở logistics
-                    </h1>
-                    <p className="text-slate-500 mt-1">Hub giao nhận, kho bãi, trạm sạc và điểm phục vụ</p>
-                </div>
-                <Button onClick={() => { resetForm(); setEditingFacility(null); setPickOnMap(false); setIsModalOpen(true); }}>
-                    <Plus size={18} className="mr-1" /> Thêm cơ sở
-                </Button>
-            </div>
+            <PageHead
+                title="Cơ sở logistics"
+                description="Hub giao nhận, kho bãi, trạm sạc và điểm phục vụ trên mạng lưới nội đô."
+                extra={
+                    <Button onClick={() => { resetForm(); setEditingFacility(null); setPickOnMap(false); setIsModalOpen(true); }}>
+                        <Plus size={16} className="mr-1" /> Thêm cơ sở
+                    </Button>
+                }
+            />
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4">
-                {facilityStats.map((stat) => {
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+                <MetricStat title="Tổng cơ sở" value={facilities.length} icon={<Warehouse size={17} />} tone="blue" />
+                <MetricStat title="Hoạt động" value={activeCount} icon={<Package size={17} />} tone="navy" />
+                <MetricStat title="Công suất" value={totalCapacity} icon={<Home size={17} />} tone="orange" />
+                {facilityStats.slice(0, 1).map((stat) => {
                     const Icon = stat.icon;
-                    return (
-                        <Card key={stat.value}>
-                            <CardBody className="flex items-center gap-2 !p-3">
-                                <div className={`p-2 rounded-lg ${stat.color}`}>
-                                    <Icon size={18} />
-                                </div>
-                                <div>
-                                    <p className="text-lg font-bold text-slate-800 dark:text-white">{stat.count}</p>
-                                    <p className="text-xs text-slate-500 truncate">{stat.label}</p>
-                                </div>
-                            </CardBody>
-                        </Card>
-                    );
+                    return <MetricStat key={stat.value} title={stat.label} value={stat.count} icon={<Icon size={17} />} tone="purple" />;
                 })}
-                <Card>
-                    <CardBody className="flex items-center gap-2 !p-3">
-                        <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600">
-                            <Package size={18} />
-                        </div>
-                        <div>
-                            <p className="text-lg font-bold text-slate-800 dark:text-white">{activeCount}</p>
-                            <p className="text-xs text-slate-500">Hoạt động</p>
-                        </div>
-                    </CardBody>
-                </Card>
             </div>
 
-            <Card>
-                <CardBody className="flex flex-wrap gap-4 items-end">
-                    <div className="flex-1 min-w-[220px]">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                            <Input placeholder="Tìm tên cơ sở, địa chỉ..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
-                        </div>
-                    </div>
+            <DataCard title="Danh sách cơ sở" subtitle={`${filteredFacilities.length} điểm trên mạng lưới`}>
+                <div className="admin-toolbar">
+                    <label className="admin-search flex-1">
+                        <Search size={16} className="text-[#66728b]" />
+                        <input placeholder="Tìm tên cơ sở, địa chỉ..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                    </label>
                     <div className="w-56">
                         <Select
                             options={[{ value: '', label: 'Tất cả loại' }, ...kindOptions.map((k) => ({ value: k.value, label: k.label }))]}
@@ -280,23 +259,22 @@ export default function LogisticsFacilitiesPage() {
                             onChange={(v) => { setKindFilter(v); setPage(1); }}
                         />
                     </div>
-                </CardBody>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Danh sách cơ sở ({filteredFacilities.length})</h2>
-                </CardHeader>
-                <CardBody>
-                    <DataTable
-                        columns={columns}
-                        data={filteredFacilities}
-                        loading={loading}
-                        emptyMessage="Chưa có cơ sở nào"
-                        pagination={{ page, totalPages, onPageChange: setPage }}
-                    />
-                </CardBody>
-            </Card>
+                </div>
+                <DataTable
+                    columns={columns}
+                    data={filteredFacilities}
+                    loading={loading}
+                    emptyMessage="Chưa có cơ sở nào"
+                    pagination={{
+                        page,
+                        totalPages,
+                        onPageChange: setPage,
+                        pageSize,
+                        pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
+                        onPageSizeChange: (n) => { setPageSize(n); setPage(1); },
+                    }}
+                />
+            </DataCard>
 
             {/* Create/Edit Modal */}
             <Modal

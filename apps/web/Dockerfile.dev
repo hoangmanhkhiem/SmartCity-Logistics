@@ -1,0 +1,16 @@
+FROM node:20-bookworm
+WORKDIR /app
+
+ENV NPM_CONFIG_FETCH_RETRIES=8 \
+    NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \
+    NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000 \
+    NPM_CONFIG_FETCH_TIMEOUT=300000
+
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
+COPY scripts/docker-dev-start.sh /usr/local/bin/docker-dev-start.sh
+RUN sed -i 's/\r$//' /usr/local/bin/docker-dev-start.sh && chmod +x /usr/local/bin/docker-dev-start.sh
+
+EXPOSE 3000
+CMD ["/usr/local/bin/docker-dev-start.sh"]

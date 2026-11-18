@@ -42,8 +42,7 @@ api.interceptors.response.use(
                 path === '/' ||
                 path === '/login' ||
                 path === '/register' ||
-                path.startsWith('/cong-khai') ||
-                path.startsWith('/mobile');
+                path.startsWith('/cong-khai');
             if (!stay) {
                 localStorage.removeItem('accessToken');
                 window.location.href = '/login';
@@ -158,7 +157,12 @@ export const routeApi = {
         destLon: number;
         restrictionAt?: string;
         restrictionVehicleType?: string;
+        profile?: 'driving' | 'driving-traffic';
     }) => api.post('/routes/driving-segment', data),
+};
+
+export const geocodeApi = {
+    search: (q: string) => api.get('/geocode', { params: { q } }),
 };
 
 // Traffic restrictions (cấm / hạn chế đường) — active GeoJSON không cần auth
@@ -219,6 +223,7 @@ export const shipperApi = {
 
     // Self-service (JWT của chính shipper)
     getTodayRoute: () => api.get('/shippers/me/routes/today'),
+    listMyDeliveries: () => api.get('/shippers/me/deliveries'),
     getRoute: (routeId: number) => api.get(`/shippers/me/routes/${routeId}`),
     getDirectionsToNextStop: (routeId: number) => api.get(`/shippers/me/routes/${routeId}/directions`),
     startRoute: (routeId: number) => api.patch(`/shippers/me/routes/${routeId}/start`),

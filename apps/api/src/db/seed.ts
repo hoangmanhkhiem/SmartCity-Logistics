@@ -258,19 +258,6 @@ async function main() {
         ),
     );
 
-    const customerUsers = await Promise.all(
-        Array.from({ length: 8 }, (_, i) =>
-            prisma.user.create({
-                data: {
-                    email: `customer${i + 1}@gmail.com`,
-                    password: hashedPassword,
-                    name: `Khách hàng ${i + 1}`,
-                    phone: `090300${String(i + 1).padStart(4, '0')}`,
-                },
-            }),
-        ),
-    );
-
     // ==================== MEMBERSHIPS ====================
     console.log('Creating memberships...');
     await Promise.all([
@@ -290,9 +277,6 @@ async function main() {
                     isDefault: true,
                 },
             }),
-        ),
-        ...customerUsers.map((u) =>
-            prisma.membership.create({ data: { userId: u.id, organizationId: orgPlatform.id, roleId: roleByName.consumer.id, isDefault: true } }),
         ),
     ]);
 
@@ -692,7 +676,7 @@ async function main() {
             const order = await prisma.order.create({
                 data: {
                     carrierId: carrier.id,
-                    customerId: customerUsers[(orderSeq - 1) % customerUsers.length].id,
+                    customerId: memberUser.id,
                     zoneId,
                     orderNumber: `ORD-2026-${String(orderSeq).padStart(5, '0')}`,
                     trackingNo: `TRK${Date.now()}${uuid().slice(0, 6).toUpperCase()}`,
@@ -730,7 +714,7 @@ async function main() {
             const order = await prisma.order.create({
                 data: {
                     carrierId: carrier.id,
-                    customerId: customerUsers[i % customerUsers.length].id,
+                    customerId: memberUser.id,
                     zoneId: zone.id,
                     orderNumber: `ORD-2026-${String(orderSeq).padStart(5, '0')}`,
                     trackingNo: `TRK${Date.now()}${uuid().slice(0, 6).toUpperCase()}`,
@@ -1081,7 +1065,6 @@ async function main() {
 - ops@trustgo.vn — nhân viên TrustGo
 - member@utc.edu.vn — thành viên / nhiệm vụ khảo sát
 - shipper1@lastmile.vn … shipper9@lastmile.vn — shipper
-- customer1@gmail.com … customer8@gmail.com — khách hàng
   `);
 }
 

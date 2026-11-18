@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/api';
-import { PageHead, StudioShell, adminNav } from '@/components/studio/shell';
-import { useToast, getErrorMessage } from '@/components/ui';
+import { PageHead } from '@/components/studio/shell';
+import { DataCard, MetricStat, SoftTag } from '@/components/studio/page-ui';
+import { Button, DataTable, useToast, getErrorMessage, type Column } from '@/components/ui';
+import { Activity, Database, Leaf, MapPinned } from 'lucide-react';
 
 type Quota = { used: number; limit: number; stopped: boolean; note: string };
 type Job = { id: number; type: string; status: string; createdAt?: string };
@@ -44,52 +46,75 @@ export default function SystemDataPage() {
     };
 
     return (
-        <StudioShell group="QUẢN TRỊ HỆ THỐNG" role="Quản trị hệ thống" items={adminNav}>
-            <PageHead title="Dữ liệu nền & hệ thống" />
-            <div className="space-y-4 px-6 pb-6">
-                <div className="grid gap-3 md:grid-cols-4">
-                    <article className="rounded-2xl bg-white p-4 text-sm">
-                        <h2 className="font-semibold">Ranh giới phường</h2>
-                        <p className="mt-1 text-xs text-[#56635d]">GeoJSON Polygon EPSG:4326</p>
-                        <input ref={zoneFile} type="file" accept=".json,.geojson" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importZones(f); e.target.value = ''; }} />
-                        <button type="button" className="mt-3 rounded-lg border px-2 py-1 text-xs" onClick={() => zoneFile.current?.click()}>Nhập file mới</button>
-                    </article>
-                    <article className="rounded-2xl bg-white p-4 text-sm">
-                        <h2 className="font-semibold">OSM / TomTom</h2>
-                        <p className="mt-2 text-xs">{quota ? `${quota.used}/${quota.limit} lượt · ${quota.stopped ? 'đã dừng 90%' : 'còn hạn mức'}` : 'Đang đọc hạn mức'}</p>
-                        <button type="button" className="mt-3 text-xs text-[#0e6e5c]" onClick={() => api.post('/traffic/sample').then(() => setMessage('Đã lấy mẫu.')).catch(() => setMessage('Cần đăng nhập quản trị.'))}>Lấy mẫu giao thông</button>
-                    </article>
-                    <article className="rounded-2xl bg-white p-4 text-sm">
-                        <h2 className="font-semibold">Hệ số phát thải</h2>
-                        <p className="mt-1 text-xs text-[#56635d]">{factors.length} hệ số</p>
-                        <Link href="/logistics/emissions" className="mt-3 inline-block text-xs text-[#0e6e5c]">Sửa danh mục</Link>
-                    </article>
-                    <article className="rounded-2xl bg-white p-4 text-sm">
-                        <h2 className="font-semibold">Khảo sát</h2>
-                        <Link href="/nghien-cuu" className="mt-3 inline-block text-xs text-[#0e6e5c]">Duyệt phiếu</Link>
-                    </article>
-                </div>
-                <section className="rounded-2xl bg-white p-4 text-sm">
-                    <h2 className="font-semibold">Công việc nền</h2>
-                    <table className="mt-2 w-full">
-                        <thead className="text-left text-xs text-[#7b8781]"><tr><th className="py-2">Job</th><th>Trạng thái</th><th>Bắt đầu</th></tr></thead>
-                        <tbody>
-                            {jobs.map((j) => <tr key={j.id} className="border-t"><td className="py-2">{j.type} #{j.id}</td><td>{j.status}</td><td>{j.createdAt ? new Date(j.createdAt).toLocaleString('vi-VN') : '—'}</td></tr>)}
-                            {jobs.length === 0 && <tr><td className="py-2" colSpan={3}>Chưa có job. Lấy mẫu giao thông để tạo.</td></tr>}
-                        </tbody>
-                    </table>
-                    {message && <p className="mt-2 text-xs">{message}</p>}
-                    {quota && <p className="mt-2 text-xs text-[#56635d]">{quota.note}</p>}
-                </section>
-                <section className="rounded-2xl bg-white p-4 text-sm">
-                    <h2 className="font-semibold">Dịch vụ</h2>
-                    <div className="mt-3 flex flex-wrap gap-4 text-xs">
-                        {[['api', health === 'ok'], ['web', true], ['mysql', health === 'ok']].map(([name, ok]) => (
-                            <span key={String(name)} className="flex items-center gap-1"><span className={`h-2 w-2 rounded-full ${ok ? 'bg-[#16a34a]' : 'bg-red-500'}`} />{String(name)}</span>
-                        ))}
-                    </div>
-                </section>
+        <div className="space-y-6">
+            <PageHead
+                title="Dữ liệu & hệ thống"
+                description="Nhập ranh giới, theo dõi hạn mức dữ liệu nền và sức khỏe dịch vụ."
+            />
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+                <MetricStat title="Hệ số phát thải" value={factors.length} icon={<Leaf size={17} />} tone="blue" />
+                <MetricStat title="Job nền" value={jobs.length} icon={<Database size={17} />} tone="navy" />
+                <MetricStat title="Quota giao thông" value={quota ? `${quota.used}/${quota.limit}` : '—'} icon={<Activity size={17} />} tone="orange" />
+                <MetricStat title="API" value={health || '…'} icon={<MapPinned size={17} />} tone="purple" />
             </div>
-        </StudioShell>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <DataCard title="Ranh giới phường" subtitle="GeoJSON Polygon EPSG:4326">
+                    <div className="p-5">
+                        <input ref={zoneFile} type="file" accept=".json,.geojson" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importZones(f); e.target.value = ''; }} />
+                        <Button type="button" variant="outline" onClick={() => zoneFile.current?.click()}>Nhập file mới</Button>
+                    </div>
+                </DataCard>
+                <DataCard title="OSM / TomTom" subtitle={quota ? `${quota.used}/${quota.limit} lượt` : 'Đang đọc hạn mức'}>
+                    <div className="p-5">
+                        <Button type="button" variant="outline" onClick={() => api.post('/traffic/sample').then(() => setMessage('Đã lấy mẫu.')).catch(() => setMessage('Cần đăng nhập quản trị.'))}>Lấy mẫu giao thông</Button>
+                    </div>
+                </DataCard>
+                <DataCard title="Hệ số phát thải" subtitle={`${factors.length} hệ số`}>
+                    <div className="p-5">
+                        <Link href="/logistics/emissions" className="text-sm font-semibold text-[#2f6bff]">Sửa danh mục</Link>
+                    </div>
+                </DataCard>
+                <DataCard title="Khảo sát" subtitle="Phiếu nghiên cứu">
+                    <div className="p-5">
+                        <Link href="/nghien-cuu" className="text-sm font-semibold text-[#2f6bff]">Duyệt phiếu</Link>
+                    </div>
+                </DataCard>
+            </div>
+
+            <DataCard title="Công việc nền">
+                <DataTable
+                    data={jobs}
+                    emptyMessage="Chưa có job. Lấy mẫu giao thông để tạo."
+                    columns={[
+                        { key: 'type', header: 'Job', render: (j) => `${j.type} #${j.id}` },
+                        { key: 'status', header: 'Trạng thái', render: (j) => <SoftTag tone={j.status === 'completed' ? 'green' : 'navy'}>{j.status}</SoftTag> },
+                        { key: 'createdAt', header: 'Bắt đầu', render: (j) => j.createdAt ? new Date(j.createdAt).toLocaleString('vi-VN') : '—' },
+                    ] satisfies Column<Job>[]}
+                />
+                {(message || quota?.note) && <p className="px-5 pb-4 text-xs text-[#66728b]">{message || quota?.note}</p>}
+            </DataCard>
+
+            <DataCard title="Dịch vụ">
+                <DataTable
+                    pagination={false}
+                    data={[
+                        { id: 'api', name: 'api', ok: health === 'ok' },
+                        { id: 'web', name: 'web', ok: true },
+                        { id: 'mysql', name: 'mysql', ok: health === 'ok' },
+                    ]}
+                    columns={[
+                        { key: 'name', header: 'Dịch vụ' },
+                        { key: 'ok', header: 'Trạng thái', render: (s) => (
+                            <span className="flex items-center gap-2">
+                                <span className={`h-2 w-2 rounded-full ${s.ok ? 'bg-[#16a34a]' : 'bg-red-500'}`} />
+                                {s.ok ? 'OK' : 'Down'}
+                            </span>
+                        ) },
+                    ]}
+                />
+            </DataCard>
+        </div>
     );
 }

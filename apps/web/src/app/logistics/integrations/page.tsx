@@ -1,9 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Card, CardBody, CardHeader, DataTable, Badge, Tag, Button, Input, Select } from '@/components/ui';
+import { Card, CardBody, DataTable, Tag, Button, Input, Select } from '@/components/ui';
 import { integrationsApi, carrierApi } from '@/api';
 import { Plug, Plus, Copy, ShoppingBag, Link2, ShieldCheck } from 'lucide-react';
+import { PageHead } from '@/components/studio/shell';
+import { MetricStat, DataCard, SoftTag } from '@/components/studio/page-ui';
 import type { Column } from '@/components/ui';
 import type { Carrier } from '@/types';
 import { formatDateTime } from '@/lib/utils';
@@ -113,9 +115,9 @@ export default function LogisticsIntegrationsPage() {
             header: 'Trạng thái',
             render: (c) => (
                 <div className="flex items-center gap-2">
-                    <Badge variant={c.isActive ? 'success' : 'default'}>
+                    <SoftTag tone={c.isActive ? 'green' : 'navy'}>
                         {c.isActive ? 'Hoạt động' : 'Vô hiệu'}
-                    </Badge>
+                    </SoftTag>
                     <button className="text-xs text-indigo-600" onClick={async () => { await integrationsApi.updateApiClient(c.id, { isActive: !c.isActive }); load(); }}>{c.isActive ? 'Thu hồi' : 'Mở lại'}</button>
                     <button className="text-xs text-red-600" onClick={async () => { if (confirm('Xóa API key?')) { await integrationsApi.deleteApiClient(c.id); load(); } }}>Xóa</button>
                 </div>
@@ -128,56 +130,15 @@ export default function LogisticsIntegrationsPage() {
 
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <div>
-                <h1 className="text-2xl font-bold text-slate-800 dark:text-white">API Tích hợp (B2B)</h1>
-                <p className="text-slate-500 mt-1">
-                    Tạo khóa cho shop / sàn TMĐT — gọi{' '}
-                    <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-xs">
-                        POST /api/v1/partner/orders
-                    </code>{' '}
-                    với header{' '}
-                    <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-xs">
-                        X-Api-Key
-                    </code>
-                </p>
-            </div>
+            <PageHead
+                title="API tích hợp (B2B)"
+                description="Tạo khóa cho đối tác và theo dõi lưu lượng đơn qua API."
+            />
 
-            {/* Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Card>
-                    <CardBody className="flex items-center gap-3">
-                        <div className="p-3 bg-indigo-100 dark:bg-indigo-900/50 rounded-xl">
-                            <Plug size={24} className="text-indigo-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{clients.length}</p>
-                            <p className="text-sm text-slate-500">Tổng API Clients</p>
-                        </div>
-                    </CardBody>
-                </Card>
-                <Card>
-                    <CardBody className="flex items-center gap-3">
-                        <div className="p-3 bg-green-100 dark:bg-green-900/50 rounded-xl">
-                            <Link2 size={24} className="text-green-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{activeClients}</p>
-                            <p className="text-sm text-slate-500">Đang hoạt động</p>
-                        </div>
-                    </CardBody>
-                </Card>
-                <Card>
-                    <CardBody className="flex items-center gap-3">
-                        <div className="p-3 bg-yellow-100 dark:bg-yellow-900/50 rounded-xl">
-                            <ShoppingBag size={24} className="text-yellow-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{totalOrders}</p>
-                            <p className="text-sm text-slate-500">Tổng đơn qua API</p>
-                        </div>
-                    </CardBody>
-                </Card>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <MetricStat title="Tổng API clients" value={clients.length} icon={<Plug size={17} />} tone="blue" />
+                <MetricStat title="Đang hoạt động" value={activeClients} icon={<Link2 size={17} />} tone="navy" />
+                <MetricStat title="Tổng đơn qua API" value={totalOrders} icon={<ShoppingBag size={17} />} tone="orange" />
             </div>
 
             {/* Created key alert */}
@@ -204,13 +165,7 @@ export default function LogisticsIntegrationsPage() {
                 </Card>
             )}
 
-            {/* Create form */}
-            <Card>
-                <CardHeader>
-                    <h2 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-                        <Plus size={18} /> Tạo API Client mới
-                    </h2>
-                </CardHeader>
+            <DataCard title="Tạo API client mới" subtitle="Cấp khóa riêng cho từng đối tác">
                 <CardBody>
                     <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-3">
                         <div className="flex-1 min-w-[220px]">
@@ -236,22 +191,16 @@ export default function LogisticsIntegrationsPage() {
                         </Button>
                     </form>
                 </CardBody>
-            </Card>
+            </DataCard>
 
-            {/* Table */}
-            <Card>
-                <CardHeader>
-                    <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Danh sách API Clients</h2>
-                </CardHeader>
-                <CardBody>
-                    <DataTable
-                        columns={columns}
-                        data={clients}
-                        loading={loading}
-                        emptyMessage="Chưa có client nào"
-                    />
-                </CardBody>
-            </Card>
+            <DataCard title="Danh sách API clients" subtitle="Khóa đang được cấp trên hệ thống">
+                <DataTable
+                    columns={columns}
+                    data={clients}
+                    loading={loading}
+                    emptyMessage="Chưa có client nào"
+                />
+            </DataCard>
         </div>
     );
 }

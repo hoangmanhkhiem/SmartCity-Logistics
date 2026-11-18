@@ -1,10 +1,12 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { PageHead, StudioShell, adminNav, roleLabel } from '@/components/studio/shell';
+import { PageHead, roleLabel } from '@/components/studio/shell';
+import { MetricStat, DataCard, SoftTag } from '@/components/studio/page-ui';
 import { organizationApi, userApi } from '@/api';
-import { useToast, getErrorMessage } from '@/components/ui';
+import { Button, DataTable, useToast, getErrorMessage, type Column } from '@/components/ui';
 import type { Organization } from '@/types';
+import { Building2, Search, Users } from 'lucide-react';
 
 type Membership = { organization?: { name?: string; type?: string }; role?: { name?: string; displayName?: string } };
 type UserRow = { id: number; name: string; email: string; isActive?: boolean; memberships?: Membership[] };
@@ -41,69 +43,101 @@ export default function UsersAdminPage() {
         } catch (error) { showToast(getErrorMessage(error, 'Không tạo được tổ chức')); }
     };
 
+    const activeCount = users.filter((u) => u.isActive !== false).length;
+
     return (
-        <StudioShell group="QUẢN TRỊ HỆ THỐNG" role="Quản trị hệ thống" items={adminNav}>
-            <PageHead title="Người dùng & tổ chức" extra={<a href="/register" className="rounded-lg bg-[#0e6e5c] px-3 py-1.5 text-sm text-white">Mời / đăng ký</a>} />
-            <div className="grid gap-4 px-6 pb-6 xl:grid-cols-[1fr_280px]">
+        <div className="space-y-6">
+            <PageHead
+                title="Người dùng & tổ chức"
+                description="Quản lý tài khoản, vai trò và tổ chức trên nền tảng."
+                extra={<a href="/register" className="admin-primary">Mời / đăng ký</a>}
+            />
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <MetricStat title="Tổng người dùng" value={users.length} icon={<Users size={17} />} tone="blue" />
+                <MetricStat title="Đang hoạt động" value={activeCount} icon={<Users size={17} />} tone="navy" />
+                <MetricStat title="Tổ chức" value={orgs.length} icon={<Building2 size={17} />} tone="orange" />
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-[1fr_280px]">
                 <div className="space-y-4">
-                    <div className="flex gap-2 text-sm">
-                        <input className="rounded-lg border bg-white px-3 py-1.5" placeholder="Tìm người dùng" value={q} onChange={(e) => setQ(e.target.value)} />
-                        <select className="rounded-lg border bg-white px-2" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
-                            <option value="">Mọi vai trò</option>
-                            {['platform_admin', 'sys_admin', 'regulator', 'org_admin', 'researcher', 'member', 'shipper', 'consumer'].map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
-                        </select>
-                    </div>
-                    <table className="w-full rounded-2xl bg-white text-sm">
-                        <thead className="text-left text-xs text-[#7b8781]"><tr><th className="px-3 py-2">Người dùng</th><th>Vai trò</th><th>Tổ chức</th><th>Trạng thái</th></tr></thead>
-                        <tbody>
-                            {filtered.map((u) => (
-                                <tr key={u.id} className="border-t cursor-pointer" onClick={() => setSelected(u)}>
-                                    <td className="px-3 py-2">{u.name}<div className="text-xs text-[#7b8781]">{u.email}</div></td>
-                                    <td>{roleLabel(u.memberships?.[0]?.role?.name)}</td>
-                                    <td>{u.memberships?.[0]?.organization?.name || '—'}</td>
-                                    <td>{u.isActive === false ? 'Khoá' : 'Hoạt động'}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    <table className="w-full rounded-2xl bg-white text-sm">
-                        <thead className="text-left text-xs text-[#7b8781]"><tr><th className="px-3 py-2">Tổ chức</th><th>Loại</th><th>Liên hệ</th><th></th></tr></thead>
-                        <tbody>
-                            {orgs.map((o) => (
-                                <tr key={o.id} className="border-t">
-                                    <td className="px-3 py-2">{o.name}</td>
-                                    <td>{o.type}</td>
-                                    <td>{o.email || o.phone || '—'}</td>
-                                    <td><button type="button" className="text-red-700" onClick={async () => { await organizationApi.delete(o.id); load(); }}>Xóa</button></td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                    <DataCard title="Người dùng">
+                        <div className="admin-toolbar">
+                            <label className="admin-search">
+                                <Search size={16} className="text-[#66728b]" />
+                                <input placeholder="Tìm người dùng" value={q} onChange={(e) => setQ(e.target.value)} />
+                            </label>
+                            <select className="h-10 rounded-[10px] border border-[#e4e8f1] px-3 text-sm" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+                                <option value="">Mọi vai trò</option>
+                                {['platform_admin', 'sys_admin', 'regulator', 'org_admin', 'researcher', 'member', 'shipper', 'consumer'].map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
+                            </select>
+                        </div>
+                        <DataTable
+                            data={filtered}
+                            emptyMessage="Chưa có người dùng"
+                            onRowClick={setSelected}
+                            rowClassName={(u) => selected?.id === u.id ? 'bg-[#e6f4ff]' : ''}
+                            columns={[
+                                { key: 'name', header: 'Người dùng', render: (u) => <span className="font-medium">{u.name}<span className="block text-xs font-normal text-[#66728b]">{u.email}</span></span> },
+                                { key: 'role', header: 'Vai trò', render: (u) => roleLabel(u.memberships?.[0]?.role?.name) },
+                                { key: 'org', header: 'Tổ chức', render: (u) => u.memberships?.[0]?.organization?.name || '—' },
+                                { key: 'isActive', header: 'Trạng thái', render: (u) => <SoftTag tone={u.isActive === false ? 'red' : 'green'}>{u.isActive === false ? 'Khoá' : 'Hoạt động'}</SoftTag> },
+                            ] satisfies Column<UserRow>[]}
+                        />
+                    </DataCard>
+                    <DataCard title="Tổ chức">
+                        <DataTable
+                            data={orgs}
+                            emptyMessage="Chưa có tổ chức"
+                            columns={[
+                                { key: 'name', header: 'Tổ chức' },
+                                { key: 'type', header: 'Loại' },
+                                { key: 'email', header: 'Liên hệ', render: (o) => o.email || o.phone || '—' },
+                                { key: 'actions', header: '', render: (o) => (
+                                    <button type="button" className="text-sm text-red-600" onClick={async () => { await organizationApi.delete(o.id); load(); }}>Xóa</button>
+                                ) },
+                            ] satisfies Column<Organization>[]}
+                        />
+                    </DataCard>
                 </div>
-                <div className="space-y-3">
-                    <form className="h-fit rounded-2xl bg-white p-4 text-sm" onSubmit={async (e) => {
-                        e.preventDefault();
-                        if (!selected) return;
-                        try {
-                            await userApi.update(selected.id, { isActive: selected.isActive === false });
-                            showToast(selected.isActive === false ? 'Đã mở khoá' : 'Đã khoá', 'success');
-                            load();
-                        } catch (error) { showToast(getErrorMessage(error, 'Không đổi được trạng thái')); }
-                    }}>
-                        <h2 className="font-semibold">{selected?.name || 'Chọn người dùng'}</h2>
-                        <p className="mt-1 text-xs text-[#7b8781]">{selected?.email}</p>
-                        <p className="mt-2 text-xs">{roleLabel(selected?.memberships?.[0]?.role?.name)} · {selected?.memberships?.[0]?.organization?.name || '—'}</p>
-                        <button type="submit" disabled={!selected} className="mt-4 rounded-lg border px-3 py-1.5 text-red-700 disabled:opacity-40">{selected?.isActive === false ? 'Mở khoá' : 'Khoá'}</button>
-                    </form>
-                    <form className="rounded-2xl bg-white p-4 text-sm" onSubmit={saveOrg}>
-                        <h2 className="font-semibold">+ Tổ chức</h2>
-                        <label className="mt-2 block text-xs">Tên<input className="mt-1 w-full rounded border px-2 py-1" value={orgForm.name} onChange={(e) => setOrgForm({ ...orgForm, name: e.target.value })} required /></label>
-                        <label className="mt-2 block text-xs">Loại<select className="mt-1 w-full rounded border px-2 py-1" value={orgForm.type} onChange={(e) => setOrgForm({ ...orgForm, type: e.target.value })}><option value="delivery">Giao hàng</option><option value="government">Cơ quan</option><option value="university">Trường</option><option value="platform">Nền tảng</option></select></label>
-                        <label className="mt-2 block text-xs">Email<input className="mt-1 w-full rounded border px-2 py-1" value={orgForm.email} onChange={(e) => setOrgForm({ ...orgForm, email: e.target.value })} /></label>
-                        <button className="mt-3 w-full rounded-lg bg-[#0e6e5c] py-2 text-white" type="submit">Tạo</button>
-                    </form>
+                <div className="space-y-4">
+                    <DataCard title={selected?.name || 'Chọn người dùng'} subtitle={selected?.email}>
+                        <div className="space-y-3 p-5 text-sm">
+                            <p>{roleLabel(selected?.memberships?.[0]?.role?.name)} · {selected?.memberships?.[0]?.organization?.name || '—'}</p>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                disabled={!selected}
+                                onClick={async () => {
+                                    if (!selected) return;
+                                    try {
+                                        await userApi.update(selected.id, { isActive: selected.isActive === false });
+                                        showToast(selected.isActive === false ? 'Đã mở khoá' : 'Đã khoá', 'success');
+                                        load();
+                                    } catch (error) { showToast(getErrorMessage(error, 'Không đổi được trạng thái')); }
+                                }}
+                            >
+                                {selected?.isActive === false ? 'Mở khoá' : 'Khoá'}
+                            </Button>
+                        </div>
+                    </DataCard>
+                    <DataCard title="Tạo tổ chức">
+                        <form className="space-y-3 p-5 text-sm" onSubmit={saveOrg}>
+                            <label className="admin-field">Tên<input value={orgForm.name} onChange={(e) => setOrgForm({ ...orgForm, name: e.target.value })} required /></label>
+                            <label className="admin-field">Loại
+                                <select value={orgForm.type} onChange={(e) => setOrgForm({ ...orgForm, type: e.target.value })}>
+                                    <option value="delivery">Giao hàng</option>
+                                    <option value="government">Cơ quan</option>
+                                    <option value="university">Trường</option>
+                                    <option value="platform">Nền tảng</option>
+                                </select>
+                            </label>
+                            <label className="admin-field">Email<input value={orgForm.email} onChange={(e) => setOrgForm({ ...orgForm, email: e.target.value })} /></label>
+                            <Button type="submit" className="w-full">Tạo</Button>
+                        </form>
+                    </DataCard>
                 </div>
             </div>
-        </StudioShell>
+        </div>
     );
 }

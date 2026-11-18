@@ -1,8 +1,63 @@
 import { createHash } from 'crypto';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DemandAgg, EmissionFactor, IssueReport, JobRecord, Plan, Scenario } from '../../../db/entities/platform.entity';
+
+const ISSUE_TYPE_ALIASES: Record<string, string> = {
+    congestion: 'congestion',
+    un_tac: 'congestion',
+    'ùn tắc': 'congestion',
+    'un tac': 'congestion',
+    'tắc đường': 'congestion',
+    'tac duong': 'congestion',
+    long_jam: 'long_jam',
+    'ùn tắc dài': 'long_jam',
+    'un tac dai': 'long_jam',
+    'tắc dài': 'long_jam',
+    accident: 'accident',
+    'tai nạn': 'accident',
+    'tai nan': 'accident',
+    parking: 'parking',
+    'không chỗ dừng đỗ': 'parking',
+    'khong cho dung do': 'parking',
+    restriction: 'restriction',
+    'cấm đường': 'restriction',
+    'cam duong': 'restriction',
+    'cấm đường / cấm giờ': 'restriction',
+    flood: 'flood',
+    'mưa / ngập': 'flood',
+    'mưa': 'flood',
+    'ngập': 'flood',
+    alley: 'alley',
+    'ngõ nhỏ, khó quay đầu': 'alley',
+    map_error: 'map_error',
+    'sai vị trí bản đồ': 'map_error',
+    other: 'other',
+};
+
+export function normalizeIssueType(raw: string): string {
+    const key = (raw || '').trim().toLowerCase();
+    return ISSUE_TYPE_ALIASES[key] || (key.replace(/\s+/g, '_').slice(0, 32) || 'other');
+}
+
+function reporterHashFor(userId: number) {
+    return createHash('sha256').update(String(userId)).digest('hex');
+}
+
+function issueToFeature(row: IssueReport) {
+    return {
+        type: 'Feature' as const,
+        geometry: { type: 'Point' as const, coordinates: [row.longitude, row.latitude] as [number, number] },
+        properties: {
+            id: row.id,
+            issueType: row.issueType,
+            note: row.note,
+            weight: row.issueType === 'accident' || row.issueType === 'long_jam' ? 1 : row.issueType === 'congestion' ? 0.9 : 0.65,
+            color: row.issueType === 'accident' ? '#7f1d1d' : row.issueType === 'congestion' || row.issueType === 'long_jam' ? '#dc2626' : '#ea580c',
+        },
+    };
+}
 
 const DEFAULT_FACTORS: Array<[string, string, number]> = [
     ['motorbike_ice', 'gasoline', 72],
@@ -65,6 +120,10 @@ export class PlatformService {
         return this.issues.find({ order: { id: 'DESC' }, take: 200 });
     }
 
+    listMyIssues(userId: number) {
+        return this.issues.find({ where: { reporterHash: reporterHashFor(userId) }, order: { id: 'DESC' }, take: 50 });
+    }
+
     async updateIssue(id: number, body: { issueType?: string; note?: string; status?: string }) {
         const row = await this.issues.findOne({ where: { id } });
         if (!row) throw new NotFoundException('Issue not found');
@@ -119,13 +178,18 @@ export class PlatformService {
     }
 
     reportIssue(userId: number, body: { issueType: string; latitude: number; longitude: number; zoneId?: number; note?: string }) {
-        const reporterHash = createHash('sha256').update(String(userId)).digest('hex');
-        const latitude = body.latitude + (Math.random() - 0.5) * 0.0009;
-        const longitude = body.longitude + (Math.random() - 0.5) * 0.0009;
+        const lat = Number(body.latitude);
+        const lon = Number(body.longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+            throw new BadRequestException('Vị trí báo cáo không hợp lệ');
+        }
+        const issueType = normalizeIssueType(body.issueType);
+        const latitude = lat + (Math.random() - 0.5) * 0.00045;
+        const longitude = lon + (Math.random() - 0.5) * 0.00045;
         return this.issues.save(
             this.issues.create({
-                reporterHash,
-                issueType: body.issueType,
+                reporterHash: reporterHashFor(userId),
+                issueType,
                 latitude,
                 longitude,
                 zoneId: body.zoneId ?? null,
@@ -144,9 +208,26 @@ export class PlatformService {
 
     async bottlenecks(issueType?: string) {
         const qb = this.issues.createQueryBuilder('i').where('i.status = :s', { s: 'approved' });
-        if (issueType) qb.andWhere('i.issue_type = :t', { t: issueType });
-        const rows = await qb.getMany();
-        return { gridM: 250, count: rows.length, items: rows };
+        if (issueType) qb.andWhere('i.issue_type = :t', { t: normalizeIssueType(issueType) });
+        const rows = await qb.orderBy('i.id', 'DESC').take(400).getMany();
+        const geojson = { type: 'FeatureCollection' as const, features: rows.map(issueToFeature) };
+        return { gridM: 250, count: rows.length, items: rows, geojson };
+    }
+
+    async approvedIncidentPoints() {
+        const rows = await this.issues.find({
+            where: { status: 'approved' },
+            order: { id: 'DESC' },
+            take: 400,
+        });
+        return rows
+            .filter((r) => Number.isFinite(r.latitude) && Number.isFinite(r.longitude))
+            .map((r) => ({
+                id: r.id,
+                issueType: r.issueType,
+                lat: r.latitude,
+                lon: r.longitude,
+            }));
     }
 
     async createPlan(organizationId: number | null, params: Record<string, unknown>) {

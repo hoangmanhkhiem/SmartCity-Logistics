@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth-store';
 import Map from '@/components/shared/map';
 import type { GeoJsonFeatureCollection } from '@/components/shared/map';
+import { DataTable, type Column } from '@/components/ui';
 
 const wards = [
     ['Hoàn Kiếm', '48', '4,3', '22%', 'Trưa', '36'],
@@ -51,6 +52,7 @@ export default function PublicSitePage() {
                     </Link>
                     <nav className="flex items-center gap-5 text-sm text-[#3f4a45]">
                         <a href="#ban-do">Bản đồ</a>
+                        <Link href="/bao-cao">Báo cáo giao thông</Link>
                         <a href="#chi-so">Chỉ số phường</a>
                         <a href="#ket-qua">Nghiên cứu</a>
                         <a href="#du-lieu">Dữ liệu mở</a>
@@ -81,10 +83,10 @@ export default function PublicSitePage() {
                         <p className="font-semibold">Lớp bản đồ</p>
                         <ul className="mt-3 space-y-2 text-[#3f4a45]">
                             <li><label className="flex items-center gap-2"><input type="checkbox" checked={layers.heat} onChange={() => setLayers({ ...layers, heat: !layers.heat })} /> Mật độ điểm nghẽn</label></li>
-                            <li><label className="flex items-center gap-2"><input type="checkbox" checked={layers.points} onChange={() => setLayers({ ...layers, points: !layers.points })} /> Điểm giao nhận & kho</label></li>
-                            <li><label className="flex items-center gap-2"><input type="checkbox" checked readOnly /> Điểm đỗ đã xác minh</label></li>
-                            <li><label className="flex items-center gap-2"><input type="checkbox" checked={layers.zones} onChange={() => setLayers({ ...layers, zones: !layers.zones })} /> Vùng hạn chế (LEZ, cấm giờ)</label></li>
+                            <li><label className="flex items-center gap-2"><input type="checkbox" checked={layers.points} onChange={() => setLayers({ ...layers, points: !layers.points })} /> Điểm đỏ báo cáo đã duyệt</label></li>
+                            <li><label className="flex items-center gap-2"><input type="checkbox" checked={layers.zones} onChange={() => setLayers({ ...layers, zones: !layers.zones })} /> Zone & đường cấm</label></li>
                         </ul>
+                        <Link href="/bao-cao" className="mt-3 inline-block text-sm font-semibold text-[#0e6e5c]">Gửi báo cáo giao thông →</Link>
                         <form className="mt-4" onSubmit={(e) => { e.preventDefault(); fetch(`/api/v1/geocode?q=${encodeURIComponent(query)}`); }}>
                             <input className="w-full rounded-lg border px-2 py-1.5 text-xs" placeholder="Khung giờ" value={query} onChange={(e) => setQuery(e.target.value)} />
                         </form>
@@ -94,7 +96,14 @@ export default function PublicSitePage() {
                         <p className="mt-3 text-[11px] leading-4 text-[#7b8781]">Chỉ hiện khi mỗi ô có từ 5 phản ánh trở lên. Vị trí được làm mờ ±50 m.</p>
                     </aside>
                     <div className="h-[420px]">
-                        <Map className="h-full w-full" center={[105.845, 21.027]} zoom={13.4} congestionGeoJson={layers.heat ? congestion : null} />
+                        <Map
+                            className="h-full w-full"
+                            center={[105.845, 21.027]}
+                            zoom={13.4}
+                            congestionGeoJson={layers.heat ? congestion : null}
+                            showZonesAndRestrictions={layers.zones}
+                            showApprovedIncidents={layers.points}
+                        />
                     </div>
                 </div>
             </section>
@@ -105,18 +114,26 @@ export default function PublicSitePage() {
                     <span className="rounded-full bg-[#f3e6cf] px-2.5 py-1 text-[11px] text-[#8a5a12]">Số liệu minh hoạ</span>
                 </div>
                 <div className="overflow-hidden rounded-2xl bg-white">
-                    <table className="w-full text-sm">
-                        <thead className="text-left text-[11px] tracking-wide text-[#7b8781]">
-                            <tr><th className="px-4 py-3">PHƯỜNG</th><th>ĐIỂM GIAO NHẬN</th><th>MỨC KHÓ ĐỖ (1–5)</th><th>TỶ LỆ XE ĐIỆN</th><th>CAO ĐIỂM</th><th>SỐ PHIẾU</th></tr>
-                        </thead>
-                        <tbody>
-                            {wards.map((row) => (
-                                <tr key={row[0]} className="border-t border-[#eef2ef]">
-                                    {row.map((cell, i) => <td key={i} className="px-4 py-3">{cell}</td>)}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                    <DataTable
+                        pagination={false}
+                        data={wards.map((row) => ({
+                            id: row[0],
+                            ward: row[0],
+                            points: row[1],
+                            park: row[2],
+                            ev: row[3],
+                            peak: row[4],
+                            tickets: row[5],
+                        }))}
+                        columns={[
+                            { key: 'ward', header: 'Phường' },
+                            { key: 'points', header: 'Điểm giao nhận' },
+                            { key: 'park', header: 'Mức khó đỗ (1–5)' },
+                            { key: 'ev', header: 'Tỷ lệ xe điện' },
+                            { key: 'peak', header: 'Cao điểm' },
+                            { key: 'tickets', header: 'Số phiếu' },
+                        ] satisfies Column<{ id: string; ward: string; points: string; park: string; ev: string; peak: string; tickets: string }>[]}
+                    />
                     <p className="px-4 py-2 text-right text-[11px] text-[#7b8781]">3 · chưa đủ 5 phiếu</p>
                 </div>
             </section>
@@ -134,7 +151,7 @@ export default function PublicSitePage() {
                         <p className="text-[11px] text-[#0e6e5c]">Mô hình · SmartPLS</p>
                         <h3 className="mt-2 font-semibold">Yếu tố logistics đô thị ảnh hưởng tới đô thị thông minh</h3>
                         <p className="mt-2 text-[#56635d]">[Tóm tắt kết quả mô hình khi hoàn thành phân tích]</p>
-                        <Link className="mt-3 inline-block font-semibold text-[#0e6e5c]" href="/co-quan/mo-phong">Xem sơ đồ mô hình →</Link>
+                        <Link className="mt-3 inline-block font-semibold text-[#0e6e5c]" href="/co-quan">Xem sơ đồ mô hình →</Link>
                     </article>
                     <article id="du-lieu" className="rounded-2xl bg-white p-4 text-sm">
                         <p className="text-[11px] text-[#0e6e5c]">Dữ liệu mở</p>

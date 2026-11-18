@@ -14,4 +14,8 @@ export class DrivingSegmentDto {
     @IsOptional()
     @IsString()
     restrictionVehicleType?: string;
+    @ApiPropertyOptional({ description: 'driving | driving-traffic — traffic dùng thời gian thực để chọn tuyến nhanh hơn' })
+    @IsOptional()
+    @IsString()
+    profile?: string;
 }

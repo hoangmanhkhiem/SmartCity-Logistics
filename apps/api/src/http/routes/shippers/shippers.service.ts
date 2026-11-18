@@ -138,6 +138,46 @@ export class ShippersService {
         return route;
     }
 
+    async listMyDeliveries(shipperId: number) {
+        const routes = await this.routeRepo.find({
+            where: { shipperId },
+            relations: ['vehicle', 'stops', 'stops.order'],
+            order: { shiftDate: 'DESC', createdAt: 'DESC' },
+            take: 40,
+        });
+
+        const deliveries = routes.flatMap((route) => {
+            const stops = (route.stops ?? []).slice().sort((a, b) => a.sequence - b.sequence);
+            return stops
+                .filter((s) => s.type === 'delivery')
+                .map((stop) => ({
+                    ...stop,
+                    route: {
+                        id: route.id,
+                        code: route.code,
+                        status: route.status,
+                        shiftDate: route.shiftDate,
+                        vehicle: route.vehicle
+                            ? { id: route.vehicle.id, plate: route.vehicle.plate, type: route.vehicle.type }
+                            : undefined,
+                    },
+                }));
+        });
+
+        const openRank = (status: string) => (['pending', 'arrived'].includes(status) ? 0 : 1);
+        deliveries.sort((a, b) => {
+            const rank = openRank(a.status) - openRank(b.status);
+            if (rank !== 0) return rank;
+            const da = new Date(a.route.shiftDate).getTime();
+            const db = new Date(b.route.shiftDate).getTime();
+            if (db !== da) return db - da;
+            return a.sequence - b.sequence;
+        });
+
+        const todayRoute = await this.getTodayRoute(shipperId);
+        return { todayRoute, deliveries };
+    }
+
     async getRouteForShipper(shipperId: number, routeId: number) {
         const route = await this.routeRepo.findOne({
             where: { id: routeId },

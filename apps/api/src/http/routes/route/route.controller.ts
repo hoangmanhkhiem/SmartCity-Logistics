@@ -35,7 +35,7 @@ export class RouteController {
     @Post('suggest-facilities') @Roles('platform_admin', 'carrier_ops') @ApiOperation({ summary: 'Gợi ý kho/hub gần tuyến lái xe tối ưu (Mapbox + buffer)' })
     suggestFacilities(@Body() dto: SuggestFacilitiesDto) { return this.service.suggestFacilitiesAlongRoute(dto); }
 
-    @Post('driving-segment') @Roles('platform_admin', 'carrier_ops') @ApiOperation({ summary: 'Một đoạn lái xe, tránh chồng lấp với đoạn cấm (phương án Mapbox)' })
+    @Post('driving-segment') @ApiOperation({ summary: 'Một đoạn lái xe, né đoạn cấm/zone và điểm ùn tắc đã duyệt' })
     drivingSegment(@Body() dto: DrivingSegmentDto) { return this.service.drivingSegmentAvoidingRestrictions(dto); }
 
     @Get() @Roles('platform_admin', 'carrier_ops', 'regulator') @ApiOperation({ summary: 'Danh sách route' })

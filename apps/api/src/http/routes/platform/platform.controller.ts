@@ -62,6 +62,14 @@ export class PlatformController {
         return this.platform.geocode(q);
     }
 
+    @Get('issues/mine')
+    @ApiBearerAuth()
+    @UseGuards(JwtAuthGuard)
+    @ApiOperation({ summary: 'Báo cáo giao thông của chính người dùng' })
+    listMyIssues(@Req() req: { user: { id: number } }) {
+        return this.platform.listMyIssues(req.user.id);
+    }
+
     @Get('issues')
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard, RolesGuard)

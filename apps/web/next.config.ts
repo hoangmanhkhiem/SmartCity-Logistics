@@ -9,9 +9,10 @@ const nextConfig: NextConfig = {
     return [
       { source: "/logistics/dashboard", destination: "/he-thong/du-lieu", permanent: false },
       { source: "/delivery/dashboard", destination: "/doanh-nghiep", permanent: false },
+      { source: "/delivery/routes", destination: "/doanh-nghiep/dieu-phoi", permanent: false },
       { source: "/regulator/dashboard", destination: "/co-quan", permanent: false },
       { source: "/regulator/reports", destination: "/co-quan", permanent: false },
-      { source: "/shipper/today", destination: "/thanh-vien/ban-do", permanent: false },
+      { source: "/shipper/today", destination: "/thanh-vien/don-hang", permanent: false },
       { source: "/consumer", destination: "/cong-khai", permanent: false },
     ];
   },

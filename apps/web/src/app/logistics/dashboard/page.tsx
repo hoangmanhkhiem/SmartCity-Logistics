@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Card, CardBody, CardHeader, Badge, Select, DatePicker } from '@/components/ui';
+import { Card, CardBody, CardHeader, Badge, Select, DatePicker, DataTable } from '@/components/ui';
 import {
     Package,
     Truck,
@@ -13,11 +13,15 @@ import {
     Warehouse,
     Gauge,
     TrendingUp,
+    CheckCircle2,
+    MapPinned,
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { analyticsApi, carrierApi } from '@/api';
 import { viStatus } from '@/lib/status-labels';
 import type { Carrier } from '@/types';
+import { PageHead } from '@/components/studio/shell';
+import { useAuthStore } from '@/stores/auth-store';
 
 interface TrendPoint {
     snapshotDate: string;
@@ -59,6 +63,7 @@ function sumValues(obj?: Record<string, number>): number {
 }
 
 export default function LogisticsDashboard() {
+    const { user } = useAuthStore();
     const [summary, setSummary] = useState<PlatformSummary | null>(null);
     const [loading, setLoading] = useState(true);
     const [summaryErr, setSummaryErr] = useState(false);
@@ -124,12 +129,33 @@ export default function LogisticsDashboard() {
     }
 
     return (
-        <div className="space-y-6 pb-6">
-            {/* Header */}
-            <div>
-                <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Dashboard</h1>
-                <p className="text-slate-500 mt-1">Tổng quan hệ thống logistics đô thị</p>
-            </div>
+        <div className="space-y-4">
+            <PageHead
+                title="Tổng quan"
+                description="Theo dõi mạng lưới giao nhận nội đô theo thời gian thực."
+                extra={
+                    <Link href="/doanh-nghiep/toi-uu" className="inline-flex h-10 items-center rounded-[10px] bg-[#2f6bff] px-4 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(47,107,255,0.18)]">
+                        Tạo đơn giao mới
+                    </Link>
+                }
+            />
+
+            <section className="welcome-card">
+                <div className="welcome-route" />
+                <span className="inline-flex items-center gap-1.5 rounded-md border border-[rgba(111,149,255,0.28)] bg-[rgba(47,107,255,0.12)] px-2.5 py-1 text-[10px] font-bold tracking-wide text-[#9bb4ff]">
+                    <Zap size={12} /> CONTROL TOWER · LIVE
+                </span>
+                <h2>Chào buổi sáng, {user?.name?.split(' ').pop() || 'Admin'}.</h2>
+                <p>Hệ thống đang vận hành ổn định. Tỷ lệ giao đúng SLA hôm nay cao hơn so với tuần trước.</p>
+                <div className="relative z-[1] flex flex-wrap gap-2">
+                    <Link href="/thanh-vien/ban-do" className="inline-flex h-10 items-center rounded-[10px] bg-[#2f6bff] px-4 text-sm font-semibold text-white">
+                        Mở bản đồ vận hành
+                    </Link>
+                    <Link href="/he-thong/du-lieu" className="inline-flex h-10 items-center rounded-[10px] border border-white/25 px-4 text-sm font-semibold text-white">
+                        Xuất báo cáo ngày
+                    </Link>
+                </div>
+            </section>
 
             {summaryErr && (
                 <Card className="border-yellow-300 dark:border-yellow-700">
@@ -144,58 +170,22 @@ export default function LogisticsDashboard() {
             )}
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <Card>
-                    <CardBody className="flex items-center gap-3">
-                        <div className="p-3 bg-indigo-100 dark:bg-indigo-900/50 rounded-xl">
-                            <Package size={24} className="text-indigo-600" />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                    { title: 'Đơn hàng hôm nay', value: summary?.orders?.total ?? 0, icon: <Package size={17} />, tone: 'blue', trend: `${vehicleAvailablePct}% đội xe` },
+                    { title: 'Xe sẵn sàng', value: availableVehicles, icon: <CheckCircle2 size={17} />, tone: 'navy', trend: `${vehicleTotal} tổng` },
+                    { title: 'Tài xế / đội xe', value: vehicleTotal, icon: <MapPinned size={17} />, tone: 'orange', trend: 'Trực tuyến' },
+                    { title: 'CO₂ (tấn)', value: co2Tons, icon: <Leaf size={17} />, tone: 'purple', trend: `${summary?.operations?.unassignedOrders ?? 0} đơn chờ` },
+                ].map((item) => (
+                    <article className="metric-card" key={item.title}>
+                        <div className="flex items-start justify-between">
+                            <span className={`metric-icon ${item.tone}`}>{item.icon}</span>
+                            <span className="rounded-md bg-[#eaf0ff] px-2 py-0.5 text-[8px] font-extrabold text-[#2f6bff]">{item.trend}</span>
                         </div>
-                        <div>
-                            <p className="text-2xl font-bold text-slate-800 dark:text-white">
-                                {summary?.orders?.total ?? 0}
-                            </p>
-                            <p className="text-sm text-slate-500">Tổng đơn hàng</p>
-                        </div>
-                    </CardBody>
-                </Card>
-
-                <Card>
-                    <CardBody className="flex items-center gap-3">
-                        <div className="p-3 bg-green-100 dark:bg-green-900/50 rounded-xl">
-                            <Truck size={24} className="text-green-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{vehicleTotal}</p>
-                            <p className="text-sm text-slate-500">Đội xe ({vehicleAvailablePct}% sẵn sàng)</p>
-                        </div>
-                    </CardBody>
-                </Card>
-
-                <Card>
-                    <CardBody className="flex items-center gap-3">
-                        <div className="p-3 bg-yellow-100 dark:bg-yellow-900/50 rounded-xl">
-                            <Leaf size={24} className="text-yellow-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{co2Tons}</p>
-                            <p className="text-sm text-slate-500">Phát thải CO₂ (tấn)</p>
-                        </div>
-                    </CardBody>
-                </Card>
-
-                <Card>
-                    <CardBody className="flex items-center gap-3">
-                        <div className="p-3 bg-red-100 dark:bg-red-900/50 rounded-xl">
-                            <AlertTriangle size={24} className="text-red-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-slate-800 dark:text-white">
-                                {summary?.operations?.unassignedOrders ?? 0}
-                            </p>
-                            <p className="text-sm text-slate-500">Đơn chờ điều phối</p>
-                        </div>
-                    </CardBody>
-                </Card>
+                        <p className="mt-4 text-xs text-[#66728b]">{item.title}</p>
+                        <p className="mt-1 text-[22px] font-extrabold tracking-tight text-[#0b1b3a]">{item.value}</p>
+                    </article>
+                ))}
             </div>
 
             {/* Secondary stats */}
@@ -244,13 +234,15 @@ export default function LogisticsDashboard() {
                         <CardHeader>
                             <h2 className="text-sm font-semibold text-slate-800 dark:text-white">Đơn hàng theo trạng thái</h2>
                         </CardHeader>
-                        <CardBody className="space-y-2">
-                            {Object.entries(summary.orders.byStatus).map(([status, count]) => (
-                                <div key={status} className="flex items-center justify-between">
-                                    <Badge variant={statusBadgeVariant[status] || 'default'}>{viStatus(status)}</Badge>
-                                    <span className="font-semibold text-slate-800 dark:text-white">{count}</span>
-                                </div>
-                            ))}
+                        <CardBody>
+                            <DataTable
+                                pagination={false}
+                                data={Object.entries(summary.orders.byStatus).map(([status, count]) => ({ id: status, status, count }))}
+                                columns={[
+                                    { key: 'status', header: 'Trạng thái', render: (r) => <Badge variant={statusBadgeVariant[r.status] || 'default'}>{viStatus(r.status)}</Badge> },
+                                    { key: 'count', header: 'Số', className: 'text-right' },
+                                ]}
+                            />
                         </CardBody>
                     </Card>
                 )}
@@ -260,13 +252,15 @@ export default function LogisticsDashboard() {
                         <CardHeader>
                             <h2 className="text-sm font-semibold text-slate-800 dark:text-white">Xe theo trạng thái</h2>
                         </CardHeader>
-                        <CardBody className="space-y-2">
-                            {Object.entries(summary.vehicles.byStatus).map(([status, count]) => (
-                                <div key={status} className="flex items-center justify-between">
-                                    <Badge variant={statusBadgeVariant[status] || 'default'}>{viStatus(status)}</Badge>
-                                    <span className="font-semibold text-slate-800 dark:text-white">{count}</span>
-                                </div>
-                            ))}
+                        <CardBody>
+                            <DataTable
+                                pagination={false}
+                                data={Object.entries(summary.vehicles.byStatus).map(([status, count]) => ({ id: status, status, count }))}
+                                columns={[
+                                    { key: 'status', header: 'Trạng thái', render: (r) => <Badge variant={statusBadgeVariant[r.status] || 'default'}>{viStatus(r.status)}</Badge> },
+                                    { key: 'count', header: 'Số', className: 'text-right' },
+                                ]}
+                            />
                         </CardBody>
                     </Card>
                 )}
@@ -276,13 +270,15 @@ export default function LogisticsDashboard() {
                         <CardHeader>
                             <h2 className="text-sm font-semibold text-slate-800 dark:text-white">Tuyến theo trạng thái</h2>
                         </CardHeader>
-                        <CardBody className="space-y-2">
-                            {Object.entries(summary.routes.byStatus).map(([status, count]) => (
-                                <div key={status} className="flex items-center justify-between">
-                                    <Badge variant={statusBadgeVariant[status] || 'default'}>{viStatus(status)}</Badge>
-                                    <span className="font-semibold text-slate-800 dark:text-white">{count}</span>
-                                </div>
-                            ))}
+                        <CardBody>
+                            <DataTable
+                                pagination={false}
+                                data={Object.entries(summary.routes.byStatus).map(([status, count]) => ({ id: status, status, count }))}
+                                columns={[
+                                    { key: 'status', header: 'Trạng thái', render: (r) => <Badge variant={statusBadgeVariant[r.status] || 'default'}>{viStatus(r.status)}</Badge> },
+                                    { key: 'count', header: 'Số', className: 'text-right' },
+                                ]}
+                            />
                         </CardBody>
                     </Card>
                 )}
@@ -354,7 +350,7 @@ export default function LogisticsDashboard() {
                             <span className="text-sm text-slate-700 dark:text-slate-300">Cơ sở logistics</span>
                         </Link>
                         <Link
-                            href="/logistics/users"
+                            href="/he-thong/nguoi-dung"
                             className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:shadow-md hover:border-indigo-300 transition-all text-center"
                         >
                             <Truck size={24} className="text-green-600" />

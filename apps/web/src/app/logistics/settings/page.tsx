@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardBody, Button, Input, Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui';
-import { Settings, Building2, Save, Bell, Shield, Cog } from 'lucide-react';
+import { CardBody, Button, Input, Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui';
+import { Building2, Save, Bell, Shield, Cog } from 'lucide-react';
+import { PageHead } from '@/components/studio/shell';
+import { DataCard } from '@/components/studio/page-ui';
 import { organizationApi } from '@/api';
 import { Organization } from '@/types';
 
@@ -70,14 +72,12 @@ export default function LogisticsSettingsPage() {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-800 dark:text-white">
-                    <Settings size={24} /> Cài đặt hệ thống
-                </h1>
-                <p className="text-slate-500 mt-1">Quản lý cấu hình và thông tin tổ chức</p>
-            </div>
+            <PageHead
+                title="Cài đặt hệ thống"
+                description="Quản lý cấu hình nền tảng và thông tin tổ chức."
+            />
 
-            <Card>
+            <DataCard>
                 <CardBody>
                     <Tabs value={tab} onChange={setTab}>
                         <TabsList>
@@ -144,7 +144,7 @@ export default function LogisticsSettingsPage() {
                         </TabsContent>
                     </Tabs>
                 </CardBody>
-            </Card>
+            </DataCard>
         </div>
     );
 }

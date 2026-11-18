@@ -1,11 +1,11 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { PageHead, StudioShell, regulatorNav } from '@/components/studio/shell';
 import Map from '@/components/shared/map';
-import { restrictionApi, roadSegmentApi, zoneApi, api } from '@/api';
-import { DataTable, useToast, getErrorMessage, type Column } from '@/components/ui';
+import { restrictionApi, roadSegmentApi, zoneApi } from '@/api';
+import { DataTable, TABLE_PAGE_SIZE, TABLE_PAGE_SIZE_OPTIONS, useToast, getErrorMessage, type Column } from '@/components/ui';
 import type { Zone } from '@/types';
 
 type DrawMode = 'polygon' | 'line' | 'ward';
@@ -42,14 +42,14 @@ function extractPolygons(geo: unknown): GeoJSON.Polygon[] {
 }
 
 export default function ZonePolicyPage() {
-    const router = useRouter();
+    const pathname = usePathname();
+    const inAdmin = pathname.startsWith('/logistics');
     const { showToast } = useToast();
     const importRef = useRef<HTMLInputElement>(null);
     const [mode, setMode] = useState<DrawMode>('polygon');
     const [zones, setZones] = useState<Zone[]>([]);
     const [rules, setRules] = useState<RestrictionRow[]>([]);
     const [loading, setLoading] = useState(true);
-    const [simMsg, setSimMsg] = useState('');
 
     const [editingRule, setEditingRule] = useState<RestrictionRow | null>(null);
     const [drawnPolygon, setDrawnPolygon] = useState<GeoJSON.Polygon | null>(null);
@@ -57,9 +57,9 @@ export default function ZonePolicyPage() {
     const [saving, setSaving] = useState(false);
     const [ruleQuery, setRuleQuery] = useState('');
     const [rulePage, setRulePage] = useState(1);
-    const [rulePageSize, setRulePageSize] = useState(10);
+    const [rulePageSize, setRulePageSize] = useState(TABLE_PAGE_SIZE);
     const [zonePage, setZonePage] = useState(1);
-    const [zonePageSize, setZonePageSize] = useState(10);
+    const [zonePageSize, setZonePageSize] = useState(TABLE_PAGE_SIZE);
     const [form, setForm] = useState({
         name: '',
         zoneId: '',
@@ -246,18 +246,6 @@ export default function ZonePolicyPage() {
         }
     };
 
-    const simulate = async () => {
-        setSimMsg('Đang mô phỏng…');
-        try {
-            await api.post('/phases/orders/simulate', { count: 20, zoneId: form.zoneId ? Number(form.zoneId) : undefined });
-            const r = await api.post('/phases/plans/solve');
-            const p = r.data as { orders?: number; totalKm?: number; co2eGrams?: number; warnings?: Array<{ message?: string }> };
-            setSimMsg(`Mẫu ${p.orders ?? 0} đơn · ${p.totalKm ?? 0} km · ${p.co2eGrams ?? 0} g CO₂e${p.warnings?.length ? ` · ${p.warnings.length} cảnh báo vùng cấm` : ''}`);
-        } catch (error) {
-            setSimMsg(getErrorMessage(error, 'Không chạy được mô phỏng. Đăng nhập cơ quan quản lý rồi thử lại.'));
-        }
-    };
-
     const hint =
         mode === 'polygon' ? (drawnPolygon ? 'Đã vẽ đa giác — có thể lưu quy định.' : 'Click nhiều điểm trên bản đồ, double-click để khép vùng.')
             : mode === 'line' ? (drawnLine ? `Đã vẽ ${drawnLine.coordinates.length} điểm trên đoạn đường.` : 'Click dọc tuyến phố, double-click để kết thúc đoạn.')
@@ -329,21 +317,22 @@ export default function ZonePolicyPage() {
         },
     ];
 
-    return (
-        <StudioShell group="CƠ QUAN QUẢN LÝ" role="Cơ quan quản lý" items={regulatorNav}>
+    const body = (
+        <div className="space-y-6">
             <PageHead
-                title="Zone & quy định"
+                title="Vùng & quy định"
+                description="Vẽ vùng, gắn quy định giờ cấm và theo dõi phạm vi trên bản đồ."
                 extra={
                     <>
                         <input ref={importRef} type="file" accept=".json,.geojson" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importGeoJson(f); e.target.value = ''; }} />
-                        <button type="button" className="rounded-lg border bg-white px-3 py-1.5 text-sm" onClick={() => importRef.current?.click()}>Nhập GeoJSON</button>
-                        <button type="button" className="rounded-lg bg-[#0e6e5c] px-3 py-1.5 text-sm text-white" onClick={() => { resetForm(); setMode('polygon'); }}>
+                        <button type="button" className="rounded-[10px] border border-[#e4e8f1] bg-white px-3 py-2 text-sm" onClick={() => importRef.current?.click()}>Nhập GeoJSON</button>
+                        <button type="button" className="admin-primary" onClick={() => { resetForm(); setMode('polygon'); }}>
                             + Quy định mới
                         </button>
                     </>
                 }
             />
-            <div className="grid gap-4 px-6 pb-6 lg:grid-cols-[1fr_300px]">
+            <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
                 <div className="space-y-3">
                     <div className="flex flex-wrap gap-2 text-sm">
                         {([
@@ -355,16 +344,16 @@ export default function ZonePolicyPage() {
                                 key={id}
                                 type="button"
                                 onClick={() => setMode(id)}
-                                className={`rounded-full px-3 py-1 ${mode === id ? 'bg-[#14352c] text-white' : 'bg-white'}`}
+                                className={`rounded-full px-3 py-1 ${mode === id ? 'bg-[#0b1b3a] text-white' : 'bg-white'}`}
                             >
                                 {label}
                             </button>
                         ))}
                     </div>
-                    <p className="rounded-xl bg-[#14352c] px-4 py-2.5 text-sm text-white">{hint}</p>
+                    <p className="rounded-xl bg-[#0b1b3a] px-4 py-2.5 text-sm text-white">{hint}</p>
                     <div className="relative h-[min(72vh,720px)] min-h-[560px] overflow-hidden rounded-2xl bg-white">
                         {mode !== 'ward' && (
-                            <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full bg-[#0e6e5c] px-4 py-1.5 text-xs font-semibold text-white shadow">
+                            <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full bg-[#2f6bff] px-4 py-1.5 text-xs font-semibold text-white shadow">
                                 {mode === 'polygon'
                                     ? 'Con trỏ chữ thập: click lần lượt các đỉnh → double-click để khép vùng'
                                     : 'Con trỏ chữ thập: click dọc phố → double-click để kết thúc đoạn'}
@@ -409,6 +398,7 @@ export default function ZonePolicyPage() {
                                 onPageChange: setRulePage,
                                 total: filteredRules.length,
                                 pageSize: rulePageSize,
+                                pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
                                 onPageSizeChange: (n) => { setRulePageSize(n); setRulePage(1); },
                             }}
                         />
@@ -425,6 +415,7 @@ export default function ZonePolicyPage() {
                                     onPageChange: setZonePage,
                                     total: zones.length,
                                     pageSize: zonePageSize,
+                                    pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
                                     onPageSizeChange: (n) => { setZonePageSize(n); setZonePage(1); },
                                 }}
                             />
@@ -460,14 +451,18 @@ export default function ZonePolicyPage() {
                     </label>
                     <label className="block">Căn cứ pháp lý<input className="mt-1 w-full rounded border px-2 py-1" value={form.legalRef} onChange={(e) => setForm({ ...form, legalRef: e.target.value })} placeholder="số văn bản" /></label>
                     <label className="block">Mô tả<input className="mt-1 w-full rounded border px-2 py-1" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
-                    {simMsg && <p className="text-xs text-[#0e6e5c]">{simMsg}</p>}
                     <div className="flex gap-2 pt-2">
-                        <button type="button" className="flex-1 rounded-lg border py-2" onClick={simulate}>Mô phỏng tác động</button>
-                        <button type="submit" disabled={saving} className="flex-1 rounded-lg bg-[#0e6e5c] py-2 text-white">{saving ? 'Đang lưu…' : 'Lưu quy định'}</button>
+                        <button type="submit" disabled={saving} className="flex-1 rounded-lg bg-[#2f6bff] py-2 text-white">{saving ? 'Đang lưu…' : 'Lưu quy định'}</button>
                     </div>
-                    <button type="button" className="w-full rounded-lg border py-2" onClick={() => router.push('/co-quan/mo-phong')}>Mở trang so sánh A/B</button>
                 </form>
             </div>
+        </div>
+    );
+
+    if (inAdmin) return body;
+    return (
+        <StudioShell group="CƠ QUAN QUẢN LÝ" role="Cơ quan quản lý" items={regulatorNav}>
+            {body}
         </StudioShell>
     );
 }

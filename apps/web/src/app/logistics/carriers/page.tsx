@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardBody, CardHeader, DataTable, Badge, Button, Input, Modal, ConfirmDialog, useToast, getErrorMessage } from '@/components/ui';
+import { DataTable, Badge, Button, Input, Modal, ConfirmDialog, useToast, getErrorMessage, TABLE_PAGE_SIZE, TABLE_PAGE_SIZE_OPTIONS } from '@/components/ui';
 import { carrierApi, organizationApi, zoneApi } from '@/api';
 import { Carrier, Organization, Zone } from '@/types';
-import { Truck, Plus, Search, Edit, Eye, Building2, MapPin, Trash2 } from 'lucide-react';
+import { Truck, Plus, Search, Edit, Eye, Building2, MapPin, Trash2, CheckCircle2 } from 'lucide-react';
+import { PageHead } from '@/components/studio/shell';
+import { MetricStat, DataCard, SoftTag } from '@/components/studio/page-ui';
 import type { Column } from '@/components/ui';
 
 export default function LogisticsCarriersPage() {
@@ -14,6 +16,7 @@ export default function LogisticsCarriersPage() {
     const [zones, setZones] = useState<Zone[]>([]);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE);
     const [totalPages, setTotalPages] = useState(1);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCarrier, setSelectedCarrier] = useState<Carrier | null>(null);
@@ -39,7 +42,7 @@ export default function LogisticsCarriersPage() {
     const fetchCarriers = async () => {
         setLoading(true);
         try {
-            const response = await carrierApi.getAll({ page, limit: 10 });
+            const response = await carrierApi.getAll({ page, limit: pageSize });
             setCarriers(response.data.data || response.data);
             setTotalPages(response.data.meta?.totalPages || 1);
         } catch (error) {
@@ -52,7 +55,7 @@ export default function LogisticsCarriersPage() {
     useEffect(() => {
         fetchCarriers();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page]);
+    }, [page, pageSize]);
 
     useEffect(() => {
         organizationApi.getAll({ limit: 100 }).then((res) => setOrganizations(res.data.data ?? res.data)).catch(() => setOrganizations([]));
@@ -178,13 +181,13 @@ export default function LogisticsCarriersPage() {
                         <span className="text-slate-400 text-sm">Chưa gán</span>
                     ) : (
                         (c.operatingZoneIds ?? []).map((zId) => (
-                            <Badge key={zId} variant="info" className="text-xs">{zoneName(zId)}</Badge>
+                            <SoftTag key={zId} tone="blue">{zoneName(zId)}</SoftTag>
                         ))
                     )}
                 </div>
             ),
         },
-        { key: 'isActive', header: 'Trạng thái', render: (c) => <Badge variant={c.isActive ? 'success' : 'error'}>{c.isActive ? 'Hoạt động' : 'Ngưng'}</Badge> },
+        { key: 'isActive', header: 'Trạng thái', render: (c) => <SoftTag tone={c.isActive ? 'green' : 'red'}>{c.isActive ? 'Hoạt động' : 'Ngưng'}</SoftTag> },
         {
             key: 'actions',
             header: '',
@@ -216,65 +219,44 @@ export default function LogisticsCarriersPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Carriers</h1>
-                    <p className="text-slate-500 mt-1">Quản lý doanh nghiệp last-mile đăng ký dùng nền tảng</p>
+            <PageHead
+                title="Carrier"
+                description="Quản lý doanh nghiệp last-mile đang kết nối và vận hành trên nền tảng."
+                extra={
+                    <Button onClick={() => { resetForm(); setEditingCarrier(null); setIsModalOpen(true); }}>
+                        <Plus size={16} className="mr-1" />
+                        Thêm carrier
+                    </Button>
+                }
+            />
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <MetricStat title="Tổng carrier" value={stats.total} icon={<Truck size={17} />} tone="blue" />
+                <MetricStat title="Đang hoạt động" value={stats.active} icon={<CheckCircle2 size={17} />} tone="navy" />
+            </div>
+
+            <DataCard>
+                <div className="admin-toolbar">
+                    <label className="admin-search">
+                        <Search size={16} className="text-[#66728b]" />
+                        <input placeholder="Tìm tên carrier..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                    </label>
                 </div>
-                <Button onClick={() => { resetForm(); setEditingCarrier(null); setIsModalOpen(true); }}>
-                    <Plus size={18} className="mr-1" />
-                    Thêm carrier
-                </Button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-                <Card>
-                    <CardBody className="flex items-center gap-3">
-                        <div className="p-3 bg-indigo-100 dark:bg-indigo-900/50 rounded-xl">
-                            <Truck size={24} className="text-indigo-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{stats.total}</p>
-                            <p className="text-sm text-slate-500">Tổng carrier</p>
-                        </div>
-                    </CardBody>
-                </Card>
-                <Card>
-                    <CardBody className="flex items-center gap-3">
-                        <div className="p-3 bg-green-100 dark:bg-green-900/50 rounded-xl">
-                            <Truck size={24} className="text-green-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-slate-800 dark:text-white">{stats.active}</p>
-                            <p className="text-sm text-slate-500">Đang hoạt động</p>
-                        </div>
-                    </CardBody>
-                </Card>
-            </div>
-
-            <Card>
-                <CardBody>
-                    <div className="relative max-w-md">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                        <Input placeholder="Tìm tên carrier..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
-                    </div>
-                </CardBody>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Danh sách carrier</h2>
-                </CardHeader>
-                <CardBody>
-                    <DataTable
-                        columns={columns}
-                        data={filtered}
-                        loading={loading}
-                        emptyMessage="Chưa có carrier nào đăng ký"
-                        pagination={{ page, totalPages, onPageChange: setPage }}
-                    />
-                </CardBody>
-            </Card>
+                <DataTable
+                    columns={columns}
+                    data={filtered}
+                    loading={loading}
+                    emptyMessage="Chưa có carrier nào đăng ký"
+                    pagination={{
+                        page,
+                        totalPages,
+                        onPageChange: setPage,
+                        pageSize,
+                        pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS,
+                        onPageSizeChange: (n) => { setPageSize(n); setPage(1); },
+                    }}
+                />
+            </DataCard>
 
             {/* Create/Edit Modal */}
             <Modal

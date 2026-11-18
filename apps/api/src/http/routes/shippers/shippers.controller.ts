@@ -71,6 +71,12 @@ export class ShippersController {
         return this.shippersService.getTodayRoute(userId);
     }
 
+    @Get('me/deliveries')
+    @ApiOperation({ summary: 'Đơn giao của shipper: hôm nay và các chuyến trước' })
+    listMyDeliveries(@CurrentUser('id') userId: number) {
+        return this.shippersService.listMyDeliveries(userId);
+    }
+
     @Get('me/routes/:routeId')
     @ApiOperation({ summary: 'Chi tiết route của shipper hiện tại' })
     getRoute(@CurrentUser('id') userId: number, @Param('routeId', ParseIntPipe) routeId: number) {

@@ -20,18 +20,18 @@ Giống mẫu tempmail: mount repo, `npm install`, migrate, hot reload.
 ```bash
 # Từ thư mục gốc D:\SmartCity-Logistics (không chạy trong apps/api)
 cp .env.example .env
-docker compose up -d
+docker compose up -d --build
 docker compose logs -f api
 ```
 
-Trong Docker dev, **api** và **web** mỗi container chỉ mount `apps/api` hoặc `apps/web` và volume `node_modules` riêng (`api_node_modules`, `web_node_modules`).
+Trong Docker dev, **api** và **web** build `Dockerfile.dev` (`npm ci` lúc build image). Container mount source + volume `node_modules`; chỉ `npm ci` lại khi `package-lock.json` đổi. Lần đầu hoặc khi lockfile đổi cần mạng tới registry.npmjs.org.
 
-Nếu lỗi `npm` / container thoát sớm:
+Nếu volume `node_modules` cũ/hỏng (cài dở vì mạng):
 
 ```bash
 docker compose down
 docker volume rm smartcity-logistics_api_node_modules smartcity-logistics_web_node_modules
-docker compose up -d --force-recreate
+docker compose up -d --build
 ```
 
 - Web: http://localhost:3000  

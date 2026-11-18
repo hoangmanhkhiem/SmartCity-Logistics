@@ -1,14 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { authApi } from '@/api';
 import { useAuthStore, getDashboardPath } from '@/stores/auth-store';
+import { canAccessPath } from '@/lib/route-access';
 import Map from '@/components/shared/map';
 
-export default function LoginPage() {
+function LoginForm() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { setAuth } = useAuthStore();
     const [formData, setFormData] = useState({ email: '', password: '' });
     const [remember, setRemember] = useState(true);
@@ -27,7 +29,14 @@ export default function LoginPage() {
             setAuth(user, accessToken);
             if (remember) localStorage.setItem('rememberEmail', formData.email);
             else localStorage.removeItem('rememberEmail');
-            router.push(getDashboardPath(useAuthStore.getState().currentRole));
+            const role = useAuthStore.getState().currentRole;
+            const rawRole = useAuthStore.getState().user?.memberships?.[0]?.role?.name;
+            const next = searchParams.get('next');
+            if (next?.startsWith('/') && !next.startsWith('//') && canAccessPath(next, role, rawRole)) {
+                router.push(next);
+            } else {
+                router.push(getDashboardPath(role));
+            }
         } catch (err: unknown) {
             const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
             setError(message || 'Đăng nhập thất bại. Vui lòng thử lại.');
@@ -114,5 +123,13 @@ export default function LoginPage() {
                 </div>
             </section>
         </main>
+    );
+}
+
+export default function LoginPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-[#f4f7f4]" />}>
+            <LoginForm />
+        </Suspense>
     );
 }

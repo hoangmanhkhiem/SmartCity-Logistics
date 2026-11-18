@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/api';
 import Map from '@/components/shared/map';
-import { PageHead, StudioShell, regulatorNav } from '@/components/studio/shell';
-import { getErrorMessage } from '@/components/ui';
+import { usePathname, useRouter } from 'next/navigation';
+import { PageHead } from '@/components/studio/shell';
+import { DataCard, SoftTag } from '@/components/studio/page-ui';
+import { DataTable, getErrorMessage, type Column } from '@/components/ui';
 
 type Solve = {
     totalKm?: number;
@@ -74,6 +76,13 @@ function applyLevers(a: Solve, levers: Levers) {
 }
 
 export default function PolicySimPage() {
+    const pathname = usePathname();
+    const router = useRouter();
+    const inAdmin = pathname.startsWith('/logistics');
+
+    useEffect(() => {
+        if (!inAdmin) router.replace('/co-quan');
+    }, [inAdmin, router]);
     const [a, setA] = useState<Solve | null>(null);
     const [levers, setLevers] = useState<Levers>(DEFAULT_LEVERS);
     const [message, setMessage] = useState('Đang lấy hiện trạng A từ lập tuyến trên đơn pending…');
@@ -170,95 +179,74 @@ export default function PolicySimPage() {
         { label: 'Đơn đụng vùng cấm (A)', av: String(a?.warnings?.length ?? '—'), bv: 'không giải lại', d: '', tone: 'text-[#7b8781]' },
     ];
 
-    return (
-        <StudioShell group="CƠ QUAN QUẢN LÝ" role="Cơ quan quản lý" items={regulatorNav}>
-            <PageHead title="Mô phỏng tác động chính sách" />
-            <div className="grid gap-4 px-6 pb-6 xl:grid-cols-[300px_1fr]">
-                <section className="h-fit space-y-3 rounded-2xl bg-white p-4 text-sm">
-                    <p className="text-xs text-[#7b8781]">Bật/tắt đòn bẩy — B tính lại ngay từ A, không nhân hệ số bịa.</p>
-                    <label className="flex gap-2 rounded-xl border border-[#dce6e1] p-3">
-                        <input type="checkbox" checked={levers.banIce} onChange={() => toggle('banIce')} />
-                        <span>
-                            <span className="font-semibold">Cấm xe máy xăng trong LEZ</span>
-                            <br />
-                            Đơn đụng vùng phải né tuyến hoặc đổi xe điện. Không hủy đơn.
-                        </span>
-                    </label>
-                    <label className="flex gap-2 rounded-xl border border-[#dce6e1] p-3">
-                        <input type="checkbox" checked={levers.shiftHour} onChange={() => toggle('shiftHour')} />
-                        <span>
-                            <span className="font-semibold">Kéo cấm giờ sớm 30 phút</span>
-                            <br />
-                            Chồng cao điểm sáng: chậm hơn, đúng giờ giảm. Km tăng rất ít.
-                        </span>
-                    </label>
-                    <label className="flex gap-2 rounded-xl border border-[#dce6e1] p-3">
-                        <input type="checkbox" checked={levers.ev40} onChange={() => toggle('ev40')} />
-                        <span>
-                            <span className="font-semibold">40% xe máy xăng → điện</span>
-                            <br />
-                            Đổi hỗn hợp đội xe, không phải lệnh cấm. Chủ yếu giảm CO₂e.
-                        </span>
-                    </label>
-                    <button className="w-full rounded-xl bg-[#0e6e5c] py-2.5 font-semibold text-white disabled:opacity-60" type="button" disabled={running} onClick={run}>
-                        {running ? 'Đang chạy…' : 'Chạy lại hiện trạng A'}
-                    </button>
-                    <p className="text-xs leading-5 text-[#56635d]">{message}</p>
-                </section>
+    const body = (
+        <div className="space-y-6">
+            <PageHead
+                title="Mô phỏng tác động chính sách"
+                description="So sánh hiện trạng và kịch bản trước khi ban hành quy định."
+            />
+            <div className="grid gap-4 xl:grid-cols-[240px_1fr]">
+                <DataCard title="Thiết lập kịch bản">
+                    <div className="space-y-3 p-5 text-sm">
+                        <label className="flex gap-2">
+                            <input type="checkbox" checked={levers.banIce} onChange={() => toggle('banIce')} />
+                            <span>Cấm xe máy xăng trong LEZ</span>
+                        </label>
+                        <label className="flex gap-2">
+                            <input type="checkbox" checked={levers.shiftHour} onChange={() => toggle('shiftHour')} />
+                            <span>Kéo dài khung giờ cấm 30 phút</span>
+                        </label>
+                        <label className="flex gap-2">
+                            <input type="checkbox" checked={levers.ev40} onChange={() => toggle('ev40')} />
+                            <span>40% xe máy xăng chuyển sang xe điện</span>
+                        </label>
+                        <button className="admin-primary w-full justify-center" type="button" disabled={running} onClick={run}>
+                            {running ? 'Đang chạy…' : 'Chạy lại hiện trạng A'}
+                        </button>
+                        <p className="text-xs leading-5 text-[#66728b]">{message || 'Ước lượng trên dữ liệu giao thông 30 ngày gần nhất'}</p>
+                    </div>
+                </DataCard>
                 <div className="space-y-3">
                     <div className="grid gap-3 md:grid-cols-2">
-                        <div>
-                            <p className="mb-1 text-sm font-semibold">A · hiện trạng (vùng + cấm đường đang lưu)</p>
-                            <div className="relative h-52 overflow-hidden rounded-2xl bg-white">
+                        <DataCard title="A · Hiện trạng" toolbar={<SoftTag tone="navy">Dữ liệu thực</SoftTag>}>
+                            <div className="sim-map">
                                 <Map className="h-full w-full" center={[105.85, 21.03]} zoom={13.6} showZonesAndRestrictions />
                             </div>
-                        </div>
-                        <div>
-                            <p className="mb-1 text-sm font-semibold">B · cùng bản đồ — kịch bản chưa ghi DB</p>
-                            <div className="relative h-52 overflow-hidden rounded-2xl bg-white">
-                                <div className="pointer-events-none absolute left-2 right-2 top-2 z-10 rounded-lg bg-[#14352c]/90 px-2 py-1 text-[11px] text-white">
-                                    {levers.banIce ? 'Cấm xăng trong LEZ' : 'Không cấm thêm'}
-                                    {levers.shiftHour ? ' · giờ cấm −30′' : ''}
-                                    {levers.ev40 ? ' · 40% đội xe điện' : ''}
-                                </div>
+                        </DataCard>
+                        <DataCard title="B · Kịch bản chính sách" toolbar={<SoftTag tone="orange">Ước lượng</SoftTag>}>
+                            <div className="sim-map">
                                 <Map className="h-full w-full" center={[105.85, 21.03]} zoom={13.6} showZonesAndRestrictions />
                             </div>
-                        </div>
+                        </DataCard>
                     </div>
-                    <div className="overflow-hidden rounded-2xl border border-[#c5d2cc] bg-white">
-                        <table className="w-full border-collapse text-left text-sm">
-                            <thead>
-                                <tr className="bg-[#14352c] text-white">
-                                    <th className="px-4 py-2.5 font-medium">Chỉ số</th>
-                                    <th className="px-4 py-2.5 font-medium">A · hiện trạng</th>
-                                    <th className="px-4 py-2.5 font-medium">B · ước lượng</th>
-                                    <th className="px-4 py-2.5 font-medium">Chênh</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {rows.map((r) => (
-                                    <tr key={r.label} className="border-t border-[#dce6e1]">
-                                        <td className="px-4 py-2">{r.label}</td>
-                                        <td className="px-4 py-2">{r.av}</td>
-                                        <td className="px-4 py-2">{r.bv}</td>
-                                        <td className={`px-4 py-2 ${r.tone}`}>{r.d}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                    <DataCard>
+                        <DataTable
+                            pagination={false}
+                            data={rows.map((r) => ({ ...r, id: r.label }))}
+                            columns={[
+                                { key: 'label', header: 'Chỉ số' },
+                                { key: 'av', header: 'A · Hiện trạng' },
+                                { key: 'bv', header: 'B · Ước lượng' },
+                                { key: 'd', header: 'Chênh', render: (r) => <span className={r.tone}>{r.d}</span> },
+                            ] satisfies Column<{ id: string; label: string; av: string; bv: string; d: string; tone: string }>[]}
+                        />
+                    </DataCard>
                     {derived && (
-                        <ul className="space-y-1 rounded-2xl bg-white px-4 py-3 text-xs leading-5 text-[#56635d]">
-                            {derived.notes.map((n) => <li key={n}>• {n}</li>)}
-                            <li>• Số đơn B = A vì chính sách đổi cách đi/loại xe, không xóa nhu cầu.</li>
-                        </ul>
+                        <DataTable
+                            pagination={false}
+                            data={derived.notes.map((n, i) => ({ id: i, note: n }))}
+                            columns={[{ key: 'note', header: 'Ghi chú mô phỏng' }]}
+                        />
                     )}
                     <div className="flex gap-2 text-sm">
-                        <button type="button" className="rounded-lg bg-[#14352c] px-3 py-2 text-white" onClick={save}>Lưu kịch bản {scenarioId ? `#${scenarioId}` : ''}</button>
-                        <button type="button" className="rounded-lg border bg-white px-3 py-2" onClick={exportCsv}>Xuất bảng CSV</button>
+                        <button type="button" className="admin-primary" onClick={save}>Lưu kịch bản {scenarioId ? `#${scenarioId}` : ''}</button>
+                        <button type="button" className="rounded-[10px] border border-[#e4e8f1] bg-white px-4 py-2" onClick={exportCsv}>Xuất bảng CSV</button>
                     </div>
                 </div>
             </div>
-        </StudioShell>
+        </div>
     );
+
+    if (!inAdmin) return null;
+    return body;
 }

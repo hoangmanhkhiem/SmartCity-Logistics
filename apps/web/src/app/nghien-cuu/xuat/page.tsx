@@ -1,54 +1,148 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { CheckCircle2, Clock, Database } from 'lucide-react';
 import { api } from '@/api';
+import { DataCard } from '@/components/studio/page-ui';
 import { PageHead, StudioShell, researchNav } from '@/components/studio/shell';
+import { DataTable, type Column } from '@/components/ui';
 
 const datasets = [
-    ['Phiếu shipper', '120', '4', 'PWA + Google Form', 'Hôm nay'],
-    ['Phiếu doanh nghiệp (4 mẫu)', '11', '0', 'Google Form', 'Hôm nay'],
-    ['Ghi nhận hiện trường P1–P9', '96', '1', 'PWA', 'Hôm nay'],
-    ['Phản ánh điểm nghẽn', '412', '23', 'PWA', 'Liên tục'],
+    { id: 'shipper', name: 'Phiếu shipper', rows: 120, pending: 4, source: 'PWA + Google Form', updated: 'Hôm nay' },
+    { id: 'org', name: 'Phiếu doanh nghiệp (4 mẫu)', rows: 11, pending: 0, source: 'Google Form', updated: 'Hôm nay' },
+    { id: 'field', name: 'Ghi nhận hiện trường P1–P9', rows: 96, pending: 1, source: 'PWA', updated: 'Hôm nay' },
+    { id: 'issues', name: 'Phản ánh điểm nghẽn', rows: 412, pending: 23, source: 'PWA', updated: 'Liên tục' },
 ];
 const codebook = [
-    ['PARK_DIFF', '3.2', 'Tiêu chí độ khó đỗ', 'Likert 1–5'],
-    ['PARK_IMP', '3.3', 'Thiếu chỗ đỗ ảnh hưởng tuyến', 'Likert 1–5'],
-    ['ISSUE_JAM', '3.4', 'Ùn tắc', 'Competing'],
-    ['PEAK_IMP', '4.3', 'Cao điểm ảnh hưởng giao', 'Likert 1–5'],
-    ['ROUTE_SAVE', '5.1', 'Đề xuất đổi tuyến', 'Route suggestion save time'],
+    { id: 'PARK_DIFF', code: 'PARK_DIFF', q: '3.2', label: 'Tiêu chí độ khó đỗ' },
+    { id: 'PARK_IMP', code: 'PARK_IMP', q: '3.3', label: 'Thiếu chỗ đỗ ảnh hưởng tuyến' },
+    { id: 'ISSUE_JAM', code: 'ISSUE_JAM', q: '3.4', label: 'Ùn tắc' },
+    { id: 'PEAK_IMP', code: 'PEAK_IMP', q: '4.3', label: 'Cao điểm ảnh hưởng giao' },
+    { id: 'ROUTE_SAVE', code: 'ROUTE_SAVE', q: '5.1', label: 'Đề xuất đổi tuyến' },
 ];
 
 export default function ExportPage() {
+    const [format, setFormat] = useState<'sav' | 'csv' | 'xlsx'>('sav');
+    const [opts, setOpts] = useState({ dummy: true, codebook: true, hideSite: true });
+    const [live, setLive] = useState({ surveys: 0, pending: 0, issues: 0 });
+
+    useEffect(() => {
+        Promise.all([
+            api.get('/surveys/responses').then((r) => r.data ?? []).catch(() => []),
+            api.get('/issues').then((r) => r.data ?? []).catch(() => []),
+        ]).then(([surveys, issues]: [Array<{ status?: string }>, unknown[]]) => {
+            const pending = surveys.filter((s) => s.status !== 'approved' && s.status !== 'rejected').length;
+            setLive({ surveys: surveys.length, pending, issues: Array.isArray(issues) ? issues.length : 0 });
+        });
+    }, []);
+
+    const totalRows = datasets.reduce((s, d) => s + d.rows, 0);
+    const pendingRows = datasets.reduce((s, d) => s + d.pending, 0);
+    const displayTotal = live.surveys + live.issues || totalRows;
+    const displayPending = live.pending || pendingRows;
+    const shipperCount = datasets[0].rows;
+
     const download = () => api.get('/phases/surveys/shipper/export').then((r) => {
         const csv = typeof r.data === 'string' ? r.data : (r.data?.csv ?? JSON.stringify(r.data));
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'shipper.csv';
+        const ext = format === 'xlsx' ? 'xlsx' : format === 'sav' ? 'sav.csv' : 'csv';
+        a.download = `shipper.${ext}`;
         a.click();
     }).catch(() => undefined);
+
+    const formatLabel = format === 'sav' ? 'SPSS (.sav)' : format === 'xlsx' ? 'Excel (.xlsx)' : 'CSV cho SmartPLS';
+
     return (
         <StudioShell group="NGHIÊN CỨU" role="Nghiên cứu viên" items={researchNav}>
-            <PageHead title="Dữ liệu & xuất phân tích" />
-            <div className="grid gap-4 px-6 pb-6 lg:grid-cols-[1.1fr_0.9fr]">
-                <section className="rounded-2xl bg-white p-4 text-sm">
-                    <table className="w-full">
-                        <thead className="text-left text-xs text-[#7b8781]"><tr><th className="py-2">Bộ dữ liệu</th><th>Dòng</th><th>Chờ duyệt</th><th>Nguồn</th><th>Cập nhật</th></tr></thead>
-                        <tbody>{datasets.map((r) => <tr key={r[0]} className="border-t">{r.map((c) => <td key={c} className="py-2">{c}</td>)}</tr>)}</tbody>
-                    </table>
-                    <h2 className="mt-4 font-semibold">Xuất cho SPSS / SmartPLS</h2>
-                    <div className="mt-2 grid gap-3 md:grid-cols-2 text-[#56635d]">
-                        <div><p className="text-xs">Đích</p><label className="mt-1 flex gap-2"><input type="radio" name="out" defaultChecked /> SPSS (.sav)</label><label className="flex gap-2"><input type="radio" name="out" /> CSV cho SmartPLS</label><label className="flex gap-2"><input type="radio" name="out" /> Excel (.xlsx)</label></div>
-                        <div><p className="text-xs">Tuỳ chọn</p><label className="mt-1 flex gap-2"><input type="checkbox" defaultChecked /> Tách câu chọn nhiều thành biến 0/1</label><label className="flex gap-2"><input type="checkbox" defaultChecked /> Kèm codebook song ngữ</label><label className="flex gap-2"><input type="checkbox" defaultChecked /> Ẩn mã điểm khảo sát</label></div>
+            <PageHead
+                title="Dữ liệu & xuất phân tích"
+                crumb="Dữ liệu & xuất phân tích"
+                eyebrow="NGHIÊN CỨU & VẬN HÀNH"
+                description="Quản lý bộ dữ liệu nghiên cứu và chuẩn hoá đầu ra cho các công cụ phân tích."
+            />
+
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+                {[
+                    { title: 'Tổng bản ghi', value: displayTotal.toLocaleString('vi-VN'), note: '4 bộ dữ liệu', icon: <Database size={18} />, tone: 'blue' },
+                    { title: 'Chờ duyệt', value: displayPending, note: 'Cần kiểm tra', icon: <Clock size={18} />, tone: 'orange' },
+                    { title: 'Cập nhật hôm nay', value: live.surveys || 31, note: 'Lúc 10:42', icon: <CheckCircle2 size={18} />, tone: 'green' },
+                ].map((card) => (
+                    <article className="cq-kpi" key={card.title}>
+                        <span className={`metric-icon ${card.tone}`}>{card.icon}</span>
+                        <div>
+                            <p className="text-[13px] text-[#748298]">{card.title}</p>
+                            <p className="mt-0.5 text-[28px] font-extrabold tracking-tight text-[#11213e]">{card.value}</p>
+                            <p className="mt-1 text-[11px] text-[#8a97a9]">{card.note}</p>
+                        </div>
+                    </article>
+                ))}
+            </div>
+
+            <div className="mt-4 grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+                <DataCard title="Bộ dữ liệu" subtitle="Các nguồn dữ liệu đang được đồng bộ">
+                    <DataTable
+                        pagination={false}
+                        data={datasets}
+                        columns={[
+                            { key: 'name', header: 'Bộ dữ liệu', render: (r) => <span className="font-semibold text-[#152542]">{r.name}</span> },
+                            { key: 'rows', header: 'Dòng' },
+                            { key: 'pending', header: 'Chờ duyệt' },
+                            { key: 'source', header: 'Nguồn' },
+                            { key: 'updated', header: 'Cập nhật' },
+                        ] satisfies Column<(typeof datasets)[number]>[]}
+                    />
+                    <div className="m-4 rounded-[14px] border border-[#e6ebf2] bg-[#f7f9fc] p-4">
+                        <h3 className="text-[15px] font-bold text-[#152542]">Xuất cho SPSS / SmartPLS</h3>
+                        <p className="mt-0.5 text-[12px] text-[#748298]">Chọn định dạng và tuỳ chọn dữ liệu đầu ra</p>
+                        <div className="mt-3 grid gap-4 sm:grid-cols-2 text-[13px] text-[#33425c]">
+                            <div>
+                                <p className="text-[12px] font-semibold">Định dạng</p>
+                                {([
+                                    ['sav', 'SPSS (.sav)'],
+                                    ['csv', 'CSV cho SmartPLS'],
+                                    ['xlsx', 'Excel (.xlsx)'],
+                                ] as const).map(([id, label]) => (
+                                    <label key={id} className="mt-1.5 flex items-center gap-2">
+                                        <input type="radio" name="out" checked={format === id} onChange={() => setFormat(id)} />
+                                        {label}
+                                    </label>
+                                ))}
+                            </div>
+                            <div>
+                                <p className="text-[12px] font-semibold">Tuỳ chọn</p>
+                                <label className="mt-1.5 flex items-center gap-2">
+                                    <input type="checkbox" checked={opts.dummy} onChange={() => setOpts({ ...opts, dummy: !opts.dummy })} />
+                                    Tách câu chọn nhiều thành biến 0/1
+                                </label>
+                                <label className="mt-1.5 flex items-center gap-2">
+                                    <input type="checkbox" checked={opts.codebook} onChange={() => setOpts({ ...opts, codebook: !opts.codebook })} />
+                                    Kèm codebook song ngữ
+                                </label>
+                                <label className="mt-1.5 flex items-center gap-2">
+                                    <input type="checkbox" checked={opts.hideSite} onChange={() => setOpts({ ...opts, hideSite: !opts.hideSite })} />
+                                    Ẩn mã điểm khảo sát
+                                </label>
+                            </div>
+                        </div>
+                        <button className="nc-cta mt-4 max-w-xs" type="button" onClick={download}>
+                            Xuất {shipperCount} phiếu · {formatLabel}
+                        </button>
                     </div>
-                    <button className="mt-4 rounded-xl bg-[#0e6e5c] px-4 py-2.5 font-semibold text-white" type="button" onClick={download}>Xuất 120 phiếu</button>
-                </section>
-                <section className="rounded-2xl bg-white p-4 text-sm">
-                    <h2 className="font-semibold">Xem trước codebook</h2>
-                    <table className="mt-2 w-full text-xs">
-                        <thead className="text-left text-[#7b8781]"><tr><th className="py-2">Mã</th><th>Câu</th><th>Nhãn</th><th>Thang</th></tr></thead>
-                        <tbody>{codebook.map((r) => <tr key={r[0]} className="border-t">{r.map((c) => <td key={c} className="py-2">{c}</td>)}</tr>)}</tbody>
-                    </table>
-                </section>
+                </DataCard>
+
+                <DataCard title="Xem trước codebook" subtitle="Quy ước biến cho bộ Phiếu shipper">
+                    <DataTable
+                        pagination={false}
+                        data={codebook}
+                        columns={[
+                            { key: 'code', header: 'Mã', render: (r) => <span className="font-semibold text-[#2f6bff]">{r.code}</span> },
+                            { key: 'q', header: 'Câu' },
+                            { key: 'label', header: 'Nhãn' },
+                        ] satisfies Column<(typeof codebook)[number]>[]}
+                    />
+                </DataCard>
             </div>
         </StudioShell>
     );

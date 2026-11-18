@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/api';
+import { Button, DataTable, Input, type Column } from '@/components/ui';
+import { PageHead } from '@/components/studio/shell';
+import { DataCard, SoftTag } from '@/components/studio/page-ui';
+import { MoreHorizontal, Plus } from 'lucide-react';
 
 type Row = Record<string, unknown> & { id: number };
 
@@ -11,6 +15,23 @@ const tabs = [
     { id: 'plans', label: 'Kế hoạch tuyến', list: '/plans', update: (id: number, body: object) => api.patch(`/plans/${id}`, body), remove: (id: number) => api.delete(`/plans/${id}`) },
     { id: 'scenarios', label: 'Kịch bản', list: '/scenarios', update: (id: number, body: object) => api.patch(`/scenarios/${id}`, body), remove: (id: number) => api.delete(`/scenarios/${id}`) },
 ];
+
+function statusTone(status: string) {
+    if (status.includes('duyệt') || status === 'approved') return 'green' as const;
+    if (status.includes('từ chối') || status === 'rejected') return 'red' as const;
+    if (status === 'pending') return 'orange' as const;
+    return 'navy' as const;
+}
+
+function viRecordStatus(status: string) {
+    const map: Record<string, string> = {
+        approved: 'Đã phê duyệt',
+        rejected: 'Bị từ chối',
+        pending: 'Chờ duyệt',
+        draft: 'Nháp',
+    };
+    return map[status] || status;
+}
 
 export default function RecordsPage() {
     const [tab, setTab] = useState(tabs[0]);
@@ -22,46 +43,64 @@ export default function RecordsPage() {
     useEffect(() => { load(); }, [tab]);
 
     return (
-        <div className="space-y-4">
-            <h1 className="text-xl font-semibold">Hồ sơ vận hành</h1>
-            <div className="flex gap-2">
-                {tabs.map((item) => (
-                    <button key={item.id} className={`rounded px-3 py-1 text-sm ${tab.id === item.id ? 'bg-indigo-600 text-white' : 'border'}`} onClick={() => setTab(item)}>{item.label}</button>
-                ))}
-            </div>
-            <table className="w-full text-sm">
-                <thead><tr className="text-left text-slate-500"><th>ID</th><th>Nội dung</th><th></th></tr></thead>
-                <tbody>
-                    {rows.map((row) => (
-                        <tr key={row.id} className="border-t">
-                            <td className="py-2">{row.id}</td>
-                            <td className="max-w-xl truncate">{String(row.siteCode || row.issueType || row.name || row.status || '')} · {String(row.status || row.kind || '')}</td>
-                            <td className="space-x-2">
-                                <button className="text-indigo-600" onClick={async () => {
+        <div className="space-y-6">
+            <PageHead
+                title="Hồ sơ vận hành"
+                description="Theo dõi phiếu khảo sát, phản ánh, kế hoạch tuyến và kịch bản."
+                extra={
+                    tab.id === 'scenarios' ? (
+                        <form className="flex gap-2" onSubmit={async (e) => { e.preventDefault(); await api.post('/scenarios', { name, kind: 'policy' }); setName(''); load(); }}>
+                            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tên kịch bản" />
+                            <Button type="submit"><Plus size={16} className="mr-1" /> Thêm hồ sơ</Button>
+                        </form>
+                    ) : tab.id === 'surveys' ? (
+                        <form className="flex gap-2" onSubmit={async (e) => { e.preventDefault(); await api.post('/surveys/forms/shipper/responses', { answers: { note: status } }); load(); }}>
+                            <Input value={status} onChange={(e) => setStatus(e.target.value)} placeholder="Ghi chú phiếu" />
+                            <Button type="submit"><Plus size={16} className="mr-1" /> Thêm hồ sơ</Button>
+                        </form>
+                    ) : undefined
+                }
+            />
+
+            <DataCard>
+                <div className="flex gap-1 border-b border-[#e4e8f1] px-5">
+                    {tabs.map((item) => (
+                        <button
+                            key={item.id}
+                            type="button"
+                            className={`-mb-px border-b-2 px-4 py-3 text-sm font-medium ${tab.id === item.id ? 'border-[#2f6bff] text-[#2f6bff]' : 'border-transparent text-[#66728b]'}`}
+                            onClick={() => setTab(item)}
+                        >
+                            {item.label}
+                        </button>
+                    ))}
+                </div>
+                <DataTable
+                    columns={[
+                        { key: 'code', header: 'Mã hồ sơ', render: (row) => String(row.code || row.siteCode || `HS-${row.id}`) },
+                        { key: 'content', header: 'Nội dung', render: (row) => String(row.siteCode || row.issueType || row.name || row.note || '') },
+                        { key: 'status', header: 'Trạng thái', render: (row) => {
+                            const rawStatus = String(row.status || row.kind || '');
+                            return <SoftTag tone={statusTone(rawStatus)}>{viRecordStatus(rawStatus) || '—'}</SoftTag>;
+                        } },
+                        { key: 'updatedAt', header: 'Cập nhật', render: (row) => row.updatedAt ? new Date(String(row.updatedAt)).toLocaleDateString('vi-VN') : '—' },
+                        { key: 'actions', header: '', render: (row) => (
+                            <div className="flex justify-end gap-2">
+                                <button className="admin-ghost" type="button" onClick={async () => {
                                     const next = window.prompt('Trạng thái hoặc tên mới', String(row.status || row.name || ''));
                                     if (!next) return;
                                     const body = row.name != null ? { name: next } : { status: next };
                                     await tab.update(row.id, body);
                                     load();
-                                }}>Sửa</button>
-                                <button className="text-red-600" onClick={async () => { await tab.remove(row.id); load(); }}>Xóa</button>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-            {tab.id === 'scenarios' && (
-                <form className="flex gap-2" onSubmit={async (e) => { e.preventDefault(); await api.post('/scenarios', { name, kind: 'policy' }); setName(''); load(); }}>
-                    <input className="rounded border px-2 py-1" value={name} onChange={(e) => setName(e.target.value)} placeholder="Tên kịch bản" />
-                    <button className="rounded bg-indigo-600 px-3 py-1 text-white">Thêm</button>
-                </form>
-            )}
-            {tab.id === 'surveys' && (
-                <form className="flex gap-2" onSubmit={async (e) => { e.preventDefault(); await api.post('/surveys/forms/shipper/responses', { answers: { note: status } }); load(); }}>
-                    <input className="rounded border px-2 py-1" value={status} onChange={(e) => setStatus(e.target.value)} placeholder="Ghi chú phiếu" />
-                    <button className="rounded bg-indigo-600 px-3 py-1 text-white">Thêm phiếu</button>
-                </form>
-            )}
+                                }}><MoreHorizontal size={16} /></button>
+                                <button className="text-xs text-red-600" type="button" onClick={async () => { await tab.remove(row.id); load(); }}>Xóa</button>
+                            </div>
+                        ) },
+                    ] satisfies Column<Row>[]}
+                    data={rows}
+                    emptyMessage="Chưa có hồ sơ"
+                />
+            </DataCard>
         </div>
     );
 }

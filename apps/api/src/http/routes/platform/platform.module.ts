@@ -8,5 +8,6 @@ import { PlatformService } from './platform.service';
     imports: [TypeOrmModule.forFeature([EmissionFactor, IssueReport, Plan, Scenario, JobRecord, DemandAgg])],
     controllers: [PlatformController],
     providers: [PlatformService],
+    exports: [PlatformService],
 })
 export class PlatformModule {}

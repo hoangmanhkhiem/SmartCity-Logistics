@@ -6,7 +6,7 @@ import mapboxgl from 'mapbox-gl';
 import MapboxDraw from '@mapbox/mapbox-gl-draw';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
-import { zoneApi, restrictionApi } from '@/api';
+import { api, zoneApi, restrictionApi } from '@/api';
 import { normalizeRestrictionFeatureCollection, normalizePolygonCoordinates } from '@/lib/geojson-lnglat';
 import { Layers, Eye, EyeOff } from 'lucide-react';
 
@@ -24,6 +24,12 @@ interface RestrictionInfo {
     timeFrom?: string;
     timeTo?: string;
     zoneName?: string;
+}
+
+interface IncidentInfo {
+    id?: number;
+    issueType?: string;
+    note?: string | null;
 }
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || 'pk.eyJ1Ijoia2hpZW1obTA0IiwiYSI6ImNtazNnc216ajBkZHgzZ3EyaWJ3OGFrZ2QifQ.3EGQJyiXL-oU1l1Ug4qfTQ';
@@ -79,6 +85,12 @@ interface MapProps {
     showZonesAndRestrictions?: boolean;
     /** Đoạn đường tô theo hệ số tắc (current/free-flow) từ speed profile. */
     congestionGeoJson?: GeoJsonFeatureCollection | null;
+    /** Tự fetch điểm báo cáo đã duyệt (điểm đỏ ùn tắc/tai nạn). Mặc định bật. */
+    showApprovedIncidents?: boolean;
+    /** Click bản đồ để chọn vị trí báo cáo. */
+    pickLocation?: boolean;
+    pickMarker?: [number, number] | null;
+    onMapClick?: (lngLat: { lng: number; lat: number }) => void;
     className?: string;
     onMarkerClick?: (id: string | number) => void;
     onRouteLoaded?: (routeCoordinates: [number, number][]) => void;
@@ -90,6 +102,25 @@ const RESTRICTIONS_LAYER_ID = 'restrictions-layer';
 const ZONES_SOURCE_ID = 'zones-source';
 const ZONES_FILL_LAYER_ID = 'zones-fill-layer';
 const ZONES_OUTLINE_LAYER_ID = 'zones-outline-layer';
+const INCIDENTS_SOURCE_ID = 'incidents-source';
+const INCIDENTS_GLOW_LAYER_ID = 'incidents-glow-layer';
+const INCIDENTS_CIRCLE_LAYER_ID = 'incidents-circle-layer';
+
+function setMapCursor(m: mapboxgl.Map | null | undefined, cursor: string) {
+    const canvas = m && typeof m.getCanvas === 'function' ? m.getCanvas() : undefined;
+    if (canvas) canvas.style.cursor = cursor;
+}
+
+const ISSUE_TYPE_VI: Record<string, string> = {
+    congestion: 'Ùn tắc',
+    long_jam: 'Ùn tắc dài',
+    accident: 'Tai nạn',
+    parking: 'Khó đỗ / không chỗ dừng',
+    restriction: 'Cấm đường',
+    flood: 'Ngập',
+    alley: 'Ngõ hẹp',
+    map_error: 'Sai bản đồ',
+};
 
 export default function Map({
     center = [105.8542, 21.0285], // Hanoi default
@@ -104,6 +135,10 @@ export default function Map({
     initialDrawFeature,
     showZonesAndRestrictions = false,
     congestionGeoJson = null,
+    showApprovedIncidents = true,
+    pickLocation = false,
+    pickMarker = null,
+    onMapClick,
     className = '',
     onMarkerClick,
     onRouteLoaded,
@@ -113,6 +148,7 @@ export default function Map({
     const legendContainer = useRef<HTMLDivElement | null>(null);
     const map = useRef<mapboxgl.Map | null>(null);
     const markersRef = useRef<mapboxgl.Marker[]>([]);
+    const pickMarkerRef = useRef<mapboxgl.Marker | null>(null);
     const [loaded, setLoaded] = useState(false);
     const routeLayerAdded = useRef(false);
     const draw = useRef<MapboxDraw | null>(null);
@@ -121,19 +157,44 @@ export default function Map({
     const [autoRestrictions, setAutoRestrictions] = useState<GeoJsonFeatureCollection>({ type: 'FeatureCollection', features: [] });
     const [showZonesLayer, setShowZonesLayer] = useState(true);
     const [showRestrictionsLayer, setShowRestrictionsLayer] = useState(true);
-    const [inspected, setInspected] = useState<{ kind: 'zone'; data: ZoneFeature } | { kind: 'restriction'; data: RestrictionInfo } | null>(null);
+    const [showIncidentsLayer, setShowIncidentsLayer] = useState(true);
+    const [autoIncidents, setAutoIncidents] = useState<GeoJsonFeatureCollection>({ type: 'FeatureCollection', features: [] });
+    const [inspected, setInspected] = useState<
+        | { kind: 'zone'; data: ZoneFeature }
+        | { kind: 'restriction'; data: RestrictionInfo }
+        | { kind: 'incident'; data: IncidentInfo }
+        | null
+    >(null);
     const skipMapClick = useRef(false);
 
     // Fetch route from Mapbox Directions API
     const fetchRoute = useCallback(async (start: [number, number], end: [number, number]) => {
         try {
-            const response = await fetch(
-                `https://api.mapbox.com/directions/v5/mapbox/driving/${start[0]},${start[1]};${end[0]},${end[1]}?geometries=geojson&access_token=${MAPBOX_TOKEN}`
-            );
-            const data = await response.json();
+            let coordinates: [number, number][] | null = null;
+            const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+            if (token) {
+                try {
+                    const res = await api.post('/routes/driving-segment', {
+                        originLon: start[0],
+                        originLat: start[1],
+                        destLon: end[0],
+                        destLat: end[1],
+                    });
+                    const geom = res.data?.route?.geometry?.coordinates as [number, number][] | undefined;
+                    if (geom?.length) coordinates = geom;
+                } catch {
+                    /* fallback Mapbox */
+                }
+            }
+            if (!coordinates) {
+                const response = await fetch(
+                    `https://api.mapbox.com/directions/v5/mapbox/driving/${start[0]},${start[1]};${end[0]},${end[1]}?geometries=geojson&access_token=${MAPBOX_TOKEN}`
+                );
+                const data = await response.json();
+                if (data.routes?.[0]) coordinates = data.routes[0].geometry.coordinates as [number, number][];
+            }
 
-            if (data.routes && data.routes[0]) {
-                const coordinates = data.routes[0].geometry.coordinates as [number, number][];
+            if (coordinates?.length) {
 
                 // Draw route on map
                 if (map.current && loaded) {
@@ -228,6 +289,44 @@ export default function Map({
     }, [showZonesAndRestrictions]);
 
     useEffect(() => {
+        if (!showApprovedIncidents) {
+            setAutoIncidents({ type: 'FeatureCollection', features: [] });
+            return;
+        }
+        let cancelled = false;
+        const apply = (payload: { geojson?: GeoJsonFeatureCollection; items?: Array<{ id: number; longitude: number; latitude: number; issueType?: string; note?: string | null }> }) => {
+            if (payload.geojson?.features) {
+                setAutoIncidents(payload.geojson);
+                return;
+            }
+            const items = Array.isArray(payload.items) ? payload.items : [];
+            setAutoIncidents({
+                type: 'FeatureCollection',
+                features: items.map((item) => ({
+                    type: 'Feature',
+                    geometry: { type: 'Point', coordinates: [item.longitude, item.latitude] },
+                    properties: {
+                        id: item.id,
+                        issueType: item.issueType,
+                        note: item.note,
+                        color: item.issueType === 'accident' ? '#7f1d1d' : '#dc2626',
+                    },
+                })),
+            });
+        };
+        api.get('/bottlenecks').then((res) => {
+            if (cancelled) return;
+            apply(res.data ?? {});
+        }).catch(() => {
+            fetch('/api/v1/bottlenecks').then((r) => (r.ok ? r.json() : null)).then((data) => {
+                if (cancelled || !data) return;
+                apply(data);
+            }).catch(() => setAutoIncidents({ type: 'FeatureCollection', features: [] }));
+        });
+        return () => { cancelled = true; };
+    }, [showApprovedIncidents]);
+
+    useEffect(() => {
         if (!mapContainer.current || map.current) return;
 
         map.current = new mapboxgl.Map({
@@ -241,7 +340,7 @@ export default function Map({
 
         map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-        if (showZonesAndRestrictions) {
+        if (showZonesAndRestrictions || showApprovedIncidents) {
             const legendEl = document.createElement('div');
             legendEl.className = 'mapboxgl-ctrl';
             legendEl.style.pointerEvents = 'auto';
@@ -333,6 +432,32 @@ export default function Map({
                 },
             });
 
+            map.current!.addSource(INCIDENTS_SOURCE_ID, {
+                type: 'geojson',
+                data: { type: 'FeatureCollection', features: [] },
+            });
+            map.current!.addLayer({
+                id: INCIDENTS_GLOW_LAYER_ID,
+                type: 'circle',
+                source: INCIDENTS_SOURCE_ID,
+                paint: {
+                    'circle-radius': 14,
+                    'circle-color': ['coalesce', ['get', 'color'], '#dc2626'],
+                    'circle-opacity': 0.28,
+                },
+            });
+            map.current!.addLayer({
+                id: INCIDENTS_CIRCLE_LAYER_ID,
+                type: 'circle',
+                source: INCIDENTS_SOURCE_ID,
+                paint: {
+                    'circle-radius': 7,
+                    'circle-color': ['coalesce', ['get', 'color'], '#dc2626'],
+                    'circle-stroke-width': 2,
+                    'circle-stroke-color': '#ffffff',
+                },
+            });
+
             setLoaded(true);
         });
 
@@ -405,9 +530,23 @@ export default function Map({
         if (map.current.getLayer(RESTRICTIONS_LAYER_ID)) map.current.setLayoutProperty(RESTRICTIONS_LAYER_ID, 'visibility', visibility);
     }, [showRestrictionsLayer, loaded]);
 
+    useEffect(() => {
+        if (!map.current || !loaded) return;
+        const source = map.current.getSource(INCIDENTS_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
+        source?.setData(autoIncidents);
+    }, [autoIncidents, loaded]);
+
+    useEffect(() => {
+        if (!map.current || !loaded) return;
+        const visibility = showIncidentsLayer && showApprovedIncidents ? 'visible' : 'none';
+        if (map.current.getLayer(INCIDENTS_GLOW_LAYER_ID)) map.current.setLayoutProperty(INCIDENTS_GLOW_LAYER_ID, 'visibility', visibility);
+        if (map.current.getLayer(INCIDENTS_CIRCLE_LAYER_ID)) map.current.setLayoutProperty(INCIDENTS_CIRCLE_LAYER_ID, 'visibility', visibility);
+    }, [showIncidentsLayer, showApprovedIncidents, loaded]);
+
     // Click để xem thông tin zone / đường cấm — tắt khi đang vẽ để click thành đỉnh đa giác/đoạn đường
     useEffect(() => {
-        if (!map.current || !loaded || !showZonesAndRestrictions || drawMode) return;
+        if (!map.current || !loaded || drawMode) return;
+        if (!showZonesAndRestrictions && !showApprovedIncidents) return;
         const m = map.current;
 
         const handleZoneClick = (e: mapboxgl.MapMouseEvent) => {
@@ -432,22 +571,37 @@ export default function Map({
         const setPointer = () => { m.getCanvas().style.cursor = 'pointer'; };
         const unsetPointer = () => { m.getCanvas().style.cursor = ''; };
 
+        const handleIncidentClick = (e: mapboxgl.MapMouseEvent) => {
+            if (skipMapClick.current) {
+                skipMapClick.current = false;
+                return;
+            }
+            const props = e.features?.[0]?.properties as IncidentInfo | undefined;
+            if (props) setInspected({ kind: 'incident', data: props });
+        };
+
         m.on('click', ZONES_FILL_LAYER_ID, handleZoneClick);
         m.on('click', RESTRICTIONS_LAYER_ID, handleRestrictionClick);
+        m.on('click', INCIDENTS_CIRCLE_LAYER_ID, handleIncidentClick);
         m.on('mouseenter', ZONES_FILL_LAYER_ID, setPointer);
         m.on('mouseleave', ZONES_FILL_LAYER_ID, unsetPointer);
         m.on('mouseenter', RESTRICTIONS_LAYER_ID, setPointer);
         m.on('mouseleave', RESTRICTIONS_LAYER_ID, unsetPointer);
+        m.on('mouseenter', INCIDENTS_CIRCLE_LAYER_ID, setPointer);
+        m.on('mouseleave', INCIDENTS_CIRCLE_LAYER_ID, unsetPointer);
 
         return () => {
             m.off('click', ZONES_FILL_LAYER_ID, handleZoneClick);
             m.off('click', RESTRICTIONS_LAYER_ID, handleRestrictionClick);
+            m.off('click', INCIDENTS_CIRCLE_LAYER_ID, handleIncidentClick);
             m.off('mouseenter', ZONES_FILL_LAYER_ID, setPointer);
             m.off('mouseleave', ZONES_FILL_LAYER_ID, unsetPointer);
             m.off('mouseenter', RESTRICTIONS_LAYER_ID, setPointer);
             m.off('mouseleave', RESTRICTIONS_LAYER_ID, unsetPointer);
+            m.off('mouseenter', INCIDENTS_CIRCLE_LAYER_ID, setPointer);
+            m.off('mouseleave', INCIDENTS_CIRCLE_LAYER_ID, unsetPointer);
         };
-    }, [zones, loaded, showZonesAndRestrictions, onZoneClick, drawMode]);
+    }, [zones, loaded, showZonesAndRestrictions, showApprovedIncidents, onZoneClick, drawMode]);
 
     // Vẽ tuyến đường tĩnh đã tính sẵn (ví dụ chỉ đường né cấm từ backend)
     useEffect(() => {
@@ -496,7 +650,7 @@ export default function Map({
         });
         draw.current = mbDraw;
         map.current.addControl(mbDraw, 'top-left');
-        map.current.getCanvas().style.cursor = 'crosshair';
+        setMapCursor(map.current, 'crosshair');
 
         if (initialDrawFeature) {
             mbDraw.add(initialDrawFeature);
@@ -520,7 +674,7 @@ export default function Map({
         return () => {
             map.current?.off('draw.create', handleChange);
             map.current?.off('draw.update', handleChange);
-            if (map.current?.getCanvas()) map.current.getCanvas().style.cursor = '';
+            setMapCursor(map.current, '');
             if (map.current?.getLayer(ZONES_FILL_LAYER_ID)) {
                 map.current.setPaintProperty(ZONES_FILL_LAYER_ID, 'fill-opacity', 0.12);
             }
@@ -658,12 +812,50 @@ export default function Map({
     }, [markers, stops, loaded, onMarkerClick]);
 
     const restrictionCount = effectiveRestrictions?.features.length ?? 0;
+    const incidentCount = autoIncidents.features.length;
+
+    useEffect(() => {
+        if (!map.current || !loaded || !pickLocation || drawMode) return;
+        const m = map.current;
+        const handle = (e: mapboxgl.MapMouseEvent) => {
+            if (skipMapClick.current) {
+                skipMapClick.current = false;
+                return;
+            }
+            onMapClick?.({ lng: e.lngLat.lng, lat: e.lngLat.lat });
+        };
+        setMapCursor(m, 'crosshair');
+        m.on('click', handle);
+        return () => {
+            setMapCursor(m, '');
+            m.off('click', handle);
+        };
+    }, [pickLocation, onMapClick, loaded, drawMode]);
+
+    useEffect(() => {
+        if (!map.current || !loaded) return;
+        pickMarkerRef.current?.remove();
+        pickMarkerRef.current = null;
+        if (!pickMarker) return;
+        const el = document.createElement('div');
+        el.style.width = '16px';
+        el.style.height = '16px';
+        el.style.borderRadius = '999px';
+        el.style.background = '#0e6e5c';
+        el.style.border = '2px solid #fff';
+        el.style.boxShadow = '0 0 0 4px rgba(14,110,92,0.25)';
+        pickMarkerRef.current = new mapboxgl.Marker({ element: el }).setLngLat(pickMarker).addTo(map.current);
+        return () => {
+            pickMarkerRef.current?.remove();
+            pickMarkerRef.current = null;
+        };
+    }, [pickMarker, loaded]);
 
     return (
         <div className={`relative w-full h-full rounded-lg overflow-hidden ${className}`}>
             <div ref={mapContainer} className="w-full h-full" />
 
-            {showZonesAndRestrictions && legendContainer.current && createPortal(
+            {(showZonesAndRestrictions || showApprovedIncidents) && legendContainer.current && createPortal(
                 <div
                     className="m-2 min-w-[190px] max-w-[280px] rounded-lg border border-slate-200 bg-white/95 p-2.5 text-xs shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-900/95"
                     onPointerDown={(e) => e.stopPropagation()}
@@ -675,6 +867,7 @@ export default function Map({
                     <p className="mb-1.5 flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-200">
                         <Layers size={13} /> Lớp bản đồ
                     </p>
+                    {showZonesAndRestrictions && (
                     <button
                         type="button"
                         onClick={() => setShowZonesLayer((v) => !v)}
@@ -686,6 +879,8 @@ export default function Map({
                         </span>
                         {showZonesLayer ? <Eye size={14} /> : <EyeOff size={14} className="text-slate-400" />}
                     </button>
+                    )}
+                    {showZonesAndRestrictions && (
                     <button
                         type="button"
                         onClick={() => setShowRestrictionsLayer((v) => !v)}
@@ -697,6 +892,20 @@ export default function Map({
                         </span>
                         {showRestrictionsLayer ? <Eye size={14} /> : <EyeOff size={14} className="text-slate-400" />}
                     </button>
+                    )}
+                    {showApprovedIncidents && (
+                    <button
+                        type="button"
+                        onClick={() => setShowIncidentsLayer((v) => !v)}
+                        className="flex w-full items-center justify-between gap-2 rounded px-1.5 py-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    >
+                        <span className="flex items-center gap-1.5">
+                            <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-600" />
+                            Báo cáo đã duyệt ({incidentCount})
+                        </span>
+                        {showIncidentsLayer ? <Eye size={14} /> : <EyeOff size={14} className="text-slate-400" />}
+                    </button>
+                    )}
 
                     {inspected && (
                         <div className="mt-2 border-t border-slate-200 pt-2 dark:border-slate-700">
@@ -705,6 +914,12 @@ export default function Map({
                                     <p className="font-semibold text-slate-800 dark:text-white">{inspected.data.name}</p>
                                     {inspected.data.type && <p className="text-slate-500">Loại: {inspected.data.type}</p>}
                                     {inspected.data.description && <p className="mt-0.5 text-slate-500">{inspected.data.description}</p>}
+                                </>
+                            ) : inspected.kind === 'incident' ? (
+                                <>
+                                    <p className="font-semibold text-slate-800 dark:text-white">{ISSUE_TYPE_VI[inspected.data.issueType || ''] || inspected.data.issueType || 'Báo cáo'}</p>
+                                    {inspected.data.note && <p className="text-slate-500">{inspected.data.note}</p>}
+                                    <p className="text-slate-500">Đã duyệt — tuyến sẽ ưu tiên né điểm này</p>
                                 </>
                             ) : (
                                 <>

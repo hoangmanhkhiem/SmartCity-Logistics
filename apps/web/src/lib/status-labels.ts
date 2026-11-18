@@ -24,6 +24,8 @@ const LABELS: Record<string, string> = {
     arrived: 'Đã đến',
     departed: 'Đã rời',
     skipped: 'Bỏ qua',
+    returned: 'Hoàn hàng',
+    refused: 'Hoàn hàng',
 };
 
 export function viStatus(status: string | null | undefined): string {
