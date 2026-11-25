@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import Map from '@/components/shared/map';
 import type { GeoJsonFeatureCollection } from '@/components/shared/map';
 import { DataTable, type Column } from '@/components/ui';
+import { simulationApi } from '@/api';
 
 const wards = [
     ['Hoàn Kiếm', '48', '4,3', '22%', 'Trưa', '36'],
@@ -22,6 +23,9 @@ export default function PublicSitePage() {
     const [congestion, setCongestion] = useState<GeoJsonFeatureCollection | null>(null);
     const [layers, setLayers] = useState({ heat: true, points: true, zones: true });
     const [query, setQuery] = useState('');
+    const [hubs, setHubs] = useState<Array<{ id: number; name: string; hubTier: string; organizationName?: string; zoneName?: string; freeKg: number; freeM3: number; latitude: number; longitude: number }>>([]);
+    const [published, setPublished] = useState<Array<{ id: number; name: string; lezMode: string; kpis?: { totalKm?: number; co2G?: number; orders?: number } }>>([]);
+    const [fb, setFb] = useState({ scenarioId: 0, stance: 'agree', content: '' });
 
     useEffect(() => {
         Promise.all([
@@ -40,6 +44,12 @@ export default function PublicSitePage() {
             }));
             setCongestion({ type: 'FeatureCollection', features: [...lines, ...points] });
         }).catch(() => undefined);
+        simulationApi.hubs().then((res) => setHubs(res.data.hubs || [])).catch(() => undefined);
+        simulationApi.scenarios(true).then((res) => {
+            const list = res.data || [];
+            setPublished(list);
+            if (list[0]) setFb((p) => ({ ...p, scenarioId: list[0].id }));
+        }).catch(() => undefined);
     }, []);
 
     return (
@@ -53,6 +63,8 @@ export default function PublicSitePage() {
                     <nav className="flex items-center gap-5 text-sm text-[#3f4a45]">
                         <a href="#ban-do">Bản đồ</a>
                         <Link href="/bao-cao">Báo cáo giao thông</Link>
+                        <a href="#hub">Hub</a>
+                        <a href="#kich-ban">Kịch bản</a>
                         <a href="#chi-so">Chỉ số phường</a>
                         <a href="#ket-qua">Nghiên cứu</a>
                         <a href="#du-lieu">Dữ liệu mở</a>
@@ -87,8 +99,8 @@ export default function PublicSitePage() {
                             <li><label className="flex items-center gap-2"><input type="checkbox" checked={layers.zones} onChange={() => setLayers({ ...layers, zones: !layers.zones })} /> Zone & đường cấm</label></li>
                         </ul>
                         <Link href="/bao-cao" className="mt-3 inline-block text-sm font-semibold text-[#0e6e5c]">Gửi báo cáo giao thông →</Link>
-                        <form className="mt-4" onSubmit={(e) => { e.preventDefault(); fetch(`/api/v1/geocode?q=${encodeURIComponent(query)}`); }}>
-                            <input className="w-full rounded-lg border px-2 py-1.5 text-xs" placeholder="Khung giờ" value={query} onChange={(e) => setQuery(e.target.value)} />
+                        <form className="mt-4" onSubmit={(e) => e.preventDefault()}>
+                            <input className="w-full rounded-lg border px-2 py-1.5 text-xs" placeholder="Tìm hub, phường, doanh nghiệp" value={query} onChange={(e) => setQuery(e.target.value)} />
                         </form>
                         <p className="mt-4 text-xs font-medium">Mật độ phản ánh</p>
                         <div className="mt-1 h-1.5 rounded-full bg-gradient-to-r from-[#f6d7a8] to-[#c2410c]" />
@@ -106,6 +118,60 @@ export default function PublicSitePage() {
                         />
                     </div>
                 </div>
+            </section>
+
+            <section id="hub" className="mx-auto max-w-6xl px-6 pt-8">
+                <h2 className="text-xl font-semibold">Tra cứu hub / MiniHub / trạm trung chuyển</h2>
+                <p className="mt-1 text-sm text-[#56635d]">Năng lực kho công khai (kg, m³). Điểm giao chỉ đến cấp phường. Nhãn nguồn: giả lập / mở / khảo sát.</p>
+                <div className="mt-3 overflow-hidden rounded-2xl bg-white">
+                    <DataTable
+                        data={hubs.filter((h) => !query || `${h.name} ${h.zoneName} ${h.organizationName}`.toLowerCase().includes(query.toLowerCase()))}
+                        emptyMessage="Chưa có hub công khai"
+                        columns={[
+                            { key: 'name', header: 'Điểm' },
+                            { key: 'hubTier', header: 'Cấp' },
+                            { key: 'organizationName', header: 'Doanh nghiệp' },
+                            { key: 'zoneName', header: 'Khu vực' },
+                            { key: 'freeKg', header: 'Còn trống kg', render: (h) => Math.round(h.freeKg) },
+                            { key: 'freeM3', header: 'Còn trống m³', render: (h) => h.freeM3.toFixed(1) },
+                        ]}
+                    />
+                </div>
+            </section>
+
+            <section id="kich-ban" className="mx-auto max-w-6xl px-6 pt-8">
+                <h2 className="text-xl font-semibold">Kết quả chạy thử đã công bố</h2>
+                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                    {published.map((s) => (
+                        <article key={s.id} className="rounded-2xl bg-white p-4 text-sm">
+                            <p className="text-[11px] text-[#0e6e5c]">{s.lezMode === 'none' ? 'Không LEZ' : `LEZ ${s.lezMode}`}</p>
+                            <h3 className="mt-1 font-semibold">{s.name}</h3>
+                            <p className="mt-2 text-[#56635d]">{Math.round(s.kpis?.totalKm || 0)} km · {Math.round((s.kpis?.co2G || 0) / 1000)} kg CO₂e · {s.kpis?.orders || 0} đơn</p>
+                        </article>
+                    ))}
+                    {!published.length && <p className="text-sm text-[#7b8781]">Chưa có kịch bản công bố.</p>}
+                </div>
+                <form
+                    className="mt-4 space-y-2 rounded-2xl bg-white p-4 text-sm"
+                    onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!fb.scenarioId) return;
+                        await simulationApi.addFeedback(fb);
+                        setFb({ ...fb, content: '' });
+                    }}
+                >
+                    <p className="font-semibold">Phản ánh phương án</p>
+                    <select className="w-full rounded border px-2 py-1" value={fb.scenarioId} onChange={(e) => setFb({ ...fb, scenarioId: Number(e.target.value) })}>
+                        {published.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                    <select className="w-full rounded border px-2 py-1" value={fb.stance} onChange={(e) => setFb({ ...fb, stance: e.target.value })}>
+                        <option value="agree">Đồng ý</option>
+                        <option value="disagree">Không đồng ý</option>
+                        <option value="neutral">Trung lập</option>
+                    </select>
+                    <textarea className="w-full rounded border px-2 py-1" rows={3} placeholder="Lý do, góp ý vị trí trạm…" value={fb.content} onChange={(e) => setFb({ ...fb, content: e.target.value })} />
+                    <button type="submit" className="rounded-lg bg-[#0e6e5c] px-4 py-2 font-semibold text-white">Gửi phản ánh</button>
+                </form>
             </section>
 
             <section id="chi-so" className="mx-auto max-w-6xl px-6 py-8">

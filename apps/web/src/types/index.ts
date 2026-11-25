@@ -58,6 +58,10 @@ export interface Vehicle {
     isElectric: boolean;
     emissionStandard?: string;
     emissionFactor?: number;
+    payloadKg?: number;
+    cargoM3?: number;
+    lezAllowed?: boolean;
+    co2GPerKm?: number;
     range?: number;
     status: 'available' | 'in_use' | 'maintenance';
     isActive: boolean;

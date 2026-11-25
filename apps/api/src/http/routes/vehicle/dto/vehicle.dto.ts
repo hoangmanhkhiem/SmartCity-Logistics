@@ -15,6 +15,10 @@ export class CreateVehicleDto {
     @ApiPropertyOptional() @IsOptional() @IsString() emissionStandard?: string;
     @ApiPropertyOptional() @IsOptional() @IsNumber() emissionFactor?: number;
     @ApiPropertyOptional() @IsOptional() @IsNumber() range?: number;
+    @ApiPropertyOptional() @IsOptional() @IsNumber() payloadKg?: number;
+    @ApiPropertyOptional() @IsOptional() @IsNumber() cargoM3?: number;
+    @ApiPropertyOptional() @IsOptional() @IsBoolean() lezAllowed?: boolean;
+    @ApiPropertyOptional() @IsOptional() @IsNumber() co2GPerKm?: number;
 }
 
 export class UpdateVehicleDto {
@@ -30,4 +34,8 @@ export class UpdateVehicleDto {
     @ApiPropertyOptional() @IsOptional() @IsNumber() emissionFactor?: number;
     @ApiPropertyOptional() @IsOptional() @IsString() status?: string;
     @ApiPropertyOptional() @IsOptional() @IsBoolean() isActive?: boolean;
+    @ApiPropertyOptional() @IsOptional() @IsNumber() payloadKg?: number;
+    @ApiPropertyOptional() @IsOptional() @IsNumber() cargoM3?: number;
+    @ApiPropertyOptional() @IsOptional() @IsBoolean() lezAllowed?: boolean;
+    @ApiPropertyOptional() @IsOptional() @IsNumber() co2GPerKm?: number;
 }

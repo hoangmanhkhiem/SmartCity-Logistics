@@ -29,6 +29,10 @@ import {
     AlertTriangle,
     ClipboardCheck,
     Navigation,
+    Network,
+    Activity,
+    Leaf,
+    History,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import './admin-shell.css';
@@ -250,6 +254,8 @@ export const orgNav: StudioNavItem[] = [
     { href: '/doanh-nghiep/tim-duong', label: 'Tìm đường', icon: icon(<Navigation size={16} />) },
     { href: '/doanh-nghiep/toi-uu', label: 'Tối ưu tuyến', icon: icon(<Target size={16} />) },
     { href: '/doanh-nghiep/bao-cao', label: 'Báo cáo giao thông', icon: icon(<ClipboardList size={16} />) },
+    { href: '/doanh-nghiep/hub', label: 'Hub & năng lực kho', icon: icon(<Network size={16} />) },
+    { href: '/doanh-nghiep/lich-su-giao', label: 'Lịch sử giao hàng', icon: icon(<History size={16} />) },
 ];
 
 export const regulatorNav: StudioNavItem[] = [
@@ -257,6 +263,9 @@ export const regulatorNav: StudioNavItem[] = [
     { href: '/co-quan/bao-cao', label: 'Giám sát báo cáo', icon: icon(<ClipboardList size={16} />) },
     { href: '/co-quan/zone', label: 'Zone & quy định', icon: icon(<Target size={16} />) },
     { href: '/co-quan/nguoi-dung', label: 'Người dùng báo cáo', icon: icon(<Users size={16} />) },
+    { href: '/co-quan/gia-lap', label: 'Giả lập đơn hàng', icon: icon(<FlaskConical size={16} />) },
+    { href: '/co-quan/dieu-hanh', label: 'Điều hành lưu lượng', icon: icon(<Activity size={16} />) },
+    { href: '/co-quan/lez-2027', label: 'LEZ 2027', icon: icon(<Leaf size={16} />) },
 ];
 
 export const memberNav: StudioNavItem[] = [
@@ -278,6 +287,7 @@ export const researchNav: StudioNavItem[] = [
     { href: '/nghien-cuu', label: 'Khảo sát & duyệt phiếu', icon: icon(<FileText size={16} />) },
     { href: '/nghien-cuu/xuat', label: 'Dữ liệu & xuất', icon: icon(<Database size={16} />) },
     { href: '/nghien-cuu/bao-cao', label: 'Báo cáo giao thông', icon: icon(<ClipboardList size={16} />) },
+    { href: '/nghien-cuu/gia-lap', label: 'Giả lập đơn hàng', icon: icon(<FlaskConical size={16} />) },
 ];
 
 export const adminNavGroups: StudioNavGroup[] = [
@@ -302,6 +312,7 @@ export const adminNavGroups: StudioNavGroup[] = [
             { href: '/he-thong/tim-duong', label: 'Tìm đường', icon: icon(<Navigation size={16} />) },
             { href: '/logistics/zones', label: 'Vùng & quy định', icon: icon(<Target size={16} />) },
             { href: '/logistics/simulation', label: 'Mô phỏng chính sách', icon: icon(<FlaskConical size={16} />) },
+            { href: '/logistics/gia-lap', label: 'Giả lập đơn hàng', icon: icon(<FlaskConical size={16} />) },
             { href: '/he-thong/du-lieu', label: 'Dữ liệu & hệ thống', icon: icon(<Database size={16} />) },
         ],
     },

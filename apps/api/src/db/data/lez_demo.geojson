@@ -1,0 +1,22 @@
+{
+  "type": "FeatureCollection",
+  "name": "lez_demo",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "LEZ 2027 A", "scenario": "A", "data_source": "SIMULATED" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[105.8462, 21.0368], [105.8578, 21.0364], [105.8594, 21.0288], [105.8576, 21.0206], [105.8498, 21.0188], [105.8448, 21.0224], [105.8442, 21.0306], [105.8462, 21.0368]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "LEZ Vành đai 1 B", "scenario": "B", "data_source": "SIMULATED" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[105.8328, 21.0482], [105.8548, 21.0504], [105.8686, 21.0416], [105.8702, 21.0264], [105.8624, 21.0128], [105.8462, 21.0086], [105.8324, 21.0148], [105.8286, 21.0288], [105.8304, 21.0408], [105.8328, 21.0482]]]
+      }
+    }
+  ]
+}

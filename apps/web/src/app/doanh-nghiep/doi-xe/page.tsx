@@ -148,7 +148,8 @@ export default function FleetPage() {
                                 { key: 'plate', header: 'Biển số', render: (v) => <span className="font-semibold text-[#152542]">{v.plate}</span> },
                                 { key: 'type', header: 'Loại', render: (v) => TYPE_LABEL[v.type] || v.type },
                                 { key: 'fuelType', header: 'Nhiên liệu', render: (v) => FUEL_LABEL[v.fuelType || ''] || (v.isElectric ? 'Điện' : '—') },
-                                { key: 'capacity', header: 'Tải', render: (v) => v.capacity != null ? `${v.capacity} kg` : '—' },
+                                { key: 'capacity', header: 'Tải / thùng', render: (v) => `${v.payloadKg ?? v.capacity ?? '—'} kg · ${v.cargoM3 ?? v.volume ?? '—'} m³` },
+                                { key: 'lezAllowed', header: 'LEZ', render: (v) => v.lezAllowed ? 'Được vào' : 'Cần trung chuyển' },
                                 { key: 'status', header: 'Trạng thái', render: (v) => {
                                     const s = vehicleStatus(v.status);
                                     return <span className={s.cls}>{s.label}</span>;

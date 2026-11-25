@@ -5,6 +5,7 @@ import { calculateRouteCo2Grams } from '../http/middlewares/utils/co2';
 import { AppDataSource } from './data-source';
 import { createSeedClient } from './seed-client';
 import { Order, Vehicle } from './entities';
+import { seedHubSimulation } from './seed-hub-simulation';
 
 async function main() {
     await AppDataSource.initialize();
@@ -36,6 +37,9 @@ async function main() {
         'users', 'organizations',
         'emission_factors', 'issue_reports', 'plans', 'scenarios', 'jobs', 'demand_agg',
         'speed_profiles', 'traffic_samples', 'traffic_probes', 'traffic_quota',
+        'scenario_feedback', 'traffic_flow_snapshots', 'segment_delivery_flows',
+        'ward_weights', 'hub_capacity_snapshots', 'delivery_events', 'shipment_legs',
+        'sim_orders', 'sim_scenarios',
     ];
     await prisma.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS = 0');
     for (const table of tablesToTruncate) {
@@ -662,6 +666,30 @@ async function main() {
             await prisma.dock.create({ data: { facilityId: f.id, name: `Dock ${i + 1}`, capacity: 4 } });
         }
     }
+
+    const zoneByName = new Map<string, { id: number }>([
+        ['Quận Cầu Giấy', { id: Number(zoneCauGiay.id) }],
+        ['Quận Đống Đa', { id: Number(zoneDongDa.id) }],
+        ['Quận Hoàn Kiếm', { id: Number(zoneHoanKiem.id) }],
+        ['Quận Ba Đình', { id: Number(zoneBaDinh.id) }],
+        ['Quận Thanh Xuân', { id: Number(zoneThanhXuan.id) }],
+        ['Phường Cửa Nam', { id: Number(zoneCuaNam.id) }],
+        ['Phường Giảng Võ', { id: Number(zoneGiangVo.id) }],
+        ['LEZ Hoàn Kiếm', { id: Number(zoneLezHoanKiem.id) }],
+    ]);
+    await seedHubSimulation({
+        prisma: prisma as never,
+        ds: AppDataSource,
+        orgA: { id: Number(orgA.id) },
+        orgB: { id: Number(orgB.id) },
+        orgC: { id: Number(orgC.id) },
+        orgPlatform: { id: Number(orgPlatform.id) },
+        carriers: (carriers as Array<{ id: unknown; organizationId: unknown }>).map((c) => ({
+            id: Number(c.id),
+            organizationId: Number(c.organizationId),
+        })),
+        zoneByName,
+    });
 
     // ==================== ORDERS (theo zone, per carrier) ====================
     console.log('Creating orders...');

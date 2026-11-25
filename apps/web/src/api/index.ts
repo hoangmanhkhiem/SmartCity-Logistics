@@ -243,6 +243,30 @@ export const trackingApi = {
 };
 
 // User API
+export const simulationApi = {
+    hubs: (organizationId?: number) => api.get('/simulation/hubs', { params: { organizationId } }),
+    updateCapacity: (id: number, data: { usedKg?: number; usedM3?: number; shareLevel?: string }) =>
+        api.post(`/simulation/hubs/${id}/capacity`, data),
+    scenarios: (published?: boolean) => api.get('/simulation/scenarios', { params: published ? { published: 1 } : {} }),
+    getScenario: (id: number) => api.get(`/simulation/scenarios/${id}`),
+    createScenario: (data: { name?: string; seed?: number; orderCount?: number; lezMode?: string }) =>
+        api.post('/simulation/scenarios', data),
+    generate: (id: number, useOsrm?: boolean) => api.post(`/simulation/scenarios/${id}/generate`, { useOsrm }),
+    publish: (id: number) => api.post(`/simulation/scenarios/${id}/publish`),
+    orders: (id: number, params?: { page?: number; limit?: number; organizationId?: number }) =>
+        api.get(`/simulation/scenarios/${id}/orders`, { params }),
+    flow: (id: number, hour?: number) => api.get(`/simulation/scenarios/${id}/flow`, { params: hour != null ? { hour } : {} }),
+    getOrder: (id: number) => api.get(`/simulation/orders/${id}`),
+    liveRoute: (id: number) => api.post(`/simulation/orders/${id}/live-route`),
+    demoTrip: () => api.post('/simulation/demo-trip'),
+    history: (params?: { page?: number; limit?: number; organizationId?: number; scenarioId?: number }) =>
+        api.get('/simulation/history', { params }),
+    feedback: (scenarioId?: number) => api.get('/simulation/feedback', { params: { scenarioId } }),
+    addFeedback: (data: { scenarioId: number; stance?: string; content?: string; latitude?: number; longitude?: number }) =>
+        api.post('/simulation/feedback', data),
+    replyFeedback: (id: number, reply: string) => api.patch(`/simulation/feedback/${id}/reply`, { reply }),
+};
+
 export const userApi = {
     getAll: (params?: any) => api.get('/users', { params }),
     getById: (id: number) => api.get(`/users/${id}`),

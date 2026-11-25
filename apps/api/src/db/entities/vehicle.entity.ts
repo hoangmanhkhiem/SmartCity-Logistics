@@ -54,6 +54,27 @@ export class Vehicle {
     @Column({ name: 'emission_factor', type: 'double', nullable: true })
     emissionFactor: number | null;
 
+    @Column({ name: 'payload_kg', type: 'double', nullable: true })
+    payloadKg: number | null;
+
+    @Column({ name: 'cargo_m3', type: 'double', nullable: true })
+    cargoM3: number | null;
+
+    @Column({ name: 'lez_allowed', default: false })
+    lezAllowed: boolean;
+
+    @Column({ name: 'co2_g_per_km', type: 'double', nullable: true })
+    co2GPerKm: number | null;
+
+    @Column({ name: 'data_source', length: 32, default: 'SIMULATED' })
+    dataSource: string;
+
+    @Column({ name: 'source_name', nullable: true })
+    sourceName: string | null;
+
+    @Column({ name: 'source_date', type: 'date', nullable: true })
+    sourceDate: string | null;
+
     @Column({ type: 'double', nullable: true })
     range: number | null;
 

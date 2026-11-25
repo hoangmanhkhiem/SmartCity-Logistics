@@ -46,6 +46,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-me}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-7d}
       MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN:-}
+      OSRM_URL: ${OSRM_URL:-}
       NODE_ENV: development
     ports:
       - "${API_PORT:-3001}:${API_PORT:-3001}"

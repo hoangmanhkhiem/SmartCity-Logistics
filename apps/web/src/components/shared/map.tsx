@@ -108,7 +108,26 @@ interface MapProps {
 }
 
 const RESTRICTIONS_SOURCE_ID = 'restrictions-source';
+const RESTRICTIONS_CASING_LAYER_ID = 'restrictions-casing-layer';
 const RESTRICTIONS_LAYER_ID = 'restrictions-layer';
+const RESTRICTIONS_DASH_LAYER_ID = 'restrictions-dash-layer';
+const RESTRICTION_LINE_IDS = [RESTRICTIONS_CASING_LAYER_ID, RESTRICTIONS_LAYER_ID, RESTRICTIONS_DASH_LAYER_ID] as const;
+
+const restrictionWidth = (base: number): mapboxgl.Expression => [
+    'interpolate',
+    ['linear'],
+    ['zoom'],
+    11,
+    base * 0.45,
+    13,
+    base * 0.75,
+    14.5,
+    base,
+    16,
+    base * 1.35,
+    18,
+    base * 1.8,
+];
 const ZONES_SOURCE_ID = 'zones-source';
 const ZONES_FILL_LAYER_ID = 'zones-fill-layer';
 const ZONES_OUTLINE_LAYER_ID = 'zones-outline-layer';
@@ -119,6 +138,36 @@ const INCIDENTS_CIRCLE_LAYER_ID = 'incidents-circle-layer';
 function setMapCursor(m: mapboxgl.Map | null | undefined, cursor: string) {
     const canvas = m && typeof m.getCanvas === 'function' ? m.getCanvas() : undefined;
     if (canvas) canvas.style.cursor = cursor;
+}
+
+function bringDrawLayersToFront(m: mapboxgl.Map) {
+    const layers = m.getStyle()?.layers ?? [];
+    for (const layer of layers) {
+        if (layer.id.startsWith('gl-draw-')) {
+            try {
+                m.moveLayer(layer.id);
+            } catch {
+                /* layer may be mid-init */
+            }
+        }
+    }
+}
+
+function roadLineLayerIds(m: mapboxgl.Map): string[] {
+    return (m.getStyle()?.layers ?? [])
+        .filter((layer) => layer.type === 'line' && /^(road|bridge|tunnel)/.test(layer.id))
+        .map((layer) => layer.id)
+        .filter((id) => Boolean(m.getLayer(id)));
+}
+
+function geometryToLineString(geom: GeoJSON.Geometry | undefined | null): GeoJSON.LineString | null {
+    if (!geom) return null;
+    if (geom.type === 'LineString' && geom.coordinates.length >= 2) return geom;
+    if (geom.type === 'MultiLineString') {
+        const longest = geom.coordinates.reduce<number[][]>((best, part) => (part.length > best.length ? part : best), []);
+        if (longest.length >= 2) return { type: 'LineString', coordinates: longest };
+    }
+    return null;
 }
 
 const ISSUE_TYPE_VI: Record<string, string> = {
@@ -181,6 +230,8 @@ export default function Map({
         | null
     >(null);
     const skipMapClick = useRef(false);
+    const onDrawCompleteRef = useRef(onDrawComplete);
+    onDrawCompleteRef.current = onDrawComplete;
     const [incidentsNonce, setIncidentsNonce] = useState(0);
     const [clearBusy, setClearBusy] = useState(false);
     const [clearMsg, setClearMsg] = useState('');
@@ -384,14 +435,38 @@ export default function Map({
                 data: { type: 'FeatureCollection', features: [] },
             });
             map.current!.addLayer({
+                id: RESTRICTIONS_CASING_LAYER_ID,
+                type: 'line',
+                source: RESTRICTIONS_SOURCE_ID,
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: {
+                    'line-color': ['coalesce', ['get', 'color'], '#dc2626'],
+                    'line-width': restrictionWidth(22),
+                    'line-opacity': 0.28,
+                    'line-blur': 1.2,
+                },
+            });
+            map.current!.addLayer({
                 id: RESTRICTIONS_LAYER_ID,
                 type: 'line',
                 source: RESTRICTIONS_SOURCE_ID,
                 layout: { 'line-join': 'round', 'line-cap': 'round' },
                 paint: {
-                    'line-color': ['coalesce', ['get', 'color'], '#ea580c'],
-                    'line-width': 4,
-                    'line-dasharray': [2, 1],
+                    'line-color': ['coalesce', ['get', 'color'], '#dc2626'],
+                    'line-width': restrictionWidth(12),
+                    'line-opacity': 0.95,
+                },
+            });
+            map.current!.addLayer({
+                id: RESTRICTIONS_DASH_LAYER_ID,
+                type: 'line',
+                source: RESTRICTIONS_SOURCE_ID,
+                layout: { 'line-join': 'round', 'line-cap': 'butt' },
+                paint: {
+                    'line-color': '#fff7ed',
+                    'line-width': restrictionWidth(4.5),
+                    'line-dasharray': [1.2, 1.1],
+                    'line-opacity': 0.9,
                 },
             });
 
@@ -552,7 +627,9 @@ export default function Map({
     useEffect(() => {
         if (!map.current || !loaded) return;
         const visibility = showRestrictionsLayer ? 'visible' : 'none';
-        if (map.current.getLayer(RESTRICTIONS_LAYER_ID)) map.current.setLayoutProperty(RESTRICTIONS_LAYER_ID, 'visibility', visibility);
+        for (const id of RESTRICTION_LINE_IDS) {
+            if (map.current.getLayer(id)) map.current.setLayoutProperty(id, 'visibility', visibility);
+        }
     }, [showRestrictionsLayer, loaded]);
 
     useEffect(() => {
@@ -569,14 +646,32 @@ export default function Map({
         }
         const rid = highlightedRestrictionId ?? -1;
         const rMatch: mapboxgl.Expression = ['==', ['to-number', ['get', 'restrictionId']], rid];
-        if (map.current.getLayer(RESTRICTIONS_LAYER_ID)) {
-            map.current.setPaintProperty(RESTRICTIONS_LAYER_ID, 'line-color', [
+        const colorExpr: mapboxgl.Expression = ['case', rMatch, '#f59e0b', ['coalesce', ['get', 'color'], '#dc2626']];
+        if (map.current.getLayer(RESTRICTIONS_CASING_LAYER_ID)) {
+            map.current.setPaintProperty(RESTRICTIONS_CASING_LAYER_ID, 'line-color', colorExpr);
+            map.current.setPaintProperty(RESTRICTIONS_CASING_LAYER_ID, 'line-width', [
                 'case',
                 rMatch,
-                '#f59e0b',
-                ['coalesce', ['get', 'color'], '#ea580c'],
+                restrictionWidth(28),
+                restrictionWidth(22),
             ]);
-            map.current.setPaintProperty(RESTRICTIONS_LAYER_ID, 'line-width', ['case', rMatch, 8, 4]);
+        }
+        if (map.current.getLayer(RESTRICTIONS_LAYER_ID)) {
+            map.current.setPaintProperty(RESTRICTIONS_LAYER_ID, 'line-color', colorExpr);
+            map.current.setPaintProperty(RESTRICTIONS_LAYER_ID, 'line-width', [
+                'case',
+                rMatch,
+                restrictionWidth(16),
+                restrictionWidth(12),
+            ]);
+        }
+        if (map.current.getLayer(RESTRICTIONS_DASH_LAYER_ID)) {
+            map.current.setPaintProperty(RESTRICTIONS_DASH_LAYER_ID, 'line-width', [
+                'case',
+                rMatch,
+                restrictionWidth(6),
+                restrictionWidth(4.5),
+            ]);
         }
     }, [highlightedZoneId, highlightedRestrictionId, loaded]);
 
@@ -631,10 +726,13 @@ export default function Map({
         };
 
         m.on('click', ZONES_FILL_LAYER_ID, handleZoneClick);
+        m.on('click', RESTRICTIONS_CASING_LAYER_ID, handleRestrictionClick);
         m.on('click', RESTRICTIONS_LAYER_ID, handleRestrictionClick);
         m.on('click', INCIDENTS_CIRCLE_LAYER_ID, handleIncidentClick);
         m.on('mouseenter', ZONES_FILL_LAYER_ID, setPointer);
         m.on('mouseleave', ZONES_FILL_LAYER_ID, unsetPointer);
+        m.on('mouseenter', RESTRICTIONS_CASING_LAYER_ID, setPointer);
+        m.on('mouseleave', RESTRICTIONS_CASING_LAYER_ID, unsetPointer);
         m.on('mouseenter', RESTRICTIONS_LAYER_ID, setPointer);
         m.on('mouseleave', RESTRICTIONS_LAYER_ID, unsetPointer);
         m.on('mouseenter', INCIDENTS_CIRCLE_LAYER_ID, setPointer);
@@ -642,10 +740,13 @@ export default function Map({
 
         return () => {
             m.off('click', ZONES_FILL_LAYER_ID, handleZoneClick);
+            m.off('click', RESTRICTIONS_CASING_LAYER_ID, handleRestrictionClick);
             m.off('click', RESTRICTIONS_LAYER_ID, handleRestrictionClick);
             m.off('click', INCIDENTS_CIRCLE_LAYER_ID, handleIncidentClick);
             m.off('mouseenter', ZONES_FILL_LAYER_ID, setPointer);
             m.off('mouseleave', ZONES_FILL_LAYER_ID, unsetPointer);
+            m.off('mouseenter', RESTRICTIONS_CASING_LAYER_ID, setPointer);
+            m.off('mouseleave', RESTRICTIONS_CASING_LAYER_ID, unsetPointer);
             m.off('mouseenter', RESTRICTIONS_LAYER_ID, setPointer);
             m.off('mouseleave', RESTRICTIONS_LAYER_ID, unsetPointer);
             m.off('mouseenter', INCIDENTS_CIRCLE_LAYER_ID, setPointer);
@@ -677,17 +778,21 @@ export default function Map({
         }
     }, [staticRouteGeometry, loaded]);
 
-    // Bật/tắt công cụ vẽ polygon/line trực quan (zone / đoạn đường cấm)
+    // Bật/tắt công cụ vẽ polygon / chọn đoạn đường cấm
     useEffect(() => {
         if (!map.current || !loaded) return;
+        const m = map.current;
 
         if (!drawMode) {
+            m.doubleClickZoom.enable();
             if (draw.current) {
-                map.current.removeControl(draw.current);
+                m.removeControl(draw.current);
                 draw.current = null;
             }
             return;
         }
+
+        m.doubleClickZoom.disable();
 
         const mbDraw = new MapboxDraw({
             displayControlsDefault: false,
@@ -696,45 +801,85 @@ export default function Map({
                 line_string: drawMode === 'line',
                 trash: true,
             },
-            defaultMode: drawMode === 'polygon' ? 'draw_polygon' : 'draw_line_string',
+            // Đoạn đường: mặc định click chọn phố trên bản đồ; nút vẽ tay ở góc trái.
+            defaultMode: drawMode === 'polygon' && !initialDrawFeature ? 'draw_polygon' : 'simple_select',
+            userProperties: true,
+            clickBuffer: 8,
+            touchBuffer: 16,
         });
         draw.current = mbDraw;
-        map.current.addControl(mbDraw, 'top-left');
+        m.addControl(mbDraw, 'top-left');
+        bringDrawLayersToFront(m);
 
         const changeMode = (mode: string, opts?: Record<string, unknown>) => {
-            (mbDraw as { changeMode: (m: string, o?: Record<string, unknown>) => void }).changeMode(mode, opts);
+            (mbDraw as { changeMode: (mode: string, opts?: Record<string, unknown>) => void }).changeMode(mode, opts);
+        };
+
+        const emitLatest = (fallback?: GeoJSON.Feature | null) => {
+            const data = mbDraw.getAll();
+            const feature = data.features[data.features.length - 1] ?? fallback ?? null;
+            if (feature) onDrawCompleteRef.current?.(feature);
         };
 
         if (initialDrawFeature) {
             const ids = mbDraw.add(initialDrawFeature);
             const featureId = ids[0];
-            setMapCursor(map.current, 'pointer');
+            setMapCursor(m, 'pointer');
             try {
                 changeMode('direct_select', { featureId });
             } catch {
                 changeMode('simple_select', { featureIds: [featureId] });
             }
-            onDrawComplete?.(initialDrawFeature);
+            emitLatest(initialDrawFeature);
+        } else if (drawMode === 'polygon') {
+            setMapCursor(m, 'crosshair');
+            changeMode('draw_polygon');
         } else {
-            setMapCursor(map.current, 'crosshair');
-            changeMode(drawMode === 'polygon' ? 'draw_polygon' : 'draw_line_string');
+            setMapCursor(m, 'pointer');
+            changeMode('simple_select');
         }
 
-        const handleChange = () => {
-            const data = mbDraw.getAll();
-            const feature = data.features[data.features.length - 1];
-            if (feature) onDrawComplete?.(feature);
+        const handleChange = () => emitLatest();
+
+        const pickRoad = (e: mapboxgl.MapMouseEvent) => {
+            if (drawMode !== 'line') return;
+            const mode = mbDraw.getMode();
+            if (mode === 'draw_line_string' || mode === 'draw_polygon' || mode === 'direct_select') return;
+            const layers = roadLineLayerIds(m);
+            if (!layers.length) return;
+            const hits = m.queryRenderedFeatures(e.point, { layers });
+            const line = geometryToLineString(hits[0]?.geometry as GeoJSON.Geometry | undefined);
+            if (!line) return;
+            const name = String(hits[0]?.properties?.name || hits[0]?.properties?.name_vi || hits[0]?.properties?.name_en || '');
+            mbDraw.deleteAll();
+            const ids = mbDraw.add({
+                type: 'Feature',
+                properties: { name },
+                geometry: line,
+            });
+            try {
+                changeMode('direct_select', { featureId: ids[0] });
+            } catch {
+                changeMode('simple_select', { featureIds: ids });
+            }
+            const added = mbDraw.get(ids[0]);
+            if (added) onDrawCompleteRef.current?.(added);
+            e.preventDefault();
         };
 
-        map.current.on('draw.create', handleChange);
-        map.current.on('draw.update', handleChange);
+        m.on('draw.create', handleChange);
+        m.on('draw.update', handleChange);
+        m.on('click', pickRoad);
+        requestAnimationFrame(() => bringDrawLayersToFront(m));
 
         return () => {
-            map.current?.off('draw.create', handleChange);
-            map.current?.off('draw.update', handleChange);
-            setMapCursor(map.current, '');
+            m.off('draw.create', handleChange);
+            m.off('draw.update', handleChange);
+            m.off('click', pickRoad);
+            m.doubleClickZoom.enable();
+            setMapCursor(m, '');
             if (draw.current) {
-                map.current?.removeControl(draw.current);
+                m.removeControl(draw.current);
                 draw.current = null;
             }
         };
@@ -942,7 +1087,7 @@ export default function Map({
                         className="flex w-full items-center justify-between gap-2 rounded px-1.5 py-1 hover:bg-slate-100 dark:hover:bg-slate-800"
                     >
                         <span className="flex items-center gap-1.5">
-                            <span className="inline-block h-0.5 w-2.5 rounded-sm bg-orange-500" />
+                            <span className="inline-block h-2 w-5 rounded-sm bg-red-600" />
                             Đường cấm/hạn chế ({restrictionCount})
                         </span>
                         {showRestrictionsLayer ? <Eye size={14} /> : <EyeOff size={14} className="text-slate-400" />}

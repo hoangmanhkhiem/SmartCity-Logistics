@@ -23,6 +23,8 @@ import { SurveyModule } from './routes/survey/survey.module';
 import { PlatformModule } from './routes/platform/platform.module';
 import { PhasesModule } from './routes/phases/phases.module';
 import { TrafficModule } from './routes/traffic/traffic.module';
+import { PublicModule } from './routes/public/public.module';
+import { SimulationModule } from './routes/simulation/simulation.module';
 
 @Module({
     imports: [
@@ -52,6 +54,8 @@ import { TrafficModule } from './routes/traffic/traffic.module';
         PlatformModule,
         PhasesModule,
         TrafficModule,
+        PublicModule,
+        SimulationModule,
     ],
     controllers: [HealthController],
 })

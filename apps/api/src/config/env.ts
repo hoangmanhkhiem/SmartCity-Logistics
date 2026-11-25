@@ -5,6 +5,7 @@ export interface AppEnv {
     jwtSecret: string;
     jwtExpiration: string;
     mapboxAccessToken?: string;
+    osrmUrl?: string;
 }
 
 export function resolveDatabaseUrl(): string {
@@ -44,5 +45,6 @@ export function loadEnvConfig(): AppEnv {
         jwtSecret,
         jwtExpiration: process.env.JWT_EXPIRATION ?? '7d',
         mapboxAccessToken: process.env.MAPBOX_ACCESS_TOKEN,
+        osrmUrl: process.env.OSRM_URL,
     };
 }

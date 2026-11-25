@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { PageHead, StudioShell, regulatorNav } from '@/components/studio/shell';
-import Map from '@/components/shared/map';
+import Map, { type GeoJsonFeatureCollection } from '@/components/shared/map';
 import { restrictionApi, roadSegmentApi, zoneApi } from '@/api';
 import { DataTable, TABLE_PAGE_SIZE, TABLE_PAGE_SIZE_OPTIONS, useToast, getErrorMessage, type Column } from '@/components/ui';
 import type { Zone } from '@/types';
@@ -48,6 +48,39 @@ function parsePolygon(boundary?: string | null): GeoJSON.Polygon | null {
     } catch {
         return null;
     }
+}
+
+function parseLineString(raw?: string | null): GeoJSON.LineString | null {
+    if (!raw) return null;
+    try {
+        const g = JSON.parse(raw) as GeoJSON.LineString | GeoJSON.Feature;
+        if (g.type === 'LineString' && Array.isArray(g.coordinates) && g.coordinates.length >= 2) return g;
+        if (g.type === 'Feature' && g.geometry?.type === 'LineString') return g.geometry as GeoJSON.LineString;
+    } catch {
+        return null;
+    }
+    return null;
+}
+
+function rulesToRestrictionGeoJson(rows: RestrictionRow[]): GeoJsonFeatureCollection {
+    return {
+        type: 'FeatureCollection',
+        features: rows.flatMap((r) => {
+            const line = parseLineString(r.roadSegment?.geometry);
+            if (!line) return [];
+            const color = r.severity === 'prohibited' ? '#dc2626' : r.severity === 'allowed_window' ? '#16a34a' : '#ea580c';
+            return [{
+                type: 'Feature' as const,
+                geometry: { type: 'LineString' as const, coordinates: line.coordinates },
+                properties: {
+                    restrictionId: r.id,
+                    description: r.description,
+                    severity: r.severity,
+                    color,
+                },
+            }];
+        }),
+    };
 }
 
 function polygonCenter(poly: GeoJSON.Polygon): [number, number] {
@@ -192,7 +225,7 @@ export default function ZonePolicyPage() {
                 showToast('Đã cập nhật quy định', 'success');
             } else if (mode === 'line') {
                 if (!drawnLine) {
-                    showToast('Chọn “Chọn đoạn đường” rồi vẽ tuyến trên bản đồ (click nhiều điểm, double-click kết thúc).');
+                    showToast('Chọn “Chọn đoạn đường”, bấm một đoạn phố trên bản đồ (hoặc vẽ tay bằng nút góc trái).');
                     setSaving(false);
                     return;
                 }
@@ -310,7 +343,7 @@ export default function ZonePolicyPage() {
         editingZone && !editingRule
             ? `Đang sửa hình vùng ${editingZone.name} (tô cam). Kéo các đỉnh trên bản đồ rồi Lưu hình vùng.`
             : mode === 'polygon' ? (drawnPolygon ? 'Đã có đa giác — kéo đỉnh để chỉnh, hoặc lưu quy định.' : 'Click nhiều điểm trên bản đồ, double-click để khép vùng.')
-            : mode === 'line' ? (drawnLine ? `Đoạn đường ${drawnLine.coordinates.length} điểm — kéo đỉnh để chỉnh.` : 'Click dọc tuyến phố, double-click để kết thúc đoạn.')
+            : mode === 'line' ? (drawnLine ? `Đoạn đường ${drawnLine.coordinates.length} điểm — kéo đỉnh để chỉnh, rồi Lưu quy định.` : 'Bấm một đoạn phố trên bản đồ để chọn (hoặc nút vẽ đường góc trái để vẽ tay).')
                 : form.zoneId ? `Phường đang chọn (tô cam): ${zones.find((z) => String(z.id) === form.zoneId)?.name || form.zoneId}` : 'Bấm Sửa hình / Chọn trên danh sách, hoặc click vùng trên bản đồ.';
 
     const startEdit = (r: RestrictionRow) => {
@@ -326,8 +359,7 @@ export default function ZonePolicyPage() {
             vehicles: r.vehicleTypes?.length ? r.vehicleTypes : ['motorbike_ice'],
             severity: r.severity || 'prohibited',
         });
-        let line: GeoJSON.LineString | null = null;
-        try { line = r.roadSegment?.geometry ? JSON.parse(r.roadSegment.geometry) : null; } catch { line = null; }
+        const line = parseLineString(r.roadSegment?.geometry);
         if (line?.type === 'LineString') {
             setMode('line');
             setEditingZone(null);
@@ -421,7 +453,17 @@ export default function ZonePolicyPage() {
                             <button
                                 key={id}
                                 type="button"
-                                onClick={() => setMode(id)}
+                                onClick={() => {
+                                    if (id !== mode) {
+                                        if (id === 'line') setDrawnPolygon(null);
+                                        if (id === 'polygon') setDrawnLine(null);
+                                        if (id === 'ward') {
+                                            setDrawnLine(null);
+                                            setDrawnPolygon(null);
+                                        }
+                                    }
+                                    setMode(id);
+                                }}
                                 className={`rounded-full px-3 py-1 ${mode === id ? 'bg-[#0b1b3a] text-white' : 'bg-white'}`}
                             >
                                 {label}
@@ -436,7 +478,7 @@ export default function ZonePolicyPage() {
                                     ? 'Kéo các đỉnh (ô vuông) trên hình đang tô để sửa — thùng rác góc bản đồ để xóa và vẽ lại'
                                     : mode === 'polygon'
                                         ? 'Con trỏ chữ thập: click lần lượt các đỉnh → double-click để khép vùng'
-                                        : 'Con trỏ chữ thập: click dọc phố → double-click để kết thúc đoạn'}
+                                        : 'Bấm đoạn phố trên bản đồ để chọn — nút vẽ đường góc trái nếu muốn vẽ tay'}
                             </div>
                         )}
                         <Map
@@ -444,6 +486,7 @@ export default function ZonePolicyPage() {
                             center={mapCenter}
                             zoom={14.2}
                             showZonesAndRestrictions
+                            restrictionsGeoJson={rulesToRestrictionGeoJson(rules)}
                             highlightedZoneId={editingZone?.id ?? (form.zoneId ? Number(form.zoneId) : null)}
                             highlightedRestrictionId={editingRule?.roadSegment ? editingRule.id : null}
                             drawMode={mode === 'ward' ? null : mode}
@@ -451,7 +494,13 @@ export default function ZonePolicyPage() {
                             onZoneClick={(z) => selectWard(z)}
                             onDrawComplete={(feature) => {
                                 if (feature.geometry.type === 'Polygon') setDrawnPolygon(feature.geometry);
-                                if (feature.geometry.type === 'LineString') setDrawnLine(feature.geometry);
+                                if (feature.geometry.type === 'LineString') {
+                                    setDrawnLine(feature.geometry);
+                                    const n = feature.properties?.name;
+                                    if (typeof n === 'string' && n.trim()) {
+                                        setForm((prev) => (prev.name ? prev : { ...prev, name: n.trim() }));
+                                    }
+                                }
                             }}
                             initialDrawFeature={
                                 mode === 'polygon' && drawnPolygon
@@ -524,7 +573,7 @@ export default function ZonePolicyPage() {
                     )}
                     {!(editingZone && !editingRule) && (
                         <>
-                            <p className="text-xs text-[#7b8781]">Áp dụng cho</p>
+                    <p className="text-xs text-[#7b8781]">Áp dụng cho</p>
                             {vehicleChoices.map((v) => (
                                 <label key={v.value} className="flex gap-2"><input type="checkbox" checked={form.vehicles.includes(v.value)} onChange={() => toggleVehicle(v.value)} /> {v.label}</label>
                             ))}

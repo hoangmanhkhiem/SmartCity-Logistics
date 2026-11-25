@@ -13,6 +13,12 @@ export class CreateFacilityDto {
     @ApiPropertyOptional() @IsOptional() @IsString() openingTime?: string;
     @ApiPropertyOptional() @IsOptional() @IsString() closingTime?: string;
     @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
+    @ApiPropertyOptional() @IsOptional() @IsString() hubTier?: string;
+    @ApiPropertyOptional() @IsOptional() @IsInt() parentHubId?: number;
+    @ApiPropertyOptional() @IsOptional() @IsInt() wardId?: number;
+    @ApiPropertyOptional() @IsOptional() @IsNumber() capacityM3?: number;
+    @ApiPropertyOptional() @IsOptional() @IsNumber() capacityKg?: number;
+    @ApiPropertyOptional() @IsOptional() @IsString() dataSource?: string;
 }
 
 export class UpdateFacilityDto {
@@ -27,4 +33,10 @@ export class UpdateFacilityDto {
     @ApiPropertyOptional() @IsOptional() @IsString() closingTime?: string;
     @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
     @ApiPropertyOptional() @IsOptional() @IsBoolean() isActive?: boolean;
+    @ApiPropertyOptional() @IsOptional() @IsString() hubTier?: string;
+    @ApiPropertyOptional() @IsOptional() @IsInt() parentHubId?: number;
+    @ApiPropertyOptional() @IsOptional() @IsInt() wardId?: number;
+    @ApiPropertyOptional() @IsOptional() @IsNumber() capacityM3?: number;
+    @ApiPropertyOptional() @IsOptional() @IsNumber() capacityKg?: number;
+    @ApiPropertyOptional() @IsOptional() @IsString() dataSource?: string;
 }

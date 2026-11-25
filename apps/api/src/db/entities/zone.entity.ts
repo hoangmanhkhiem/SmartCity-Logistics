@@ -33,6 +33,15 @@ export class Zone {
     @Column({ default: 'secondary' })
     source: string;
 
+    @Column({ name: 'data_source', length: 32, default: 'OPEN' })
+    dataSource: string;
+
+    @Column({ name: 'source_name', nullable: true })
+    sourceName: string | null;
+
+    @Column({ name: 'source_date', type: 'date', nullable: true })
+    sourceDate: string | null;
+
     @Column({ default: true })
     verified: boolean;
 
@@ -153,6 +162,18 @@ export class Restriction {
 
     @Column({ default: 'regulation' })
     source: string;
+
+    @Column({ name: 'effective_year', nullable: true })
+    effectiveYear: number | null;
+
+    @Column({ name: 'data_source', length: 32, default: 'SURVEY' })
+    dataSource: string;
+
+    @Column({ name: 'source_name', nullable: true })
+    sourceName: string | null;
+
+    @Column({ name: 'source_date', type: 'date', nullable: true })
+    sourceDate: string | null;
 
     @Column({ default: true })
     verified: boolean;

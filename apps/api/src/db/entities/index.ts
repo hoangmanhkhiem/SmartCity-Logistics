@@ -15,6 +15,17 @@ import { Role, Permission, RolePermission, Membership } from './rbac.entity';
 import { SurveyAssignment, SurveyForm, SurveyResponse } from './survey.entity';
 import { DemandAgg, EmissionFactor, IssueReport, JobRecord, Plan, Scenario } from './platform.entity';
 import { SpeedProfile, TrafficProbe, TrafficQuota, TrafficSample } from './traffic.entity';
+import {
+    SimScenario,
+    SimOrder,
+    ShipmentLeg,
+    DeliveryEvent,
+    HubCapacitySnapshot,
+    WardWeight,
+    SegmentDeliveryFlow,
+    TrafficFlowSnapshot,
+    ScenarioFeedback,
+} from './simulation.entity';
 
 export {
     Organization,
@@ -52,6 +63,15 @@ export {
     TrafficSample,
     SpeedProfile,
     TrafficQuota,
+    SimScenario,
+    SimOrder,
+    ShipmentLeg,
+    DeliveryEvent,
+    HubCapacitySnapshot,
+    WardWeight,
+    SegmentDeliveryFlow,
+    TrafficFlowSnapshot,
+    ScenarioFeedback,
 };
 
 export const ENTITIES = [
@@ -90,4 +110,13 @@ export const ENTITIES = [
     TrafficSample,
     SpeedProfile,
     TrafficQuota,
+    SimScenario,
+    SimOrder,
+    ShipmentLeg,
+    DeliveryEvent,
+    HubCapacitySnapshot,
+    WardWeight,
+    SegmentDeliveryFlow,
+    TrafficFlowSnapshot,
+    ScenarioFeedback,
 ];

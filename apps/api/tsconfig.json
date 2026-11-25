@@ -22,5 +22,6 @@
                 "src/*"
             ]
         }
-    }
+    },
+    "exclude": ["node_modules", "dist", "src/db/seed.ts", "src/db/seed-hub-simulation.ts"]
 }

@@ -40,6 +40,30 @@ export class Facility {
     @Column({ nullable: true })
     capacity: number | null;
 
+    @Column({ name: 'hub_tier', length: 16, nullable: true })
+    hubTier: string | null;
+
+    @Column({ name: 'parent_hub_id', nullable: true })
+    parentHubId: number | null;
+
+    @Column({ name: 'ward_id', nullable: true })
+    wardId: number | null;
+
+    @Column({ name: 'capacity_m3', type: 'double', nullable: true })
+    capacityM3: number | null;
+
+    @Column({ name: 'capacity_kg', type: 'double', nullable: true })
+    capacityKg: number | null;
+
+    @Column({ name: 'data_source', length: 32, default: 'SIMULATED' })
+    dataSource: string;
+
+    @Column({ name: 'source_name', nullable: true })
+    sourceName: string | null;
+
+    @Column({ name: 'source_date', type: 'date', nullable: true })
+    sourceDate: string | null;
+
     @Column({ name: 'opening_time', nullable: true })
     openingTime: string | null;
 
@@ -71,6 +95,10 @@ export class Facility {
     @ManyToOne(() => Zone, (z) => z.facilities)
     @JoinColumn({ name: 'zone_id' })
     zone: Zone | null;
+
+    @ManyToOne(() => Facility, { onDelete: 'SET NULL' })
+    @JoinColumn({ name: 'parent_hub_id' })
+    parentHub: Facility | null;
 
     @OneToMany(() => Charger, (c) => c.facility)
     chargers: Charger[];
